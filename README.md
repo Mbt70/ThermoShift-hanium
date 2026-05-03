@@ -118,11 +118,30 @@ scripts/       # 개발/분석/배포 보조 스크립트
 
 ## 협업 흐름
 
-1. 작업 단위는 GitHub Issue로 만든다.
-2. 브랜치는 `feature/기능명`, `fix/문제명`, `docs/문서명` 형식으로 만든다.
-3. 작업 후 Pull Request를 열고 최소 1명 리뷰를 받는다.
-4. 회의에서 결정된 내용은 `docs/decision-log.md` 또는 `docs/meetings/`에 남긴다.
-5. 발표/보고서에 재사용할 내용은 Google Drive/Notion에만 두지 말고 필요한 범위에서 repository 문서에도 반영한다.
+GitHub를 많이 써보지 않은 팀원도 따라올 수 있도록, 처음에는 단순하게 운영합니다.
+
+1. **할 일을 정한다**
+   - 가능하면 GitHub Issue로 만들고, 어렵다면 단톡/회의록에 먼저 적어도 됩니다.
+
+2. **작업 전에 최신 상태로 맞춘다**
+   - 내 컴퓨터에서 작업한다면 `git pull`을 먼저 합니다.
+
+3. **문서 수정은 가볍게, 코드 수정은 조심해서**
+   - 오타, 회의록, 링크 추가는 바로 수정해도 괜찮습니다.
+   - 코드 기능 개발이나 큰 변경은 branch 또는 Pull Request를 권장합니다.
+
+4. **작업한 내용을 알아볼 수 있게 저장한다**
+   - commit 메시지는 완벽하지 않아도 되지만, “무엇을 했는지”는 보이게 씁니다.
+   - 예: `docs: add meeting notes`, `feat: add dashboard draft`
+
+5. **막히면 빨리 공유한다**
+   - Git 충돌, 실행 오류, 역할이 애매한 작업은 혼자 오래 붙잡지 말고 팀에 공유합니다.
+
+6. **결정사항은 문서로 남긴다**
+   - 회의에서 결정된 내용은 `docs/decision-log.md` 또는 `docs/meetings/`에 남깁니다.
+   - 발표/보고서에 재사용할 내용은 Google Drive/Notion에만 두지 말고 필요한 범위에서 repository 문서에도 반영합니다.
+
+자세한 GitHub 사용 규칙은 [`CONTRIBUTING.md`](./CONTRIBUTING.md)에 정리되어 있습니다.
 
 ## 관련 문서
 
