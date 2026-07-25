@@ -1,0 +1,146 @@
+.st-key-ts_greeting_header {
+  margin-bottom: 10px;
+}
+
+.ts-greeting-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.ts-greeting-text p {
+  margin: 0;
+  line-height: 1.1;
+  color: var(--muted);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-greeting-text h1 {
+  margin-top: -15px;
+  margin-bottom: 30px;
+  color: var(--text);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.03em;
+}
+
+.ts-bell {
+  width: 24px;
+  height: 24px;
+  margin-top: 6px;
+  color: var(--icon);
+}
+
+.ts-room-count {
+  margin: 0 0 25px;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+[class*="st-key-ts_room_card_"] {
+  position: relative;
+  padding: 16px 18px !important;
+  margin-bottom: 15px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--input-radius);
+  box-shadow: none;
+}
+
+[class*="st-key-ts_room_open_"] {
+  position: absolute !important;
+  inset: 0;
+  z-index: 2;
+  margin: 0 !important;
+  padding: 0 !important;
+  height: auto;
+}
+
+[class*="st-key-ts_room_open_"] div {
+  height: 100%;
+  width: 100%;
+}
+
+[class*="st-key-ts_room_open_"] button {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: transparent;
+  box-shadow: none;
+  opacity: 0;
+  cursor: pointer;
+}
+
+[class*="st-key-ts_room_open_"] button:hover,
+[class*="st-key-ts_room_open_"] button:focus,
+[class*="st-key-ts_room_open_"] button:active {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  opacity: 0;
+}
+
+.ts-room-name {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.02em;
+}
+
+.ts-room-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.ts-room-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ts-room-stat-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.ts-room-badge-wrap {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ts-room-badge-img {
+  margin-top: -10px;
+  height: 21px;
+  width: auto;
+}
+
+.st-key-add_room_action button {
+  padding: 16px 18px;
+  background: transparent;
+  border: 1.5px dashed var(--border);
+  color: var(--primary-dark);
+  font-weight: var(--font-weight-extrabold) !important;
+  box-shadow: none;
+}
+
+.st-key-add_room_action button:hover,
+.st-key-add_room_action button:active,
+.st-key-add_room_action button:focus {
+  background: transparent;
+  border: 1.5px dashed var(--border);
+  color: var(--primary-dark);
+  box-shadow: none;
+}

@@ -1,0 +1,16 @@
+.ts-settings-hint {
+  margin: -6px 0 18px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.st-key-room_settings_delete button {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.st-key-room_settings_delete button:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}

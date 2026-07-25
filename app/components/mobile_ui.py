@@ -1,8 +1,6 @@
-import base64
 from pathlib import Path
 
 import streamlit as st
-
 
 STYLE_ROOT = Path(__file__).resolve().parents[1] / "styles"
 PAGE_STYLE_ROOT = STYLE_ROOT / "pages"
@@ -10,11 +8,14 @@ BASE_STYLESHEETS = (
     STYLE_ROOT / "tokens.css",
     STYLE_ROOT / "components.css",
 )
-LOGO = Path(__file__).resolve().parents[1] / "assets" / "icons" / "logo.svg"
 
 
-def apply_mobile_styles(page_name: str) -> None:
+def apply_mobile_styles(page_name: str, *, shared: tuple[str, ...] = ()) -> None:
     stylesheets = list(BASE_STYLESHEETS)
+    for shared_name in shared:
+        shared_stylesheet = PAGE_STYLE_ROOT / f"{shared_name}.css"
+        if shared_stylesheet.exists():
+            stylesheets.append(shared_stylesheet)
     page_stylesheet = PAGE_STYLE_ROOT / f"{page_name}.css"
     if page_stylesheet.exists():
         stylesheets.append(page_stylesheet)
@@ -23,19 +24,6 @@ def apply_mobile_styles(page_name: str) -> None:
     )
     st.markdown(
         f"<style>{css}</style><div class='ts-page-marker ts-{page_name}'></div>",
-        unsafe_allow_html=True,
-    )
-
-
-def brand_logo() -> None:
-    encoded_logo = base64.b64encode(LOGO.read_bytes()).decode("ascii")
-    st.markdown(
-        f"""
-        <div class="ts-logo" aria-label="ThermoShift 로고">
-          <img src="data:image/svg+xml;base64,{encoded_logo}"
-               alt="ThermoShift 로고">
-        </div>
-        """,
         unsafe_allow_html=True,
     )
 
