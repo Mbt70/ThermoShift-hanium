@@ -1,6 +1,6 @@
 import streamlit as st
 
-from app.components.auth_store import check_credentials, is_registered
+from app.components.auth_store import check_credentials, is_registered, set_current_user
 from app.components.mobile_ui import (
     apply_mobile_styles,
     auth_switch_link,
@@ -57,6 +57,7 @@ if submitted:
             inline_error("비밀번호가 올바르지 않습니다")
 
     if credentials_ok:
-        st.switch_page("pages/home.py")
+        set_current_user(email)
+        st.switch_page("pages/room_list.py")
 
 auth_switch_link("pages/signup.py", "회원가입", key="login_signup_link")

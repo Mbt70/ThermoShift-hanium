@@ -77,7 +77,7 @@ if submitted:
         and password_match_ok
     )
     if valid:
-        register_user(email, password)
+        register_user(name, email, password)
         st.switch_page("pages/login.py")
 
 auth_switch_link(
