@@ -1,0 +1,7 @@
+{
+  "name": "thermoshift",
+  "private": true,
+  "scripts": {
+    "dev": ".venv\\Scripts\\streamlit.exe run app\\main.py"
+  }
+}
