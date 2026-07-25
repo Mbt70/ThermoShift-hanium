@@ -1,6 +1,25 @@
+import base64
+from pathlib import Path
+
 import streamlit as st
 
-from app.components.mobile_ui import apply_mobile_styles, auth_switch_link, brand_logo
+from app.components.mobile_ui import apply_mobile_styles, auth_switch_link
+
+LOGO = Path(__file__).resolve().parents[1] / "assets" / "icons" / "logo.svg"
+
+
+def brand_logo() -> None:
+    encoded_logo = base64.b64encode(LOGO.read_bytes()).decode("ascii")
+    st.markdown(
+        f"""
+        <div class="ts-logo" aria-label="ThermoShift 로고">
+          <img src="data:image/svg+xml;base64,{encoded_logo}"
+               alt="ThermoShift 로고">
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 apply_mobile_styles("onboarding")
 
