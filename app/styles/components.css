@@ -2,8 +2,18 @@ html,
 body,
 [data-testid="stAppViewContainer"],
 [data-testid="stMain"] {
-  background: var(--bg-outside);
   font-family: var(--font-family);
+}
+
+[data-testid="stHorizontalBlock"] {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+}
+
+[data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+  width: 100% !important;
+  min-width: 0 !important;
 }
 
 [data-testid="stAppViewContainer"] h1,
@@ -36,11 +46,13 @@ footer {
   width: min(100%, var(--page-width));
   max-width: var(--page-width);
   min-height: 100dvh;
+  flex-shrink: 0;
   margin: 0 auto;
   padding: 22px 22px 28px;
   background: var(--bg);
   border-left: 1px solid #e1e5e9;
   border-right: 1px solid #e1e5e9;
+  border-radius: 0;
   box-shadow: 0 0 34px rgb(20 31 43 / 7%);
 }
 
@@ -289,5 +301,48 @@ footer {
   .ts-form-submit-space {
     height: 8px;
   }
+}
+
+.ts-tab-bar-spacer {
+  height: 92px;
+}
+
+.st-key-ts_tab_bar {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  width: min(100%, var(--page-width));
+  transform: translateX(-50%);
+  z-index: 5;
+  background: transparent;
+}
+
+.st-key-ts_tab_bar > * {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  padding: 16px 0 calc(env(safe-area-inset-bottom, 0px) + 16px);
+}
+
+[class*="st-key-ts_tab_"]:not(.st-key-ts_tab_bar) {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.st-key-ts_tab_bar [data-testid="stPageLink"] a {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 !important;
+  color: var(--placeholder) !important;
+  font-size: var(--font-size-2xs) !important;
+  font-weight: var(--font-weight-semibold) !important;
+  text-align: center;
 }
 
