@@ -1,0 +1,413 @@
+[data-testid="stElementContainer"]:has(.ts-home-chips) {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+}
+
+[data-testid="stElementContainer"]:has(.ts-home-chips) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+[data-testid="stHorizontalBlock"]:has(.ts-home-chips) {
+  margin-bottom: 18px;
+}
+
+[data-testid="stHorizontalBlock"]:has(.ts-home-chips) .st-key-ts_page_header {
+  margin-bottom: 0;
+}
+
+.ts-home-chips {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+
+.ts-home-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.ts-home-chip-auto.is-active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary-dark);
+}
+
+.st-key-ts_comfort_link {
+  position: relative;
+  cursor: pointer;
+}
+
+.st-key-ts_comfort_link .st-key-ts_comfort_open {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.st-key-ts_comfort_link .st-key-ts_comfort_open [data-testid="stButton"] {
+  height: 100%;
+}
+
+.st-key-ts_comfort_link .st-key-ts_comfort_open button {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+
+.ts-comfort {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  margin-bottom: 18px;
+}
+
+.ts-comfort-title {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-comfort-hint {
+  margin: 6px 0 0;
+  color: var(--primary-dark);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-gauge-wrap {
+  position: relative;
+  width: 114px;
+  height: 114px;
+  margin: 0 auto;
+}
+
+.ts-gauge-ring {
+  width: 100%;
+  height: 100%;
+}
+
+.ts-gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ts-gauge-score {
+  color: var(--text);
+  font-size: 28px;
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.02em;
+}
+
+.ts-gauge-label {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+}
+
+.st-key-ts_judgment_card,
+.st-key-ts_target_card,
+.st-key-ts_reservation_card,
+.st-key-ts_trend_card {
+  padding: 16px 18px !important;
+  margin-bottom: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--input-radius);
+  box-shadow: none;
+}
+
+.st-key-ts_judgment_card {
+  background: var(--primary-light);
+  border-color: var(--primary-light);
+}
+
+[data-testid="stHorizontalBlock"]:has(.ts-judgment-sub) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+.ts-judgment-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: var(--font-size-xs) !important;
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-judgment-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-judgment-headline {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: var(--font-size-xs) !important;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.4;
+}
+
+.ts-judgment-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-2xs) !important;
+  font-weight: var(--font-weight-medium);
+}
+
+.st-key-ts_judgment_card [data-testid="stElementContainer"]:has([data-testid="stPageLink"]),
+.st-key-ts_judgment_card [data-testid="stPageLink"] {
+  width: 100%;
+}
+
+.st-key-ts_judgment_card [data-testid="stPageLink"] a {
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0;
+  line-height: 1.6;
+  color: var(--primary-dark) !important;
+  font-size: 10px !important;
+  font-weight: var(--font-weight-bold) !important;
+}
+
+.ts-target-title,
+.ts-reservation-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-target-title-icon {
+  width: 13px;
+  height: 13px;
+}
+
+[data-testid="stHorizontalBlock"]:has(.st-key-target_temp_minus) {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 28px;
+}
+
+[data-testid="stHorizontalBlock"]:has(.st-key-target_temp_minus) > [data-testid="stColumn"] {
+  width: auto !important;
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+}
+
+.ts-target-value {
+  margin: 0;
+  text-align: center;
+  color: var(--text);
+  font-size: 36px !important;
+  font-weight: var(--font-weight-extrabold);
+}
+
+.ts-target-sub {
+  margin: 8px 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.ts-target-note {
+  margin: 4px 0 0;
+  text-align: center;
+  color: var(--placeholder);
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+}
+
+.st-key-target_temp_minus button,
+.st-key-target_temp_plus button {
+  width: 52px !important;
+  height: 52px;
+  min-height: 52px;
+  margin: 0 auto;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 24px;
+  line-height: 1;
+  background: var(--card) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+.st-key-target_temp_minus button:hover,
+.st-key-target_temp_plus button:hover {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.ts-reservation-badge-wrap {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ts-reservation-badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+}
+
+.ts-reservation-desc {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+
+.st-key-reservation_add button {
+  background: var(--primary-light);
+  color: #000;
+  font-weight: var(--font-weight-extrabold);
+}
+
+.st-key-reservation_add button:hover {
+  background: var(--primary-light);
+  color: #000;
+}
+
+.st-key-reservation_all button {
+  background: var(--card);
+  color: #000;
+  font-weight: var(--font-weight-extrabold);
+  border: 1px solid var(--border);
+}
+
+.st-key-reservation_all button:hover {
+  background: var(--bg);
+  color: #000;
+  border: 1px solid var(--border);
+}
+
+.ts-trend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.ts-trend-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-trend-legend {
+  display: flex;
+  gap: 10px;
+}
+
+.ts-legend-item {
+  position: relative;
+  padding-left: 14px;
+  color: var(--muted);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.ts-legend-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 10px;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+.ts-legend-temp::before {
+  background: var(--text);
+}
+
+.ts-legend-co2::before {
+  background: var(--chart-blue);
+}
+
+.ts-trend-svg {
+  width: 100%;
+  height: auto;
+}
+
+.ts-trend-target-label {
+  fill: var(--warning);
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.ts-env-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.ts-env-tile {
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--input-radius);
+}
+
+.ts-env-tile-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-env-tile-value {
+  margin: 0;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.02em;
+}
+
+.ts-env-tile-unit {
+  margin-left: 2px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
