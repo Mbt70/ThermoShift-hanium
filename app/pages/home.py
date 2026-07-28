@@ -15,6 +15,7 @@ from app.components.room_store import (
     system_judgment,
     trend_series,
 )
+from app.components.schedule_store import list_schedules
 
 ICONS_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
 
@@ -232,11 +233,12 @@ with st.container(key="ts_reservation_card", border=True):
             unsafe_allow_html=True,
         )
     with badge_col:
-        if room["reservation_count"] > 0:
+        reservation_count = len(list_schedules(room["id"]))
+        if reservation_count > 0:
             st.markdown(
                 f"""
                 <div class="ts-reservation-badge-wrap">
-                  <span class="ts-reservation-badge">예약 {room["reservation_count"]}건</span>
+                  <span class="ts-reservation-badge">예약 {reservation_count}건</span>
                 </div>
                 """,
                 unsafe_allow_html=True,

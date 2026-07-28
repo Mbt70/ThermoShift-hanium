@@ -206,6 +206,22 @@
   font-weight: var(--font-weight-bold);
 }
 
+/* Same markdown-container negative-margin issue as the home header/chips
+   row: the title's own margin-bottom makes its column taller than the
+   un-margined badge column, so align-items:center centers them on
+   different heights. Neutralize it and move the gap to the row itself. */
+[data-testid="stHorizontalBlock"]:has(.ts-reservation-title) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+[data-testid="stHorizontalBlock"]:has(.ts-reservation-title) {
+  margin-bottom: 10px;
+}
+
+[data-testid="stHorizontalBlock"]:has(.ts-reservation-title) .ts-reservation-title {
+  margin-bottom: 0;
+}
+
 .ts-target-title-icon {
   width: 13px;
   height: 13px;
