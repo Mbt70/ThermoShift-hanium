@@ -1,0 +1,534 @@
+:root {
+  --schedule-radius: 8px;
+  --toggle-off: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDYiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCA0NiAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ2IiBoZWlnaHQ9IjI4IiByeD0iMTQiIGZpbGw9IiM5OEExQUIiLz4KPGcgZmlsdGVyPSJ1cmwoI2ZpbHRlcjBfZF8yMTlfMTY3KSI+CjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSIyMiIgaGVpZ2h0PSIyMiIgcng9IjExIiBmaWxsPSJ3aGl0ZSIvPgo8L2c+CjxkZWZzPgo8ZmlsdGVyIGlkPSJmaWx0ZXIwX2RfMjE5XzE2NyIgeD0iMSIgeT0iMiIgd2lkdGg9IjI2IiBoZWlnaHQ9IjI2IiBmaWx0ZXJVbml0cz0idXNlclNwYWNlT25Vc2UiIGNvbG9yLWludGVycG9sYXRpb24tZmlsdGVycz0ic1JHQiI+CjxmZUZsb29kIGZsb29kLW9wYWNpdHk9IjAiIHJlc3VsdD0iQmFja2dyb3VuZEltYWdlRml4Ii8+CjxmZUNvbG9yTWF0cml4IGluPSJTb3VyY2VBbHBoYSIgdHlwZT0ibWF0cml4IiB2YWx1ZXM9IjAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDEyNyAwIiByZXN1bHQ9ImhhcmRBbHBoYSIvPgo8ZmVPZmZzZXQgZHk9IjEiLz4KPGZlR2F1c3NpYW5CbHVyIHN0ZERldmlhdGlvbj0iMSIvPgo8ZmVDb21wb3NpdGUgaW4yPSJoYXJkQWxwaGEiIG9wZXJhdG9yPSJvdXQiLz4KPGZlQ29sb3JNYXRyaXggdHlwZT0ibWF0cml4IiB2YWx1ZXM9IjAgMCAwIDAgMC4wNjI3NDUxIDAgMCAwIDAgMC4wOTQxMTc2IDAgMCAwIDAgMC4xNTY4NjMgMCAwIDAgMC4wNSAwIi8+CjxmZUJsZW5kIG1vZGU9Im5vcm1hbCIgaW4yPSJCYWNrZ3JvdW5kSW1hZ2VGaXgiIHJlc3VsdD0iZWZmZWN0MV9kcm9wU2hhZG93XzIxOV8xNjciLz4KPGZlQmxlbmQgbW9kZT0ibm9ybWFsIiBpbj0iU291cmNlR3JhcGhpYyIgaW4yPSJlZmZlY3QxX2Ryb3BTaGFkb3dfMjE5XzE2NyIgcmVzdWx0PSJzaGFwZSIvPgo8L2ZpbHRlcj4KPC9kZWZzPgo8L3N2Zz4K");
+  --toggle-on: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDYiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCA0NiAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ2IiBoZWlnaHQ9IjI4IiByeD0iMTQiIGZpbGw9IiMwMDlFOUIiLz4KPGcgZmlsdGVyPSJ1cmwoI2ZpbHRlcjBfZF8yMTlfMTU5KSI+CjxyZWN0IHg9IjIxIiB5PSIzIiB3aWR0aD0iMjIiIGhlaWdodD0iMjIiIHJ4PSIxMSIgZmlsbD0id2hpdGUiLz4KPC9nPgo8ZGVmcz4KPGZpbHRlciBpZD0iZmlsdGVyMF9kXzIxOV8xNTkiIHg9IjE5IiB5PSIyIiB3aWR0aD0iMjYiIGhlaWdodD0iMjYiIGZpbHRlclVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj4KPGZlRmxvb2QgZmxvb2Qtb3BhY2l0eT0iMCIgcmVzdWx0PSJCYWNrZ3JvdW5kSW1hZ2VGaXgiLz4KPGZlQ29sb3JNYXRyaXggaW49IlNvdXJjZUFscGhhIiB0eXBlPSJtYXRyaXgiIHZhbHVlcz0iMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMTI3IDAiIHJlc3VsdD0iaGFyZEFscGhhIi8+CjxmZU9mZnNldCBkeT0iMSIvPgo8ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIxIi8+CjxmZUNvbXBvc2l0ZSBpbjI9ImhhcmRBbHBoYSIgb3BlcmF0b3I9Im91dCIvPgo8ZmVDb2xvck1hdHJpeCB0eXBlPSJtYXRyaXgiIHZhbHVlcz0iMCAwIDAgMCAwLjA2Mjc0NTEgMCAwIDAgMCAwLjA5NDExNzYgMCAwIDAgMCAwLjE1Njg2MyAwIDAgMCAwLjA1IDAiLz4KPGZlQmxlbmQgbW9kZT0ibm9ybWFsIiBpbjI9IkJhY2tncm91bmRJbWFnZUZpeCIgcmVzdWx0PSJlZmZlY3QxX2Ryb3BTaGFkb3dfMjE5XzE1OSIvPgo8ZmVCbGVuZCBtb2RlPSJub3JtYWwiIGluPSJTb3VyY2VHcmFwaGljIiBpbjI9ImVmZmVjdDFfZHJvcFNoYWRvd18yMTlfMTU5IiByZXN1bHQ9InNoYXBlIi8+CjwvZmlsdGVyPgo8L2RlZnM+Cjwvc3ZnPgo=");
+}
+
+/* Same margin-collapse issue as the rest of the schedule pages: the
+   label's own margin-bottom gets absorbed by the unpadded wrapper chain
+   (12px + Streamlit's default -16px collapses to -4px), so use padding on
+   the wrapper instead, which never collapses. */
+[data-testid="stElementContainer"]:has(.ts-schedule-day-label) {
+  padding-bottom: 16px;
+}
+
+[data-testid="stElementContainer"]:has(.ts-schedule-day-label) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+.ts-schedule-day-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+[class*="st-key-ts_schedule_card_"] {
+  position: relative;
+  flex-shrink: 0;
+  padding: 20px 18px !important;
+  margin-bottom: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--schedule-radius);
+  box-shadow: none;
+}
+
+[class*="st-key-ts_schedule_card_"] [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+[class*="st-key-ts_schedule_open_"] {
+  position: absolute !important;
+  inset: 0;
+  z-index: 2;
+  margin: 0 !important;
+  padding: 0 !important;
+  height: auto;
+}
+
+[class*="st-key-ts_schedule_open_"] div {
+  height: 100%;
+  width: 100%;
+}
+
+[class*="st-key-ts_schedule_open_"] button {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: transparent;
+  box-shadow: none;
+  opacity: 0;
+  cursor: pointer;
+}
+
+[class*="st-key-ts_schedule_open_"] button:hover,
+[class*="st-key-ts_schedule_open_"] button:focus,
+[class*="st-key-ts_schedule_open_"] button:active {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  opacity: 0;
+}
+
+.ts-schedule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ts-schedule-time {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-schedule-badge {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+}
+
+.ts-schedule-badge-done {
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.ts-schedule-badge-active {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+.ts-schedule-badge-upcoming {
+  background: var(--bg);
+  color: var(--placeholder);
+}
+
+.ts-schedule-add-space {
+  height: 4px;
+}
+
+.st-key-schedule_add button {
+  padding: 16px 18px;
+  background: transparent;
+  border: 1.5px dashed var(--border);
+  color: var(--primary-dark);
+  font-weight: var(--font-weight-extrabold) !important;
+  box-shadow: none;
+}
+
+.st-key-schedule_add button:hover,
+.st-key-schedule_add button:active,
+.st-key-schedule_add button:focus {
+  background: transparent;
+  border: 1.5px dashed var(--border);
+  color: var(--primary-dark);
+  box-shadow: none;
+}
+
+.ts-schedule-form-hint {
+  margin: -6px 0 20px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.ts-schedule-field-label {
+  margin: 0 0 7px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.02em;
+}
+
+/* Streamlit's markdown containers carry a default margin-bottom: -16px
+   (its trailing-gap collapse); that eats the label's own 7px margin above
+   and lets the next widget's box start before the label text ends. */
+[data-testid="stElementContainer"]:has(.ts-schedule-field-label) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+[data-testid="stDateInput"] {
+  margin-bottom: 15px;
+}
+
+[data-testid="stDateInput"] input {
+  min-height: 48px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--schedule-radius);
+  color: var(--text);
+  font-size: var(--font-size-base);
+  box-shadow: none;
+}
+
+[data-testid="stDateInput"] [data-baseweb="input"] {
+  border-radius: var(--schedule-radius);
+}
+
+[data-testid="stSelectbox"] {
+  margin-bottom: 15px;
+}
+
+[data-testid="stSelectbox"] > div > div {
+  min-height: 48px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--schedule-radius);
+  color: var(--text);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: none;
+}
+
+.ts-schedule-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-schedule-card-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+
+.st-key-ts_schedule_temp_card,
+.st-key-ts_schedule_precool_card,
+.st-key-ts_schedule_repeat_card,
+.st-key-ts_schedule_info_card {
+  padding: 16px 18px !important;
+  margin-bottom: 15px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--schedule-radius);
+  box-shadow: none;
+}
+
+[data-testid="stHorizontalBlock"]:has(.st-key-schedule_temp_minus) {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 28px;
+}
+
+[data-testid="stHorizontalBlock"]:has(.st-key-schedule_temp_minus) > [data-testid="stColumn"] {
+  width: auto !important;
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+}
+
+.ts-schedule-temp-value {
+  margin: 0;
+  text-align: center;
+  color: var(--text);
+  font-size: 36px !important;
+  font-weight: var(--font-weight-extrabold);
+}
+
+.ts-schedule-temp-sub {
+  margin: 8px 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.st-key-schedule_temp_minus button,
+.st-key-schedule_temp_plus button {
+  width: 52px !important;
+  height: 52px;
+  min-height: 52px;
+  margin: 0 auto;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 24px;
+  line-height: 1;
+  background: var(--card) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+.st-key-schedule_temp_minus button:hover,
+.st-key-schedule_temp_plus button:hover {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+}
+
+/* Custom toggle art from assets/icons/toggleon.svg + toggleoff.svg,
+   swapped in place of the native switch track; the native thumb is
+   hidden since the artwork already draws its own knob. */
+[data-testid="stCheckbox"] label > div:first-of-type {
+  width: 46px !important;
+  height: 28px !important;
+  background-color: transparent !important;
+  background-image: var(--toggle-off);
+  background-size: 46px 28px;
+  background-repeat: no-repeat;
+  border-radius: 0;
+}
+
+[data-testid="stCheckbox"] label:has(input[role="switch"]:checked) > div:first-of-type {
+  background-image: var(--toggle-on);
+}
+
+[data-testid="stCheckbox"] label > div:first-of-type > div {
+  display: none;
+}
+
+[data-testid="stElementContainer"]:has(button[data-variant="pills"]) {
+  margin-top: 4px;
+}
+
+button[data-variant="pills"] {
+  background: var(--bg) !important;
+  color: var(--muted) !important;
+  border-color: var(--border) !important;
+}
+
+button[data-variant="pills"][aria-pressed="true"] {
+  background: var(--primary) !important;
+  color: #fff !important;
+  border-color: var(--primary) !important;
+}
+
+/* Same margin-collapse issue as the other schedule-page fixes: the note's
+   own margin gets absorbed by the unpadded wrapper chain, so use padding
+   on the wrapper (never collapses) for spacing that matches the 15px gap
+   between the cards above it instead. */
+[data-testid="stElementContainer"]:has(.ts-schedule-note) {
+  padding-bottom: 15px;
+}
+
+[data-testid="stElementContainer"]:has(.ts-schedule-note) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+.ts-schedule-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--warning-bg);
+  border-radius: var(--schedule-radius);
+  color: var(--warning);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.4;
+}
+
+.ts-schedule-note svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ts-schedule-field-error {
+  margin: -8px 0 12px;
+  color: var(--danger);
+  font-size: 10px !important;
+  font-weight: var(--font-weight-medium);
+}
+
+.st-key-schedule_submit button:focus {
+  box-shadow: none;
+}
+
+/* Streamlit's markdown container carries a default margin-bottom: -16px;
+   that collapses against this element's own margins and left it touching
+   the box above with the card below overlapping it. Neutralize the
+   container so the explicit positive margins below are the real gap. */
+[data-testid="stElementContainer"]:has(.ts-schedule-time-error) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+/* The paragraph's own margin-top collapses straight through the chain of
+   unpadded wrapper divs (none of them have padding/border to stop it) and
+   ends up absorbed by the previous element instead of creating a gap here.
+   Padding never collapses, so use that for the top gap instead. */
+[data-testid="stElementContainer"]:has(.ts-schedule-time-error) {
+  padding-top: 4px;
+}
+
+.ts-schedule-time-error {
+  margin: 0 0 12px;
+  color: var(--danger);
+  font-size: 10px !important;
+  font-weight: var(--font-weight-medium);
+}
+
+/* Streamlit's markdown container carries a default margin-bottom: -16px;
+   it collapses with this card's own margin-bottom (15px + -16px = -1px),
+   leaving almost no gap before the next card. Neutralize it. */
+[data-testid="stElementContainer"]:has(.ts-schedule-status-card) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+.ts-schedule-status-card {
+  padding: 18px;
+  margin-bottom: 15px;
+  background: var(--primary-light);
+  border-radius: var(--schedule-radius);
+}
+
+.ts-schedule-status-card-muted {
+  background: var(--card);
+  border: 1px solid var(--border);
+  text-align: center;
+  padding: 24px 18px;
+}
+
+.ts-schedule-status-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  color: var(--primary-dark);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-schedule-status-card-muted .ts-schedule-status-title {
+  justify-content: center;
+  color: var(--muted);
+}
+
+.ts-schedule-status-temps {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ts-schedule-status-temp {
+  color: var(--text);
+  font-size: 30px;
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.02em;
+}
+
+.ts-schedule-status-arrow {
+  color: var(--muted);
+  font-size: 20px;
+}
+
+.ts-schedule-status-labels {
+  display: flex;
+  justify-content: space-between;
+  margin: 4px 0 12px;
+  color: var(--muted);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-schedule-status-labels span:last-child {
+  margin-left: auto;
+}
+
+.ts-schedule-progress-track {
+  height: 6px;
+  margin-bottom: 10px;
+  background: rgb(255 255 255 / 60%);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.ts-schedule-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+}
+
+.ts-schedule-status-caption {
+  margin: 0;
+  color: var(--primary-dark);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.ts-schedule-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.ts-schedule-info-row:first-of-type {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.ts-schedule-info-label {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.ts-schedule-info-value {
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.st-key-schedule_detail_edit button {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.st-key-schedule_detail_edit button:hover {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.st-key-schedule_detail_cancel button {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.st-key-schedule_detail_cancel button:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.ts-schedule-cancel-dialog-desc {
+  margin: -8px 0 18px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+
+.st-key-schedule_cancel_keep button {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.st-key-schedule_cancel_confirm button {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.st-key-schedule_cancel_confirm button:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
