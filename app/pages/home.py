@@ -1,4 +1,5 @@
 import base64
+import re
 from pathlib import Path
 
 import streamlit as st
@@ -11,11 +12,12 @@ from app.components.room_store import (
     environment_snapshot,
     get_room,
     relative_updated,
+    set_control_mode,
     set_target_temperature,
     system_judgment,
     trend_series,
 )
-from app.components.schedule_store import list_schedules
+from app.components.schedule_store import list_today_schedules
 
 ICONS_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
 
@@ -61,6 +63,25 @@ _BOLT_ICON = (
 def _icon_data_uri(file_name: str) -> str:
     encoded = base64.b64encode((ICONS_DIR / file_name).read_bytes()).decode("ascii")
     return f"data:image/svg+xml;base64,{encoded}"
+
+
+def _recolored_icon_data_uri(file_name: str, color: str) -> str:
+    content = (ICONS_DIR / file_name).read_text(encoding="utf-8")
+    content = re.sub(r"<mask[^>]*>.*?</mask>", "", content, flags=re.DOTALL)
+    content = re.sub(r'<[a-zA-Z]+[^>]*\smask="[^"]*"[^>]*/?>', "", content)
+    content = re.sub(r'fill="(?!none"|white")[^"]*"', f'fill="{color}"', content)
+    encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
+
+
+_CONTROL_MODES = (
+    ("monitoring", "모니터", "monitoring.svg"),
+    ("manual", "수동", "back_hand.svg"),
+    ("rule", "규칙", "rule-based.svg"),
+    ("predictive", "예측", "predictive.svg"),
+)
+_MODE_ICON_INACTIVE = "#98a1ab"
+_MODE_ICON_ACTIVE = "#ffffff"
 
 
 def _trend_svg(temps: list[float], co2s: list[float], target: float) -> str:
@@ -199,6 +220,33 @@ with st.container(key="ts_judgment_card", border=True):
     with link_col:
         st.page_link("pages/log_detail.py", label="자세히 ›")
 
+with st.container(key="ts_control_mode_card", border=True):
+    st.markdown('<p class="ts-mode-title">제어 모드</p>', unsafe_allow_html=True)
+    current_mode = room.get("control_mode", "rule")
+    clicked_mode = None
+    mode_cols = st.columns(4, gap="small")
+    for col, (mode_id, mode_label, icon_file) in zip(mode_cols, _CONTROL_MODES):
+        with col:
+            with st.container(key=f"ts_mode_{mode_id}"):
+                is_active = mode_id == current_mode
+                icon_color = _MODE_ICON_ACTIVE if is_active else _MODE_ICON_INACTIVE
+                icon_uri = _recolored_icon_data_uri(icon_file, icon_color)
+                active_class = "is-active" if is_active else ""
+                st.markdown(
+                    f"""
+                    <div class="ts-mode-item {active_class}">
+                      <div class="ts-mode-icon-wrap"><img src="{icon_uri}" alt="" class="ts-mode-icon" /></div>
+                      <p class="ts-mode-label">{mode_label}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if st.button(mode_label, key=f"mode_btn_{mode_id}", use_container_width=True):
+                    clicked_mode = mode_id
+    if clicked_mode and clicked_mode != current_mode:
+        set_control_mode(room["id"], clicked_mode)
+        st.rerun()
+
 with st.container(key="ts_target_card", border=True):
     thermo_uri = _icon_data_uri("thermostat.svg")
     st.markdown(
@@ -233,7 +281,7 @@ with st.container(key="ts_reservation_card", border=True):
             unsafe_allow_html=True,
         )
     with badge_col:
-        reservation_count = len(list_schedules(room["id"]))
+        reservation_count = len(list_today_schedules(room["id"]))
         if reservation_count > 0:
             st.markdown(
                 f"""

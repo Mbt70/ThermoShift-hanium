@@ -14,6 +14,7 @@ _DEFAULT_FIELDS = {
     "auto_control": True,
     "reservation_count": 0,
     "last_updated": None,
+    "control_mode": "rule",
 }
 
 
@@ -165,6 +166,15 @@ def set_target_temperature(room_id: str, target_temperature: int) -> None:
         return
     room["target_temperature"] = target_temperature
     room["last_updated"] = datetime.now().isoformat()
+    _save_rooms(rooms)
+
+
+def set_control_mode(room_id: str, control_mode: str) -> None:
+    rooms = _load_rooms()
+    room = next((r for r in rooms if r["id"] == room_id), None)
+    if room is None:
+        return
+    room["control_mode"] = control_mode
     _save_rooms(rooms)
 
 
