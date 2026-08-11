@@ -200,12 +200,35 @@
   font-weight: var(--font-weight-bold);
 }
 
+/* The title's own margin-bottom (meant as the gap before the description
+   paragraph that follows the row on the precool card) still counts toward
+   its column's height here, making that column taller than the toggle's.
+   align-items:center then centers the two *columns*, leaving the text
+   itself sitting above the toggle instead of level with it. Neutralize it
+   for the title/toggle header row specifically. */
+[data-testid="stHorizontalBlock"]:has(.ts-schedule-card-title) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+[data-testid="stHorizontalBlock"]:has(.ts-schedule-card-title) .ts-schedule-card-title {
+  margin-bottom: 0;
+}
+
 .ts-schedule-card-desc {
   margin: 0;
   color: var(--muted);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   line-height: 1.4;
+}
+
+/* Streamlit's markdown container carries a default margin-bottom: -16px
+   (its trailing-gap collapse); as the last element in the card that eats
+   straight into the card's own padding-bottom, leaving almost no visible
+   gap before the border. Neutralize it so the card's padding is the real
+   bottom gap. */
+[data-testid="stElementContainer"]:has(.ts-schedule-card-desc) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
 }
 
 .st-key-ts_schedule_temp_card,
