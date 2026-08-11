@@ -42,6 +42,15 @@ footer {
   min-height: 100dvh;
 }
 
+[data-testid="stMain"] {
+  scrollbar-width: none;
+}
+
+[data-testid="stMain"]::-webkit-scrollbar {
+  display: none;
+  width: 0;
+}
+
 [data-testid="stMainBlockContainer"] {
   width: min(100%, var(--page-width));
   max-width: var(--page-width);
