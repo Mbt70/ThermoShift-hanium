@@ -63,17 +63,11 @@ footer {
 }
 
 [data-testid="stMainBlockContainer"] {
-  width: min(100%, var(--page-width));
-  max-width: var(--page-width);
+  width: 100%;
   min-height: 100dvh;
-  flex-shrink: 0;
   margin: 0 auto;
-  padding: 22px 22px 28px;
+  padding: 32px 40px;
   background: var(--bg);
-  border-left: 1px solid #e1e5e9;
-  border-right: 1px solid #e1e5e9;
-  border-radius: 0;
-  box-shadow: 0 0 34px rgb(20 31 43 / 7%);
 }
 
 [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] {
@@ -315,23 +309,6 @@ footer {
   [data-testid="stMainBlockContainer"] {
     padding-right: 20px;
     padding-left: 20px;
-    border: 0;
-    box-shadow: none;
-  }
-}
-
-@media (max-width: 370px) {
-  [data-testid="stMainBlockContainer"] {
-    padding-right: 16px;
-    padding-left: 16px;
-  }
-
-  .ts-form-space {
-    height: 48px;
-  }
-
-  .ts-form-submit-space {
-    height: 8px;
   }
 }
 
@@ -342,9 +319,8 @@ footer {
 .st-key-ts_tab_bar {
   position: fixed;
   bottom: 0;
-  left: 50%;
-  width: min(100%, var(--page-width));
-  transform: translateX(-50%);
+  left: 0;
+  width: 100%;
   z-index: 5;
   background: transparent;
 }

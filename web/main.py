@@ -14,7 +14,7 @@ def page(source: str, *, title: str, url_path: str, default: bool = False):
 
 st.set_page_config(
     page_title="ThermoShift",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="collapsed",
 )
 
