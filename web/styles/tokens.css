@@ -1,0 +1,52 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
+
+:root {
+  --font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Malgun Gothic", sans-serif;
+
+  --font-size-2xs: 11px;
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-base: 15px;
+  --font-size-lg: 16px;
+  --font-size-xl: 21px;
+  --font-size-2xl: 30px;
+
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  --primary: #58a4a2;
+  --primary-dark: #397f80;
+  --primary-light: #cff6f3;
+
+  --bg: #f4f7f9;
+  --bg-outside: #eef2f4;
+  --card: #ffffff;
+
+  --text: #171a21;
+  --muted: #606a78;
+  --placeholder: #98a2b1;
+  --icon: #87929f;
+  --border: #dce1e6;
+
+  --success: #69c565;
+  --success-bg: #e4f5e7;
+  --warning: #d99a22;
+  --warning-bg: #fff0c9;
+  --danger: #e64a45;
+  --danger-bg: #fbe8e5;
+
+  --chart-blue: #5f84c4;
+  --chart-purple: #9b7fd4;
+  --chart-orange: #e0983f;
+  --chart-gray: #d1d4d6;
+
+  --input-radius: 14px;
+  --button-radius: 14px;
+  --page-width: 430px;
+}
