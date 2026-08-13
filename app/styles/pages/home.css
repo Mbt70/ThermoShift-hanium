@@ -197,10 +197,10 @@
 }
 
 .ts-mode-title {
-  margin: 0 0 12px;
+  margin: 0 0 12px !important;
   color: var(--text);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-bold) !important;
 }
 
 .st-key-ts_control_mode_card [data-testid="stHorizontalBlock"] {
@@ -297,10 +297,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 0 10px;
+  margin: 0 0 10px !important;
   color: var(--text);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-bold) !important;
 }
 
 /* Same markdown-container negative-margin issue as the home header/chips
@@ -350,11 +350,11 @@
 }
 
 .ts-target-sub {
-  margin: 8px 0 0;
+  margin: 8px 0 0 !important;
   text-align: center;
   color: var(--muted);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-xs) !important;
+  font-weight: var(--font-weight-medium) !important;
 }
 
 .ts-target-note {
@@ -447,10 +447,10 @@
 }
 
 .ts-trend-title {
-  margin: 0;
+  margin: 0 !important;
   color: var(--text);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-bold) !important;
 }
 
 .ts-trend-legend {

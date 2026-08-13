@@ -10,6 +10,7 @@ body,
   justify-content: center !important;
   align-items: center !important;
   padding-top: 0 !important;
+  background-color: rgba(15, 20, 30, 0.55) !important;
 }
 
 [data-testid="stDialog"] > div {
@@ -189,8 +190,9 @@ footer {
   box-shadow: none;
 }
 
-[data-testid="stTextInput"] [data-baseweb="base-input"] {
-  background: var(--card);
+[data-testid="stTextInput"] [data-baseweb="base-input"],
+[data-testid="stTextInputRootElement"] > div {
+  background: var(--card) !important;
 }
 
 [data-testid="stTextInput"] [data-baseweb="input"]:focus-within,
