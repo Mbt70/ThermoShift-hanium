@@ -6,6 +6,8 @@ body,
 }
 
 [data-testid="stDialog"] {
+  display: flex !important;
+  justify-content: center !important;
   align-items: center !important;
   padding-top: 0 !important;
 }
@@ -187,10 +189,14 @@ footer {
   box-shadow: none;
 }
 
+[data-testid="stTextInput"] [data-baseweb="base-input"] {
+  background: var(--card);
+}
+
 [data-testid="stTextInput"] [data-baseweb="input"]:focus-within,
 [data-testid="stTextInputRootElement"]:focus-within {
-  border-color: var(--primary) !important;
-  box-shadow: 0 0 0 2px rgb(88 164 162 / 13%);
+  border-color: var(--border) !important;
+  box-shadow: none !important;
 }
 
 [data-testid="stTextInput"] input {

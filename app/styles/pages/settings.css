@@ -161,7 +161,7 @@
 }
 
 .ts-settings-row-value {
-  margin: 0;
+  margin: 0 !important;
   color: var(--muted);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
