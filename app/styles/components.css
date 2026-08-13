@@ -5,6 +5,17 @@ body,
   font-family: var(--font-family);
 }
 
+[data-testid="stDialog"] {
+  align-items: center !important;
+  padding-top: 0 !important;
+}
+
+[data-testid="stDialog"] > div {
+  width: min(90vw, 360px) !important;
+  max-height: min(80vh, 600px);
+  overflow-y: auto;
+}
+
 [data-testid="stHorizontalBlock"] {
   display: flex !important;
   flex-direction: row !important;
@@ -166,17 +177,19 @@ footer {
   letter-spacing: -0.02em;
 }
 
-[data-testid="stTextInput"] [data-baseweb="input"] {
+[data-testid="stTextInput"] [data-baseweb="input"],
+[data-testid="stTextInputRootElement"] {
   min-height: 50px;
   overflow: hidden;
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border) !important;
   border-radius: var(--input-radius);
   box-shadow: none;
 }
 
-[data-testid="stTextInput"] [data-baseweb="input"]:focus-within {
-  border-color: var(--primary);
+[data-testid="stTextInput"] [data-baseweb="input"]:focus-within,
+[data-testid="stTextInputRootElement"]:focus-within {
+  border-color: var(--primary) !important;
   box-shadow: 0 0 0 2px rgb(88 164 162 / 13%);
 }
 
@@ -186,6 +199,16 @@ footer {
   padding-bottom: 0;
   color: var(--text);
   font-size: var(--font-size-base);
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+[data-testid="stTextInput"] input:-webkit-autofill,
+[data-testid="stTextInput"] input:-webkit-autofill:hover,
+[data-testid="stTextInput"] input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--card) inset !important;
+  -webkit-text-fill-color: var(--text) !important;
+  transition: background-color 9999s ease-in-out 0s;
 }
 
 [data-testid="stTextInput"] input::placeholder {

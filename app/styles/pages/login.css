@@ -1,3 +1,15 @@
 .st-key-login_signup_link {
   justify-content: flex-end;
 }
+
+[data-testid="stMainBlockContainer"]:has(.ts-login) [data-testid="stTextInputRootElement"]:focus-within,
+[data-testid="stMainBlockContainer"]:has(.ts-login) [data-testid="stTextInput"] [data-baseweb="input"]:focus-within {
+  border-color: var(--border) !important;
+  box-shadow: none !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.ts-login) [data-testid="stTextInput"] input:focus,
+[data-testid="stMainBlockContainer"]:has(.ts-login) [data-testid="stTextInput"] input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
