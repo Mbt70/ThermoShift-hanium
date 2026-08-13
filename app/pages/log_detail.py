@@ -59,10 +59,12 @@ if room is None:
 log_id = st.session_state.get("_ts_selected_log")
 log = get_log(log_id) if log_id else None
 
-if log is None or log["success"]:
-    st.switch_page("pages/log_list.py")
+return_page = st.session_state.get("_ts_log_detail_return", "pages/log_list.py")
 
-page_header("제어 로그 상세", back_page="pages/log_list.py")
+if log is None or log["success"]:
+    st.switch_page(return_page)
+
+page_header("제어 로그 상세", back_page=return_page)
 
 st.markdown(
     f"""

@@ -28,6 +28,29 @@ ERROR_CATALOG = {
         "cause_guess": "일시적인 통신 오류일 수 있습니다. 잠시 후 다시 시도해 주세요.",
         "checklist": ["잠시 후 다시 시도", "기기 전원 재연결", "그래도 반복되면 관리자에게 문의"],
     },
+    # non-control system events (알림에서 넘어오는 것들). 제어 명령이 아니라
+    # 센서/환경/네트워크 상태 이벤트지만, 사용자에게 보여주는 방식은 제어
+    # 실패와 동일하므로 같은 카탈로그에서 관리한다.
+    "sensor_offline": {
+        "failure_reason": "센서 노드에서 3분 이상 신호가 수신되지 않았습니다.",
+        "cause_guess": "센서 배터리가 방전됐거나 게이트웨이와의 통신 범위를 벗어났을 수 있습니다.",
+        "checklist": ["센서 배터리 잔량 확인", "센서-게이트웨이 거리 확인", "게이트웨이 재부팅"],
+    },
+    "co2_high": {
+        "failure_reason": "CO₂ 농도가 설정 기준을 초과했습니다.",
+        "cause_guess": "환기가 원활하지 않거나 재실 인원이 많아 농도가 상승했을 수 있습니다.",
+        "checklist": ["환기 장치 동작 확인", "창문 개방 여부 확인", "재실 인원 확인"],
+    },
+    "temperature_abnormal": {
+        "failure_reason": "실내 온도가 설정 범위를 벗어났습니다.",
+        "cause_guess": "냉난방 기기가 정상 동작하지 않거나 외부 온도 영향을 받았을 수 있습니다.",
+        "checklist": ["냉난방 기기 동작 확인", "설정 온도 확인", "창문/문 개방 여부 확인"],
+    },
+    "network_error": {
+        "failure_reason": "장비와 서버 간 통신이 5분 이상 원활하지 않습니다.",
+        "cause_guess": "게이트웨이 전원이 꺼졌거나 공유기 연결이 끊겼을 수 있습니다.",
+        "checklist": ["게이트웨이 전원 확인", "공유기 연결 상태 확인", "그래도 반복되면 관리자에게 문의"],
+    },
 }
 
 _DEMO_TEMPLATE = [
@@ -125,7 +148,32 @@ def list_logs(room_id: str, day: date, method: str | None = None) -> list[dict]:
     return sorted(logs, key=lambda log: log["timestamp"])
 
 
+def _alert_as_log(alert_id: str) -> dict | None:
+    # Bridge for 알림 → 제어로그 상세 unification: sensor/env/network alerts
+    # aren't control commands, so they don't live in _DEMO_TEMPLATE — this
+    # builds a log-shaped dict from the alert on the fly instead.
+    from app.components.alert_store import get_alert
+
+    alert = get_alert(alert_id)
+    if alert is None:
+        return None
+    return _with_catalog_fields(
+        {
+            "id": f"alert_{alert_id}",
+            "room_id": None,
+            "timestamp": None,
+            "method": None,
+            "content": alert["title"],
+            "success": False,
+            "failure_title": alert["title"],
+            "error_code": alert["type"],
+        }
+    )
+
+
 def get_log(log_id: str) -> dict | None:
+    if log_id.startswith("alert_"):
+        return _alert_as_log(log_id[len("alert_") :])
     recorded = next((log for log in _load_recorded() if log["id"] == log_id), None)
     if recorded is not None:
         return _with_catalog_fields(recorded)

@@ -31,9 +31,12 @@ def apply_mobile_styles(page_name: str, *, shared: tuple[str, ...] = ()) -> None
     )
 
 
-def page_header(title: str, back_page: str = "pages/onboarding.py") -> None:
+def page_header(
+    title: str, back_page: str = "pages/onboarding.py", *, show_back: bool = True
+) -> None:
     with st.container(key="ts_page_header"):
-        st.page_link(back_page, label="‹")
+        if show_back:
+            st.page_link(back_page, label="‹")
         st.markdown(f"<h1>{title}</h1>", unsafe_allow_html=True)
 
 

@@ -30,13 +30,6 @@ def greeting_header(name: str) -> None:
                 <p>안녕하세요</p>
                 <h1>{name}님</h1>
               </div>
-              <svg class="ts-bell" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 2a6 6 0 0 0-6 6v3.586l-1.707 1.707A1 1 0 0 0 5 15h14a1 1 0 0 0
-                         .707-1.707L18 11.586V8a6 6 0 0 0-6-6Z" stroke="currentColor"
-                      stroke-width="1.6" stroke-linejoin="round" />
-                <path d="M9.5 18a2.5 2.5 0 0 0 5 0" stroke="currentColor" stroke-width="1.6"
-                      stroke-linecap="round" />
-              </svg>
             </div>
             """,
             unsafe_allow_html=True,

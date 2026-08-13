@@ -110,6 +110,7 @@ if logs:
                 )
             if not log["success"] and clicked:
                 st.session_state["_ts_selected_log"] = log["id"]
+                st.session_state["_ts_log_detail_return"] = "pages/log_list.py"
                 st.switch_page("pages/log_detail.py")
 else:
     st.markdown(
