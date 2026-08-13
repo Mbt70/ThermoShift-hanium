@@ -47,3 +47,35 @@ def current_user_name() -> str:
     email = st.session_state.get(_CURRENT_USER_KEY)
     user = _load_users().get(email) if email else None
     return user["name"] if user else "Thermo"
+
+
+def current_user_email() -> str | None:
+    return st.session_state.get(_CURRENT_USER_KEY)
+
+
+def update_user_name(email: str, name: str) -> None:
+    users = _load_users()
+    user = users.get(email)
+    if user is None:
+        return
+    user["name"] = name
+    _save_users(users)
+
+
+def update_password(email: str, new_password: str) -> None:
+    users = _load_users()
+    user = users.get(email)
+    if user is None:
+        return
+    user["password"] = new_password
+    _save_users(users)
+
+
+def delete_user(email: str) -> None:
+    users = _load_users()
+    users.pop(email, None)
+    _save_users(users)
+
+
+def log_out() -> None:
+    st.session_state.pop(_CURRENT_USER_KEY, None)

@@ -9,13 +9,15 @@ apply_mobile_styles("room_settings", shared=("room_form",))
 if not is_logged_in():
     st.switch_page("pages/login.py")
 
-page_header("공간 설정", back_page="pages/room_list.py")
+return_page = st.session_state.get("_ts_room_settings_return", "pages/room_list.py")
+
+page_header("공간 설정", back_page=return_page)
 
 room_id = st.session_state.get("_ts_selected_room")
 room = get_room(room_id) if room_id else None
 
 if room is None:
-    st.switch_page("pages/room_list.py")
+    st.switch_page(return_page)
 
 st.markdown(
     '<p class="ts-settings-hint">공간 이름 위치 평면도를 수정할 수 있어요</p>',
@@ -49,7 +51,7 @@ with save_col:
 if delete_clicked:
     delete_room(room["id"])
     st.session_state.pop("_ts_selected_room", None)
-    st.switch_page("pages/room_list.py")
+    st.switch_page(return_page)
 
 if save_clicked:
     update_room(
@@ -58,4 +60,4 @@ if save_clicked:
         location=location,
         floor_plan_name=floor_plan.name if floor_plan is not None else None,
     )
-    st.switch_page("pages/room_list.py")
+    st.switch_page(return_page)

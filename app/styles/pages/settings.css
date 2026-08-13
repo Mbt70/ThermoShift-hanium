@@ -1,0 +1,389 @@
+[data-testid="stMainBlockContainer"]:has(.ts-settings) {
+  padding-left: 20px !important;
+  padding-right: 20px !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.ts-password) [data-testid="stTextInputRootElement"],
+[data-testid="stMainBlockContainer"]:has(.ts-password) [data-testid="stTextInput"] [data-baseweb="input"],
+[data-testid="stMainBlockContainer"]:has(.ts-password) [data-testid="stTextInput"] input {
+  border: none !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.ts-password) [data-testid="stTextInputRootElement"]:focus-within,
+[data-testid="stMainBlockContainer"]:has(.ts-password) [data-testid="stTextInput"] [data-baseweb="input"]:focus-within {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.ts-password) [data-testid="stTextInput"] input:focus,
+[data-testid="stMainBlockContainer"]:has(.ts-password) [data-testid="stTextInput"] input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.ts-password) [data-testid="stTextInputRootElement"] {
+  padding-left: 16px !important;
+}
+
+.st-key-ts_password_submit_wrap {
+  position: fixed;
+  left: 50%;
+  bottom: 120px;
+  transform: translateX(-50%);
+  width: min(100% - 44px, calc(var(--page-width) - 44px));
+  z-index: 5;
+}
+
+:root {
+  --settings-radius: 16px;
+  --toggle-off: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDYiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCA0NiAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ2IiBoZWlnaHQ9IjI4IiByeD0iMTQiIGZpbGw9IiM5OEExQUIiLz4KPGcgZmlsdGVyPSJ1cmwoI2ZpbHRlcjBfZF8yMTlfMTY3KSI+CjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSIyMiIgaGVpZ2h0PSIyMiIgcng9IjExIiBmaWxsPSJ3aGl0ZSIvPgo8L2c+CjxkZWZzPgo8ZmlsdGVyIGlkPSJmaWx0ZXIwX2RfMjE5XzE2NyIgeD0iMSIgeT0iMiIgd2lkdGg9IjI2IiBoZWlnaHQ9IjI2IiBmaWx0ZXJVbml0cz0idXNlclNwYWNlT25Vc2UiIGNvbG9yLWludGVycG9sYXRpb24tZmlsdGVycz0ic1JHQiI+CjxmZUZsb29kIGZsb29kLW9wYWNpdHk9IjAiIHJlc3VsdD0iQmFja2dyb3VuZEltYWdlRml4Ii8+CjxmZUNvbG9yTWF0cml4IGluPSJTb3VyY2VBbHBoYSIgdHlwZT0ibWF0cml4IiB2YWx1ZXM9IjAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDEyNyAwIiByZXN1bHQ9ImhhcmRBbHBoYSIvPgo8ZmVPZmZzZXQgZHk9IjEiLz4KPGZlR2F1c3NpYW5CbHVyIHN0ZERldmlhdGlvbj0iMSIvPgo8ZmVDb21wb3NpdGUgaW4yPSJoYXJkQWxwaGEiIG9wZXJhdG9yPSJvdXQiLz4KPGZlQ29sb3JNYXRyaXggdHlwZT0ibWF0cml4IiB2YWx1ZXM9IjAgMCAwIDAgMC4wNjI3NDUxIDAgMCAwIDAgMC4wOTQxMTc2IDAgMCAwIDAgMC4xNTY4NjMgMCAwIDAgMC4wNSAwIi8+CjxmZUJsZW5kIG1vZGU9Im5vcm1hbCIgaW4yPSJCYWNrZ3JvdW5kSW1hZ2VGaXgiIHJlc3VsdD0iZWZmZWN0MV9kcm9wU2hhZG93XzIxOV8xNjciLz4KPGZlQmxlbmQgbW9kZT0ibm9ybWFsIiBpbj0iU291cmNlR3JhcGhpYyIgaW4yPSJlZmZlY3QxX2Ryb3BTaGFkb3dfMjE5XzE2NyIgcmVzdWx0PSJzaGFwZSIvPgo8L2ZpbHRlcj4KPC9kZWZzPgo8L3N2Zz4K");
+  --toggle-on: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDYiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCA0NiAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ2IiBoZWlnaHQ9IjI4IiByeD0iMTQiIGZpbGw9IiMwMDlFOUIiLz4KPGcgZmlsdGVyPSJ1cmwoI2ZpbHRlcjBfZF8yMTlfMTU5KSI+CjxyZWN0IHg9IjIxIiB5PSIzIiB3aWR0aD0iMjIiIGhlaWdodD0iMjIiIHJ4PSIxMSIgZmlsbD0id2hpdGUiLz4KPC9nPgo8ZGVmcz4KPGZpbHRlciBpZD0iZmlsdGVyMF9kXzIxOV8xNTkiIHg9IjE5IiB5PSIyIiB3aWR0aD0iMjYiIGhlaWdodD0iMjYiIGZpbHRlclVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj4KPGZlRmxvb2QgZmxvb2Qtb3BhY2l0eT0iMCIgcmVzdWx0PSJCYWNrZ3JvdW5kSW1hZ2VGaXgiLz4KPGZlQ29sb3JNYXRyaXggaW49IlNvdXJjZUFscGhhIiB0eXBlPSJtYXRyaXgiIHZhbHVlcz0iMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMTI3IDAiIHJlc3VsdD0iaGFyZEFscGhhIi8+CjxmZU9mZnNldCBkeT0iMSIvPgo8ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIxIi8+CjxmZUNvbXBvc2l0ZSBpbjI9ImhhcmRBbHBoYSIgb3BlcmF0b3I9Im91dCIvPgo8ZmVDb2xvck1hdHJpeCB0eXBlPSJtYXRyaXgiIHZhbHVlcz0iMCAwIDAgMCAwLjA2Mjc0NTEgMCAwIDAgMCAwLjA5NDExNzYgMCAwIDAgMCAwLjE1Njg2MyAwIDAgMCAwLjA1IDAiLz4KPGZlQmxlbmQgbW9kZT0ibm9ybWFsIiBpbjI9IkJhY2tncm91bmRJbWFnZUZpeCIvPgo8ZmVCbGVuZCBtb2RlPSJub3JtYWwiIGluPSJTb3VyY2VHcmFwaGljIiBpbjI9ImVmZmVjdDFfZHJvcFNoYWRvd18yMTlfMTU5IiByZXN1bHQ9InNoYXBlIi8+CjwvZmlsdGVyPgo8L2RlZnM+Cjwvc3ZnPgo=");
+}
+
+[data-testid="stElementContainer"]:has(.ts-settings-section-label) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+.ts-settings-section-label {
+  margin: 0 0 5px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+/* ---- shared card shell ---- */
+
+.st-key-ts_account_card,
+.st-key-ts_rooms_card,
+.st-key-ts_sensor_card {
+  padding: 0 16px !important;
+  margin-bottom: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--settings-radius);
+  box-shadow: none;
+  gap: 0 !important;
+}
+
+.st-key-ts_account_card [data-testid="stMarkdownContainer"],
+.st-key-ts_rooms_card [data-testid="stMarkdownContainer"],
+.st-key-ts_sensor_card [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+/* each top-level row is one direct stLayoutWrapper child of the card;
+   this is what :not(:last-of-type) targets for the separator line,
+   independent of whether the row is a plain st.columns() row or a
+   st.container() row (password/logout) with a nested columns() row */
+.st-key-ts_account_card > [data-testid="stLayoutWrapper"],
+.st-key-ts_rooms_card > [data-testid="stLayoutWrapper"],
+.st-key-ts_sensor_card > [data-testid="stLayoutWrapper"] {
+  display: flex;
+  align-items: stretch;
+}
+
+.st-key-ts_account_card > [data-testid="stLayoutWrapper"]:not(:last-of-type),
+.st-key-ts_rooms_card > [data-testid="stLayoutWrapper"]:not(:last-of-type),
+.st-key-ts_sensor_card > [data-testid="stLayoutWrapper"]:not(:last-of-type) {
+  border-bottom: 1px solid var(--border);
+}
+
+.st-key-ts_account_card [data-testid="stHorizontalBlock"],
+.st-key-ts_rooms_card [data-testid="stHorizontalBlock"],
+.st-key-ts_sensor_card [data-testid="stHorizontalBlock"] {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+/* ---- left side: fixed-width icon slot + label, same X for every row ---- */
+
+.ts-settings-row-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ts-settings-icon-wrapper {
+  width: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+}
+
+.ts-settings-icon-wrapper svg {
+  flex-shrink: 0;
+}
+
+.ts-settings-icon-wrapper img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.ts-settings-label-text {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-settings-label-text.ts-settings-logout {
+  color: var(--danger);
+}
+
+/* ---- right side: value/action group, right-aligned to the same edge ---- */
+
+.st-key-ts_account_card [data-testid="stColumn"]:nth-of-type(2) > [data-testid="stVerticalBlock"],
+.st-key-ts_rooms_card [data-testid="stColumn"]:nth-of-type(2) > [data-testid="stVerticalBlock"],
+.st-key-ts_sensor_card [data-testid="stColumn"]:nth-of-type(2) > [data-testid="stVerticalBlock"] {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.st-key-ts_account_card [data-testid="stColumn"]:nth-of-type(2) [data-testid="stElementContainer"],
+.st-key-ts_rooms_card [data-testid="stColumn"]:nth-of-type(2) [data-testid="stElementContainer"],
+.st-key-ts_sensor_card [data-testid="stColumn"]:nth-of-type(2) [data-testid="stElementContainer"] {
+  width: fit-content !important;
+}
+
+.st-key-ts_account_card [data-testid="stColumn"]:nth-of-type(2) > [data-testid="stVerticalBlock"] {
+  gap: 10px;
+}
+
+.st-key-ts_rooms_card [data-testid="stColumn"]:nth-of-type(2) > [data-testid="stVerticalBlock"] {
+  gap: 10px;
+}
+
+.ts-settings-row-value {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-align: right;
+}
+
+.st-key-settings_edit_name button {
+  width: 32px !important;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 10px;
+  background: var(--card) !important;
+  color: var(--muted) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+.st-key-settings_edit_name button:hover,
+.st-key-settings_edit_name button:focus {
+  background: var(--bg) !important;
+  color: var(--muted) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+.ts-settings-chevron {
+  display: flex;
+  align-items: center;
+  color: var(--placeholder);
+  line-height: 1;
+}
+
+.ts-settings-chevron svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ---- whole-row overlay buttons (비밀번호 변경 / 로그아웃) ---- */
+
+.st-key-ts_settings_password_row,
+.st-key-ts_settings_logout_row {
+  position: relative;
+}
+
+.st-key-settings_password_open,
+.st-key-settings_logout {
+  position: absolute !important;
+  inset: 0;
+  z-index: 2;
+}
+
+.st-key-settings_password_open [data-testid="stButton"],
+.st-key-settings_logout [data-testid="stButton"] {
+  height: 100%;
+}
+
+.st-key-settings_password_open button,
+.st-key-settings_logout button {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+
+/* ---- 공간 설정 edit/delete buttons ---- */
+
+[class*="st-key-settings_room_iconedit_"] button,
+[class*="st-key-settings_room_icondel_"] button {
+  width: 40px !important;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 12px;
+  background: var(--card) !important;
+  color: var(--muted) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+[class*="st-key-settings_room_iconedit_"] button:hover,
+[class*="st-key-settings_room_iconedit_"] button:focus,
+[class*="st-key-settings_room_icondel_"] button:hover,
+[class*="st-key-settings_room_icondel_"] button:focus {
+  background: var(--bg) !important;
+  color: var(--muted) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+/* ---- 센서 설정 ---- */
+
+.ts-settings-toggle-placeholder {
+  width: 46px;
+  height: 28px;
+}
+
+[data-testid="stCheckbox"] label > div:first-of-type {
+  width: 46px !important;
+  height: 28px !important;
+  background-color: transparent !important;
+  background-image: var(--toggle-off);
+  background-size: 46px 28px;
+  background-repeat: no-repeat;
+  border-radius: 0;
+}
+
+[data-testid="stCheckbox"] label:has(input[role="switch"]:checked) > div:first-of-type {
+  background-image: var(--toggle-on);
+}
+
+[data-testid="stCheckbox"] label > div:first-of-type > div {
+  display: none;
+}
+
+.st-key-ts_settings_delete_account_wrap {
+  margin-bottom: 8px;
+}
+
+.st-key-ts_settings_delete_account_wrap [data-testid="stColumn"]:last-of-type {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.st-key-ts_settings_delete_account_wrap [data-testid="stVerticalBlock"],
+.st-key-ts_settings_delete_account_wrap [data-testid="stElementContainer"] {
+  width: fit-content !important;
+  margin-left: 0 !important;
+}
+
+.st-key-ts_settings_delete_account_wrap [data-testid="stColumn"]:last-of-type [data-testid="stVerticalBlock"],
+.st-key-ts_settings_delete_account_wrap [data-testid="stColumn"]:last-of-type [data-testid="stElementContainer"] {
+  margin-left: auto !important;
+}
+
+.st-key-settings_delete_account button,
+.st-key-settings_bottom_logout button {
+  width: auto !important;
+  min-height: 0;
+  padding: 0;
+  background: transparent !important;
+  color: var(--placeholder) !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-size: var(--font-size-xs) !important;
+  font-weight: var(--font-weight-medium) !important;
+}
+
+.st-key-settings_delete_account button:hover,
+.st-key-settings_delete_account button:focus,
+.st-key-settings_delete_account button:active,
+.st-key-settings_bottom_logout button:hover,
+.st-key-settings_bottom_logout button:focus,
+.st-key-settings_bottom_logout button:active {
+  background: transparent !important;
+  color: var(--placeholder) !important;
+  box-shadow: none !important;
+}
+
+.st-key-settings_room_delete_confirm button,
+.st-key-settings_account_delete_confirm button,
+.st-key-settings_logout_confirm button {
+  background: var(--danger-bg) !important;
+  color: var(--danger) !important;
+}
+
+.st-key-settings_room_delete_confirm button:hover,
+.st-key-settings_room_delete_confirm button:focus,
+.st-key-settings_account_delete_confirm button:hover,
+.st-key-settings_account_delete_confirm button:focus,
+.st-key-settings_logout_confirm button:hover,
+.st-key-settings_logout_confirm button:focus {
+  background: var(--danger-bg) !important;
+  color: var(--danger) !important;
+  filter: brightness(0.96);
+}
+
+.ts-settings-dialog-desc {
+  margin: -8px 0 18px;
+  color: var(--muted);
+  font-size: var(--font-size-2xs) !important;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+
+.ts-settings-field-label {
+  margin: 0 0 7px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.02em;
+}
+
+[data-testid="stElementContainer"]:has(.ts-settings-field-label) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+[data-testid="stTextInput"] {
+  margin-bottom: 15px;
+}
+
+[data-testid="stTextInput"] input {
+  min-height: 48px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--settings-radius);
+  color: var(--text);
+  font-size: var(--font-size-base);
+  box-shadow: none;
+}
+
+.ts-settings-submit-space {
+  height: 8px;
+}
+
+.ts-settings-error {
+  margin: -8px 0 12px;
+  color: var(--danger);
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+}
