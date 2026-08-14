@@ -3,15 +3,27 @@
 # the rest of the app only depends on the dict shape returned here.
 
 ALERT_TYPE_CONFIG = {
-    "sensor_offline": {"icon": "sensors.svg", "filter_label": "센서 오류"},
-    "co2_high": {"icon": "control_error.svg", "filter_label": "CO₂ 초과"},
-    "temperature_abnormal": {"icon": "device_thermostat.svg", "filter_label": "온도 이탈"},
-    "control_failed": {"icon": "settings_remote.svg", "filter_label": "제어 실패"},
-    "network_error": {"icon": "control_error.svg", "filter_label": "네트워크"},
+    "sensor_offline": {"icon": "sensors.svg", "filter_label": "센서 오류", "severity": "critical"},
+    "co2_high": {"icon": "control_error.svg", "filter_label": "CO₂ 초과", "severity": "warning"},
+    "temperature_abnormal": {
+        "icon": "device_thermostat.svg",
+        "filter_label": "온도 이탈",
+        "severity": "warning",
+    },
+    "control_failed": {
+        "icon": "settings_remote.svg",
+        "filter_label": "제어 실패",
+        "severity": "critical",
+    },
+    "network_error": {"icon": "control_error.svg", "filter_label": "네트워크", "severity": "critical"},
     # not shown as filter chips yet, but already routable once real alerts arrive
-    "humidity_abnormal": {"icon": "device_thermostat.svg", "filter_label": "습도 이탈"},
-    "door_open": {"icon": "door.svg", "filter_label": "도어 열림"},
-    "power_abnormal": {"icon": "plug.svg", "filter_label": "전력 이상"},
+    "humidity_abnormal": {
+        "icon": "device_thermostat.svg",
+        "filter_label": "습도 이탈",
+        "severity": "warning",
+    },
+    "door_open": {"icon": "door.svg", "filter_label": "도어 열림", "severity": "warning"},
+    "power_abnormal": {"icon": "plug.svg", "filter_label": "전력 이상", "severity": "critical"},
 }
 
 FILTER_OPTIONS = ["전체", "센서 오류", "CO₂ 초과", "온도 이탈", "제어 실패", "네트워크"]
@@ -90,3 +102,13 @@ def get_alert(alert_id: str) -> dict | None:
 
 def active_alert_count() -> int:
     return sum(1 for alert in _MOCK_ALERTS if alert["status"] == "active")
+
+
+def alert_severity_counts() -> dict:
+    counts = {"critical": 0, "warning": 0}
+    for alert in _MOCK_ALERTS:
+        if alert["status"] != "active":
+            continue
+        severity = ALERT_TYPE_CONFIG.get(alert["type"], {}).get("severity", "warning")
+        counts[severity] += 1
+    return counts

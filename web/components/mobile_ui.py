@@ -1,4 +1,5 @@
 import base64
+import re
 from pathlib import Path
 
 import streamlit as st
@@ -58,8 +59,34 @@ def inline_error(message: str) -> None:
     )
 
 
+_MIME_TYPES = {
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
+
 def icon_data_uri(file_name: str) -> str:
-    encoded = base64.b64encode((ICONS_DIR / file_name).read_bytes()).decode("ascii")
+    path = ICONS_DIR / file_name
+    mime = _MIME_TYPES.get(path.suffix.lower(), "application/octet-stream")
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
+def recolored_icon_data_uri(file_name: str, color: str) -> str:
+    """Same as icon_data_uri but force-recolors an SVG's fills.
+
+    Source icons are fill="#00696D" (dark teal) - fine on light rows, but
+    invisible against dark sidebar/panel backgrounds, so callers that place
+    icons on dark surfaces need a tinted variant instead of the raw asset.
+    """
+    content = (ICONS_DIR / file_name).read_text(encoding="utf-8")
+    content = re.sub(r"<mask[^>]*>.*?</mask>", "", content, flags=re.DOTALL)
+    content = re.sub(r'<[a-zA-Z]+[^>]*\smask="[^"]*"[^>]*/?>', "", content)
+    content = re.sub(r'fill="(?!none"|white")[^"]*"', f'fill="{color}"', content)
+    encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
     return f"data:image/svg+xml;base64,{encoded}"
 
 

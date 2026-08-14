@@ -2,8 +2,11 @@ import sys
 from pathlib import Path
 
 WEB_ROOT = Path(__file__).resolve().parent
+REPOSITORY_ROOT = WEB_ROOT.parent
 if str(WEB_ROOT) not in sys.path:
     sys.path.insert(0, str(WEB_ROOT))
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
 
 import streamlit as st
 
@@ -19,7 +22,10 @@ st.set_page_config(
 )
 
 pages = [
-    page("pages/home.py", title="홈", url_path="home", default=True),
+    page("pages/login.py", title="로그인", url_path="login", default=True),
+    page("pages/home.py", title="대시보드", url_path="home"),
+    page("pages/room_detail.py", title="공간 상세", url_path="room-detail"),
+    page("pages/devices.py", title="공간·디바이스", url_path="devices"),
 ]
 
 navigation = st.navigation(pages, position="hidden")

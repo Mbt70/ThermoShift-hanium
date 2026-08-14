@@ -200,7 +200,7 @@ with st.container(key="ts_account_card", border=True):
         _confirm_logout()
 
 st.markdown('<p class="ts-settings-section-label">공간 설정</p>', unsafe_allow_html=True)
-rooms = list_rooms()
+rooms = list_rooms(current_user_email())
 room_icon_uri = _icon_data_uri("meeting_room.svg")
 with st.container(key="ts_rooms_card", border=True):
     for room in rooms:
