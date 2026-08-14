@@ -11,12 +11,28 @@ body,
   align-items: center !important;
   padding-top: 0 !important;
   background-color: rgba(15, 20, 30, 0.55) !important;
+  left: 50% !important;
+  right: auto !important;
+  width: min(100%, var(--page-width)) !important;
+  transform: translateX(-50%) !important;
 }
 
 [data-testid="stDialog"] > div {
   width: min(90vw, 360px) !important;
   max-height: min(80vh, 600px);
   overflow-y: auto;
+}
+
+/* Popups shouldn't give any visual feedback on hover. */
+[data-testid="stDialog"] button:hover {
+  filter: none !important;
+  transform: none !important;
+}
+
+:where([data-testid="stDialog"]) .stButton button:hover,
+:where([data-testid="stDialog"]) [data-testid="stFormSubmitButton"] button:hover {
+  background: var(--primary) !important;
+  color: #fff !important;
 }
 
 [data-testid="stHorizontalBlock"] {

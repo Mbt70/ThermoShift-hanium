@@ -340,7 +340,6 @@
 .st-key-settings_logout_confirm button:focus {
   background: var(--danger-bg) !important;
   color: var(--danger) !important;
-  filter: brightness(0.96);
 }
 
 .ts-settings-dialog-desc {
