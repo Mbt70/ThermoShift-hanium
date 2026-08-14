@@ -210,18 +210,16 @@ button[data-variant="pills"][data-selected="true"] {
 .ts-log-fail-title {
   margin: 14px 0 6px;
   color: var(--text);
-  font-size: var(--font-size-md) !important;
+  font-size: var(--font-size-lg) !important;
   font-weight: var(--font-weight-bold);
-  white-space: nowrap;
 }
 
 .ts-log-fail-desc {
   margin: 0;
   color: var(--text);
-  font-size: 10px !important;
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-semibold);
   line-height: 1.4;
-  white-space: nowrap;
 }
 
 .ts-log-card-title {
@@ -230,7 +228,7 @@ button[data-variant="pills"][data-selected="true"] {
   gap: 6px;
   margin: 0 0 8px;
   color: var(--text);
-  font-size: var(--font-size-sm) !important;
+  font-size: var(--font-size-md) !important;
   font-weight: var(--font-weight-bold);
 }
 
@@ -251,8 +249,8 @@ button[data-variant="pills"][data-selected="true"] {
 .ts-log-cause-desc {
   margin: 0;
   color: var(--muted);
-  font-size: 12px !important;
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-semibold);
   line-height: 1.4;
 }
 
@@ -271,7 +269,7 @@ button[data-variant="pills"][data-selected="true"] {
 }
 
 .ts-log-checklist-card .ts-log-card-title {
-  font-size: 11px !important;
+  font-size: var(--font-size-sm) !important;
 }
 
 .ts-log-checklist {
@@ -283,7 +281,7 @@ button[data-variant="pills"][data-selected="true"] {
 }
 
 .ts-log-checklist li {
-  font-size: 11px !important;
+  font-size: var(--font-size-xs) !important;
 }
 
 .st-key-log_go_manual {
