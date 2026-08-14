@@ -5,6 +5,11 @@ body,
   font-family: var(--font-family);
 }
 
+html:has([data-testid="stDialog"]),
+body:has([data-testid="stDialog"]) {
+  overflow: hidden !important;
+}
+
 [data-testid="stDialog"] {
   display: flex !important;
   justify-content: center !important;
@@ -285,7 +290,8 @@ footer {
 .stButton button:focus,
 [data-testid="stFormSubmitButton"] button:focus {
   color: #fff;
-  box-shadow: 0 0 0 3px rgb(88 164 162 / 20%);
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .st-key-onboarding_login,
