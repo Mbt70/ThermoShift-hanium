@@ -2,16 +2,21 @@
   --log-radius: 12px;
 }
 
-[data-testid="stElementContainer"]:has(button[data-variant="pills"]) {
-  padding-bottom: 14px;
+[data-testid="stElementContainer"]:has(button[data-testid^="stBaseButton-pills"]) {
+  padding-bottom: 26px;
 }
 
+button[data-testid="stBaseButton-pills"],
+button[data-testid="stBaseButton-pillsActive"],
 button[data-variant="pills"] {
   background: var(--card) !important;
   color: var(--text) !important;
   border-color: var(--border) !important;
+  font-family: var(--font-family) !important;
+  font-weight: var(--font-weight-semibold) !important;
 }
 
+button[data-testid="stBaseButton-pillsActive"],
 button[data-variant="pills"][data-selected="true"] {
   background: var(--text) !important;
   color: #fff !important;

@@ -308,7 +308,7 @@
   border-radius: 0;
 }
 
-[data-testid="stCheckbox"] label:has(input[role="switch"]:checked) > div:first-of-type {
+[data-testid="stCheckbox"] label:has(input:checked) > div:first-of-type {
   background-image: var(--toggle-on);
 }
 
