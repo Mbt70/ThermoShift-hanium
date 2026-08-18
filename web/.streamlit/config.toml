@@ -1,5 +1,5 @@
 [server]
-runOnSave = true
+runOnSave = false
 showEmailPrompt = false
 
 [browser]
