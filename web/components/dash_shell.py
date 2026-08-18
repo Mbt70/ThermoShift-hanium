@@ -19,7 +19,7 @@ _NAV_SECTIONS = (
     (
         "기록",
         (
-            ("control_log", "제어 로그", "receipt_long.svg", None),
+            ("control_log", "제어 로그", "receipt_long.svg", "pages/control_log.py"),
             ("alerts", "알림", "notifications.svg", None),
             ("report", "성과 리포트", "monitoring.svg", None),
         ),
