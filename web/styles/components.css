@@ -3,6 +3,7 @@ body,
 [data-testid="stAppViewContainer"],
 [data-testid="stMain"] {
   font-family: var(--font-family);
+  background: var(--bg);
 }
 
 [data-testid="stDialog"] {

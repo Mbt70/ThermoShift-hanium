@@ -74,7 +74,7 @@ with main_col:
                             )
                         with edit_col:
                             if st.button(
-                                "edit", key=f"dev_edit_{r['id']}", icon=":material/edit:", use_container_width=True
+                                "edit", key=f"dev_edit_{r['id']}", icon=":material/edit:", width="stretch"
                             ):
                                 st.session_state["_devices_editing"] = r["id"]
                                 st.rerun()
@@ -83,7 +83,7 @@ with main_col:
                                 "delete",
                                 key=f"dev_delete_{r['id']}",
                                 icon=":material/delete:",
-                                use_container_width=True,
+                                width="stretch",
                             ):
                                 delete_room(r["id"])
                                 if st.session_state.get("_web_selected_room") == r["id"]:
@@ -98,9 +98,9 @@ with main_col:
                                 )
                                 edit_col1, edit_col2 = st.columns(2)
                                 with edit_col1:
-                                    cancel = st.form_submit_button("취소", use_container_width=True)
+                                    cancel = st.form_submit_button("취소", width="stretch")
                                 with edit_col2:
-                                    save = st.form_submit_button("저장", use_container_width=True)
+                                    save = st.form_submit_button("저장", width="stretch")
                             if save and new_name and new_loc:
                                 update_room(r["id"], name=new_name, location=new_loc, floor_plan_name=None)
                                 st.session_state.pop("_devices_editing", None)
@@ -128,7 +128,7 @@ with main_col:
                         "평면도", type=["png", "jpg", "jpeg"], key="dev_new_floor_plan"
                     )
                     error_slot = st.empty()
-                submitted = st.button("등록하기", key="dev_register_submit", use_container_width=True)
+                submitted = st.button("등록하기", key="dev_register_submit", width="stretch")
                 if submitted:
                     if name and location:
                         register_room(

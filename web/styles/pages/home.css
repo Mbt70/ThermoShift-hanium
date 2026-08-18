@@ -6,7 +6,7 @@
 /* ---- KPI row ---- */
 
 [class*="_card"][class*="st-key-ts_dash_kpi_card_"] {
-  padding: 8px 14px !important;
+  padding: 10px 16px 14px !important;
 }
 
 .ts-dash-kpi-head {
@@ -14,7 +14,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 6px;
-  margin: 0 0 8px;
+  margin: 0 0 3px;
   min-width: 0;
 }
 
@@ -24,23 +24,24 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: var(--font-weight-semibold);
 }
 
 .ts-dash-kpi-icon {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
 }
 
 .ts-dash-kpi-value {
-  margin: 0 0 3px;
+  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text);
-  font-size: 24px;
+  font-size: 26px !important;
+  line-height: 1.1 !important;
   font-weight: var(--font-weight-extrabold);
   letter-spacing: -0.01em;
 }
@@ -48,28 +49,45 @@
 .ts-dash-kpi-unit {
   margin-left: 2px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: var(--font-weight-semibold);
 }
 
 .ts-dash-kpi-sub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin: 0;
-  color: var(--placeholder);
-  font-size: 7px;
+  color: var(--muted);
+  font-size: 12px !important;
   font-weight: var(--font-weight-medium);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.ts-dash-kpi-sub svg {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+}
+
+.ts-dash-kpi-sub.is-positive svg {
+  color: var(--success);
+}
+
+.ts-dash-kpi-sub.is-negative svg {
+  color: var(--danger);
+}
+
 /* ---- room status grid ---- */
 
 [class*="_card"][class*="st-key-ts_dash_room_card_"] {
-  margin-bottom: 8px !important;
-  padding: 9px !important;
-  background: var(--bg);
+  margin-bottom: 0 !important;
+  padding: 12px !important;
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--input-radius);
+  border-radius: 12px;
   position: relative;
 }
 
@@ -99,14 +117,13 @@
   cursor: pointer;
 }
 
-.ts-dash-room-thumb-empty {
-  /* Placeholder for the room's future 3D/floor-plan render - left blank on
-     purpose for now, see home.py. */
-  height: 44px;
+.ts-dash-room-thumb {
+  /* Heatmap-style stand-in for the room's future 3D/floor-plan render -
+     colored per-room from its live temperature via _heat_thumb_style in
+     home.py (same blue->teal->red scale as the legend below the grid). */
+  height: 72px;
   border-radius: 8px;
-  margin-bottom: 7px;
-  background: var(--card);
-  border: 1px dashed var(--border);
+  margin-bottom: 8px;
 }
 
 .ts-dash-room-card-head {
@@ -114,7 +131,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .ts-dash-room-card-name {
@@ -122,14 +139,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text);
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: var(--font-weight-bold);
 }
 
 .ts-dash-room-card-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px 8px;
 }
 
 .ts-dash-room-card-stats span {
@@ -141,7 +158,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: var(--font-weight-semibold);
 }
 
@@ -154,6 +171,33 @@
 .ts-dash-inline-icon {
   width: 16px;
   height: 16px;
+}
+
+/* Push the room-card grid down a touch below the title, and pin the heat
+   legend to the bottom of the card - it now has a fixed min-height (see the
+   "match" block further down) taller than its natural content, so without
+   this the legend would just trail the last room row instead of using the
+   extra space. Targets "whatever element directly follows the title's
+   container" via the adjacent-sibling combinator rather than assuming it's
+   a stHorizontalBlock - Streamlit sometimes wraps the room-card row one
+   level deeper in a stLayoutWrapper, which silently broke the old
+   type-specific selector (the row rendered right under the title with no
+   gap, overlapping it) without ever matching. */
+/* Shrinks the outer 공간 현황 envelope itself (its own top padding, and the
+   gap before the room-card row) - NOT the room cards' own padding/sizing,
+   which stays untouched. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_room_grid_card {
+  padding-top: 8px !important;
+}
+
+.st-key-ts_dash_room_grid_card > [data-testid="stElementContainer"]:has(.ts-dash-card-title) + * {
+  margin-top: 8px !important;
+}
+
+.st-key-ts_dash_room_grid_card > [data-testid="stElementContainer"]:has(.ts-dash-heat-legend) {
+  margin-top: auto !important;
+  margin-bottom: 8px;
+  padding-top: 8px;
 }
 
 .ts-dash-heat-legend {
@@ -173,64 +217,79 @@
   background: linear-gradient(90deg, rgb(91 132 196), rgb(88 164 152), rgb(230 74 69));
 }
 
-/* ---- timeline card selectors ---- */
+/* ---- timeline card header (title + metric/period dropdowns) ---- */
+
+.ts-dash-timeline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+/* st.columns(vertical_alignment="center") sets its own align-items:center
+   on this row, but the site-wide stHorizontalBlock reset in this file
+   (align-items:flex-start !important, needed elsewhere to stop Streamlit's
+   equal-height JS) has higher specificity and silently wins instead,
+   leaving the dropdowns bottom-heavy against the title text. Force center
+   back on just this row. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_timeline_card [data-testid="stHorizontalBlock"]:has(.ts-dash-card-title) {
+  align-items: center !important;
+}
+
+/* The align-items:center above genuinely works (verified: the title's
+   stColumn gets correct auto top/bottom margins to center a 22px box in
+   the 40px row) - but Streamlit's stMarkdownContainer around the title
+   carries the same built-in margin-bottom:-1rem seen elsewhere, which
+   desyncs its rendered box from the height the layout system centers
+   against, so the visible text sticks at a fixed offset instead of moving
+   with the corrected centering. Neutralize it here too. */
+.st-key-ts_dash_timeline_card [data-testid="stElementContainer"]:has(.ts-dash-card-title) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important;
+}
+
+/* Push the chart down a bit below the title/dropdown row - targets
+   "whatever directly follows the header row" via the adjacent-sibling
+   combinator rather than a specific element type, since Streamlit's exact
+   wrapping here (stLayoutWrapper vs not) isn't reliable to assume. */
+.st-key-ts_dash_timeline_card > *:has(.ts-dash-card-title) + * {
+  margin-top: 30px !important;
+}
 
 .st-key-ts_dash_timeline_card [data-testid="stSelectbox"] > div > div {
-  min-height: 26px;
+  min-height: 28px;
   border-radius: 999px;
   border-color: var(--border);
-  background: var(--bg);
+  background: var(--card);
   font-size: 11px;
-}
-
-.st-key-ts_dash_timeline_card [data-testid="stButtonGroup"] {
-  display: inline-flex;
-  gap: 2px;
-  background: var(--bg);
-  border-radius: 999px;
-  padding: 2px;
-}
-
-.st-key-ts_dash_timeline_card button[data-variant="pills"] {
-  background: transparent !important;
-  color: var(--muted) !important;
-  border: none !important;
-  border-radius: 999px !important;
-  padding: 3px 12px !important;
-  min-height: 0 !important;
-  font-size: 11px !important;
-  font-weight: var(--font-weight-semibold) !important;
-  box-shadow: none !important;
-}
-
-.st-key-ts_dash_timeline_card button[data-variant="pills"][data-selected="true"] {
-  background: #fff !important;
-  color: var(--text) !important;
-  box-shadow: 0 1px 6px rgb(20 31 43 / 12%) !important;
 }
 
 /* ---- power ranking bars ---- */
 
+[class*="_card"][class*="st-key-ts_dash_power_rank_card"] {
+  padding: 13px 17px !important;
+}
+
 .ts-dash-power-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 0;
+  gap: 14px;
+  padding: 6px 0;
 }
 
 .ts-dash-power-name {
-  flex: 0 0 80px;
+  flex: 0 0 92px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text);
-  font-size: 11px;
+  font-size: 13.5px;
   font-weight: var(--font-weight-semibold);
 }
 
 .ts-dash-power-bar-track {
   flex: 1;
-  height: 6px;
+  height: 13px;
   border-radius: 999px;
   background: var(--bg);
   overflow: hidden;
@@ -243,10 +302,10 @@
 }
 
 .ts-dash-power-value {
-  flex: 0 0 50px;
+  flex: 0 0 58px;
   text-align: right;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: var(--font-weight-semibold);
 }
 
@@ -254,29 +313,52 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 4px 0 0 90px;
-  padding-top: 4px;
+  margin: 8px 0 0 106px;
+  padding-top: 8px;
   border-top: 1px solid var(--border);
   color: var(--placeholder);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: var(--font-weight-medium);
+}
+
+.ts-dash-power-offline-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--placeholder);
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-dash-power-offline-tag svg {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
 }
 
 /* ---- reservation panel ---- */
 
 .ts-dash-reservation-desc {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 10.5px !important;
   font-weight: var(--font-weight-medium);
-  line-height: 1.5;
+  line-height: 1.4;
+}
+
+/* Push the button row down a bit below the description - targets
+   "whatever directly follows the title+desc container" rather than
+   assuming its exact element type, since Streamlit sometimes wraps
+   st.columns() output one level deeper (stLayoutWrapper) than expected. */
+.st-key-ts_dash_reservation_card > [data-testid="stElementContainer"]:has(.ts-dash-reservation-desc) + * {
+  margin-top: 10px !important;
 }
 
 .st-key-dash_reservation_new button,
 .st-key-dash_reservation_all button {
-  min-height: 30px !important;
+  min-height: 32px !important;
   padding: 0 4px !important;
-  font-size: 10px !important;
+  font-size: 11.5px !important;
   white-space: nowrap;
 }
 
@@ -293,14 +375,24 @@
 
 /* ---- AI panel ---- */
 
+/* Extended taller on purpose - past its own content's natural height - so
+   the reservation+AI column becomes the tallest column in the row, which
+   pulls the room-grid/timeline cards (height:100% of the row, see the
+   "match" block below) down to match it instead of the reverse. Needs the
+   same specificity-boost as dash_shell.css's sidebar min-height override -
+   the blanket stVerticalBlock min-height:0 reset there otherwise wins. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_ai_card {
+  min-height: 281px !important;
+}
+
 /* Scoped to the dashboard's narrow side column only - room_detail.py's
    judgment card (same shared classes) keeps the normal shell sizing. */
 .st-key-ts_dash_ai_card .ts-dash-judgment-headline {
-  font-size: 11px;
+  font-size: 13px !important;
 }
 
 .st-key-ts_dash_ai_card .ts-dash-judgment-sub {
-  font-size: 10px;
+  font-size: 10.5px !important;
 }
 
 .ts-dash-ai-summary {
@@ -308,26 +400,85 @@
   padding-top: 8px;
   border-top: 1px solid var(--border);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 10.5px !important;
   font-weight: var(--font-weight-medium);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 /* ---- KPI summary footer ---- */
 
+/* A little extra room above this card so the page's gray background still
+   reads as a visible gap under 공간별 실시간 전력 - the default flex gap
+   alone was too thin to register as a gap at all. */
+.st-key-ts_dash_summary_card {
+  margin-top: 6px !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Title stays fixed at the top; the item row (with its gray divider lines)
+   takes the rest of the card's height and centers itself within it, so the
+   dividers sit in the vertical middle of the box rather than hugging the
+   title above them. */
+.st-key-ts_dash_summary_card > [data-testid="stElementContainer"]:has(.ts-dash-card-title) {
+  flex: 0 0 auto !important;
+  margin-bottom: -18px !important;
+}
+
+.st-key-ts_dash_summary_card [data-testid="stElementContainer"]:has(.ts-dash-card-title) div:has(> .ts-dash-card-title) {
+  margin-bottom: 0 !important;
+}
+
+.st-key-ts_dash_summary_card > [data-testid="stElementContainer"]:has(.ts-dash-summary-grid) {
+  flex: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  margin-top: 0 !important;
+}
+
+/* The grid's width:100% (below) resolves against its *immediate* parent -
+   but that parent is 2 levels of Streamlit-generated wrapper divs deep
+   inside the flex-centered container above, and neither wrapper stretches
+   to fill it on its own (a flex item with no flex-grow just shrinks to its
+   content width). Force every wrapper level in between to actually fill
+   the available width so the 100% has something correct to resolve
+   against - otherwise the grid silently shrinks to content width and
+   leaves a gap on wide screens. */
+.st-key-ts_dash_summary_card > [data-testid="stElementContainer"]:has(.ts-dash-summary-grid) > div,
+.st-key-ts_dash_summary_card > [data-testid="stElementContainer"]:has(.ts-dash-summary-grid) div:has(> .ts-dash-summary-grid) {
+  width: 100% !important;
+}
+
+/* Streamlit wraps every st.markdown block's content 2 levels deep in a div
+   with a built-in margin-bottom:-1rem (presumably to tighten default
+   paragraph spacing elsewhere) - inside this flex-centered wrapper that
+   negative margin instead shrinks the wrapper's own height below its
+   child's real content height, so the grid visually overflows past the
+   wrapper (and the align-items:center math above ends up centering
+   against the wrong, too-small box). :has(> .ts-dash-summary-grid) finds
+   that exact div (the grid's immediate parent) regardless of how many
+   levels deep Streamlit nests it. */
+.st-key-ts_dash_summary_card [data-testid="stElementContainer"]:has(.ts-dash-summary-grid) div:has(> .ts-dash-summary-grid) {
+  margin-bottom: 0 !important;
+}
+
 .ts-dash-summary-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 10px;
+  gap: 0;
+  width: 100%;
 }
 
 .ts-dash-summary-item {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 8px 10px;
-  background: var(--bg);
-  border-radius: var(--input-radius);
+  gap: 6px;
+  padding: 2px 18px;
+  border-left: 1px solid var(--border);
+}
+
+.ts-dash-summary-item:first-child {
+  border-left: 0;
 }
 
 .ts-dash-summary-head {
@@ -338,20 +489,20 @@
 }
 
 .ts-dash-summary-head img {
-  width: 15px;
-  height: 15px;
+  width: 17px;
+  height: 17px;
   flex-shrink: 0;
 }
 
 .ts-dash-summary-label {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: var(--font-weight-semibold);
 }
 
 .ts-dash-summary-value {
   color: var(--text);
-  font-size: 14px;
+  font-size: 18px;
   font-weight: var(--font-weight-extrabold);
 }
 
@@ -389,19 +540,19 @@
   height: 100% !important;
 }
 
-/* ---- power ranking: "more" link ---- */
-
-.st-key-dash_power_more button {
-  min-height: 0 !important;
-  padding: 4px 10px !important;
-  background: var(--bg) !important;
-  color: var(--muted) !important;
-  border: 1px solid var(--border) !important;
-  box-shadow: none !important;
-  font-size: 11px !important;
+/* The height:100% chain above depends on the row's flex cross-size actually
+   propagating down through column -> stVerticalBlock -> stLayoutWrapper ->
+   card, which in practice doesn't reliably reach the card even though
+   align-items:stretch computes correctly on the row - so pin an explicit
+   min-height matching the room-grid card's own natural content (title +
+   2 room rows sized for at least 4 room cards + legend) directly on both
+   the columns and the cards as a belt-and-braces fallback. Bump this (and
+   ai-card's min-height above, to keep the reservation+AI column in step)
+   if the room-card sizing above changes. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_dash_room_grid_card),
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_dash_timeline_card),
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_room_grid_card,
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_timeline_card {
+  min-height: 413px !important;
 }
 
-.st-key-dash_power_more button:hover {
-  background: var(--border) !important;
-  color: var(--text) !important;
-}

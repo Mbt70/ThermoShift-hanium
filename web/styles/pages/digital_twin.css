@@ -1,0 +1,396 @@
+/* Page-specific styles for the 디지털 트윈·3D page. Shell (sidebar, topbar
+   look, generic bordered card) lives in dash_shell.css; the KPI-card and
+   KPI-summary-footer classes are reused as-is from home.css - both are
+   loaded alongside this via apply_mobile_styles's `shared` param. */
+
+/* ---- pull the KPI row up a touch so the KPI summary footer clears the
+   viewport bottom without scrolling, same fix applied to the dashboard/
+   room-detail pages' shared top padding - kept page-scoped here instead
+   of touching dash_shell.css since those two pages already fit. ---- */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has([class*="st-key-ts_dash_kpi_card_"]) {
+  margin-top: -4px !important;
+}
+
+/* ---- top room-select dropdown ---- */
+
+/* The combobox wrapper has an explicit height:40px baked in (not just
+   content-driven), two levels deep from stSelectbox - override both
+   levels or the outer box stays 40px regardless of what shrinks inside. */
+.st-key-twin_top_room_select [data-testid="stSelectbox"] > div,
+.st-key-twin_top_room_select [data-testid="stSelectbox"] > div > div {
+  height: 24px !important;
+  min-height: 0 !important;
+}
+
+.st-key-twin_top_room_select [data-testid="stSelectbox"] > div > div {
+  border-radius: 999px;
+  border-color: var(--border);
+  background: var(--card);
+  font-size: 11.5px;
+  font-weight: var(--font-weight-semibold);
+}
+
+/* The visible height also comes from the inner combobox input/button's
+   own default padding (8px) - shrink those too. */
+.st-key-twin_top_room_select input,
+.st-key-twin_top_room_select button {
+  min-height: 0 !important;
+  height: 22px !important;
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
+}
+
+.st-key-twin_top_room_select {
+  margin-bottom: 8px;
+}
+
+/* ---- "공간" title vs. the room-select box - same misalignment pattern as
+   the CFD/timeline headers: the site-wide align-items:flex-start reset
+   beats st.columns(vertical_alignment="center"), so the title column falls
+   back to Streamlit's own equal-height auto-margin centering, which
+   centers the *column box* rather than the title text within the row. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-twin_top_room_select) {
+  align-items: center !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-twin_top_room_select) [data-testid="stMarkdownContainer"]:has(.ts-dash-topbar-title) {
+  margin-bottom: 0 !important;
+}
+
+/* ---- CFD title vs. dropdown vertical alignment - same fix as 과거
+   타임라인 변화's header: the site-wide align-items:flex-start reset beats
+   st.columns(vertical_alignment="center")'s own align-items, and the
+   title's Streamlit-generated markdown wrapper carries a built-in
+   margin-bottom:-1rem that desyncs its box from the height the layout
+   centers against. ---- */
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_twin_cfd_card [data-testid="stHorizontalBlock"]:has(.ts-dash-card-title) {
+  align-items: center !important;
+}
+
+.st-key-ts_dash_twin_cfd_card [data-testid="stElementContainer"]:has(.ts-dash-card-title) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important;
+}
+
+/* ---- custom humidity KPI badge (no pre-made icon asset for this one) ---- */
+
+.ts-twin-humidity-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #dbeafe;
+  color: #2f6fb0;
+  flex-shrink: 0;
+}
+
+/* ---- 3D twin panel header row: native segmented_control standing in for
+   the 3D/sensor/히트맵 tabs so they're actually clickable. Its wrapper
+   defaults to filling the whole tab_col width with flex-grow buttons,
+   which stretches the gray track background far past the text - pin it to
+   fit-content and right-align it in the column instead. ---- */
+
+.st-key-twin_view_tab [data-testid="stSegmentedControl"] {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.st-key-twin_view_tab [role="radiogroup"] {
+  width: fit-content;
+  flex: 0 0 auto !important;
+  background: var(--bg);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.st-key-twin_view_tab [role="radiogroup"] label {
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+}
+
+.st-key-twin_view_tab [role="radiogroup"] button,
+.st-key-twin_view_tab [role="radiogroup"] div[data-testid="stMarkdownContainer"] p {
+  padding: 5px 12px !important;
+  min-height: 0 !important;
+  border-radius: 999px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  font-size: 11.5px !important;
+  font-weight: var(--font-weight-semibold) !important;
+  line-height: 1.4 !important;
+}
+
+.st-key-twin_view_tab [role="radiogroup"] button[aria-checked="true"] {
+  background: var(--primary-dark) !important;
+}
+
+.st-key-twin_view_tab [role="radiogroup"] button[aria-checked="true"] p {
+  color: #fff !important;
+}
+
+/* ---- 3D twin card: no placeholder box, legend pinned to the bottom ---- */
+
+/* Bottom padding trimmed to exactly 5px so the 18°C-30°C legend bar sits
+   5px above the card's own bottom border. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_twin_view_card {
+  padding-bottom: 5px !important;
+}
+
+/* The legend is the only thing left in the card below the header row - with
+   no render box between them anymore, push it all the way down to use the
+   card's full (flex-grown) height instead of trailing right under the
+   header. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_twin_view_card > *:has(.ts-dash-card-title) + * {
+  margin-top: auto !important;
+}
+
+/* That pushed element is the legend's own stElementContainer, which
+   collapses to ~2px tall because its markdown wrapper carries Streamlit's
+   built-in margin-bottom:-1rem - the legend paints ~16px below its own
+   box as a result and spills past the card's bottom border. Zero the
+   negative margin so the container's box actually matches the legend's
+   rendered height. */
+.st-key-ts_dash_twin_view_card [data-testid="stElementContainer"]:has(.ts-dash-heat-legend) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important;
+}
+
+/* ---- CFD strip ---- */
+
+.ts-twin-cfd-strip {
+  height: 110px;
+  border-radius: 12px;
+  margin-top: 8px;
+}
+
+/* ---- current-state list rows (tighter than the default list-row) ---- */
+
+/* Stacked (label above value) rather than the default label-left/value-
+   right row - this card is now half-width next to 제어 모드, too narrow
+   for "Ac 상태" and "AC ON 설정 온도 24" to sit on one line without
+   truncating. */
+.st-key-ts_dash_twin_state_card .ts-dash-list-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 0;
+}
+
+.st-key-ts_dash_twin_state_card .ts-dash-list-primary {
+  color: var(--text);
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* ---- control-mode tiles: base look + invisible-overlay-button click
+   target. This used to live in room_detail.css and get pulled in via the
+   `shared` param, but room_detail's own redesign dropped its control-mode
+   section entirely (and the CSS along with it) - this page still uses the
+   same key prefixes for its 2x2 grid, so the base rules now live here
+   instead of depending on another page's stylesheet for them. */
+
+[class*="st-key-ts_dash_mode_"] {
+  position: relative;
+  cursor: pointer;
+}
+
+[class*="st-key-dash_mode_btn_"] {
+  position: absolute !important;
+  inset: 0;
+  z-index: 2;
+}
+
+[class*="st-key-dash_mode_btn_"] [data-testid="stButton"] {
+  height: 100%;
+}
+
+[class*="st-key-dash_mode_btn_"] button {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+
+.ts-dash-mode-item {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px;
+  border-radius: 14px;
+  background: var(--bg);
+  text-align: center;
+}
+
+.ts-dash-mode-item.is-active {
+  background: var(--primary-dark);
+}
+
+.ts-dash-mode-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+}
+
+.ts-dash-mode-icon-wrap img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.ts-dash-mode-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-dash-mode-item.is-active .ts-dash-mode-label {
+  color: #fff;
+}
+
+/* ---- control-mode tiles in a 2x2 grid here instead of 1x4 - column
+   ratio is already st.columns(2), so no extra grid CSS is needed beyond
+   the base rules above, just spacing between the two stacked rows. ---- */
+
+/* The column-internal gap between the stacked top/bottom tiles is set by
+   a nested stVerticalBlock, but dash_shell.css's site-wide
+   `[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar)
+   [data-testid="stVerticalBlock"] { gap: 5px !important }` reset (0,3,0)
+   outranks a plain two-class selector (0,2,0) here, so a `gap` override
+   never lands - push the bottom-row tiles down with margin-top instead,
+   which that reset doesn't touch. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_mode_rule,
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_mode_predictive {
+  margin-top: 25px !important;
+}
+
+/* This card's tiles sit in a narrower half-width column (next to 현재 제어
+   상태) rather than the full-width row room_detail.py uses them in, so the
+   default tile padding/icon/label sizing wraps 2-3 char labels onto two
+   lines. Scale everything down to fit a single line. */
+.st-key-ts_dash_twin_mode_card .ts-dash-mode-item {
+  padding: 10px 4px;
+  gap: 5px;
+}
+
+.st-key-ts_dash_twin_mode_card .ts-dash-mode-icon-wrap {
+  width: 24px;
+  height: 24px;
+}
+
+.st-key-ts_dash_twin_mode_card .ts-dash-mode-icon-wrap img {
+  width: 18px;
+  height: 18px;
+}
+
+.st-key-ts_dash_twin_mode_card .ts-dash-mode-label {
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+/* ---- match 현재 제어 상태 / 제어 모드 heights, content centered ---- */
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_twin_state_card,
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_twin_mode_card {
+  min-height: 204px !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Title stays fixed at the top; whatever directly follows it (the list
+   rows in 현재 제어 상태, the tile row in 제어 모드) takes the rest of the
+   card and centers within it, so a shorter card's content doesn't just
+   hug the top with dead space below once both cards share a height. */
+.st-key-ts_dash_twin_state_card > *:has(.ts-dash-card-title) + * {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_twin_mode_card [data-testid="stHorizontalBlock"] {
+  flex: 1 !important;
+  align-items: center !important;
+  margin-top: 18px !important;
+  gap: 14px !important;
+}
+
+/* ---- fill the page: grow the twin+side row, pin KPI summary near the
+   very bottom of the viewport ---- */
+
+/* The row holding the 3D-twin panel and the AI/state/mode/CFD column grows
+   to fill whatever space is left between the KPI row above and the KPI
+   summary footer below, instead of leaving a big blank gap there. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-ts_dash_twin_view_card) {
+  flex: 1 !important;
+  align-items: stretch !important;
+}
+
+/* Both columns in that row stretch to the row's full (now taller) height. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_dash_twin_view_card),
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_dash_twin_ai_card) {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Left column has a single card - three levels sit between the stretched
+   column and the card itself (stVerticalBlock > stLayoutWrapper > the
+   card's own stVerticalBlock), and every one of them defaults to
+   flex:0 0 auto, so the flex:1 has to be threaded through all of them or
+   the outer stretch never reaches the card. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_dash_twin_view_card) > *:has(.st-key-ts_dash_twin_view_card),
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_dash_twin_view_card) > * > [data-testid="stLayoutWrapper"]:has(.st-key-ts_dash_twin_view_card) {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_twin_view_card {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Right column: only the AI card's wrapper grows - 현재 제어 상태/제어 모드
+   and CFD keep their existing sizes and just sit lower as AI pushes down.
+   Same extra stLayoutWrapper level as the left column above. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_dash_twin_ai_card) > *:has(.st-key-ts_dash_twin_ai_card),
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_dash_twin_ai_card) > * > [data-testid="stLayoutWrapper"]:has(.st-key-ts_dash_twin_ai_card) {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_twin_ai_card {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* KPI summary footer: small fixed gap above it now (the row above already
+   consumes the free space via flex:1), landing it close to the bottom of
+   the viewport instead of needing an auto-margin push. */
+.st-key-ts_dash_summary_card {
+  margin-top: 3px !important;
+}
+
+/* Leave a bit more page background visible below the summary footer -
+   scoped to this page only via its marker div so the shared main-column
+   padding isn't touched elsewhere. The flex:1 twin/AI row shrinks to
+   absorb the extra bottom padding automatically. */
+[data-testid="stMainBlockContainer"]:has(.ts-digital_twin) [data-testid="stColumn"]:has(.st-key-ts_dash_sidebar) ~ [data-testid="stColumn"] {
+  padding-bottom: 14px !important;
+}
