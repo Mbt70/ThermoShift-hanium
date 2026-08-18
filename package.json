@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "dev": ".venv\\Scripts\\streamlit.exe run app\\main.py",
+    "dev:web": ".venv\\Scripts\\streamlit.exe run web\\main.py --server.port 8502",
     "build": "node scripts/build-pwa.mjs"
   }
 }

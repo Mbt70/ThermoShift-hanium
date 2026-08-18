@@ -1,0 +1,166 @@
+/* Page-specific styles for 마이페이지 (내 정보). Shell (sidebar, topbar
+   look, generic bordered card) comes from dash_shell.css via
+   apply_mobile_styles's `shared` param. */
+
+/* ---- the two account/password cards ---- */
+
+.st-key-ts_dash_mypage_account_card,
+.st-key-ts_dash_mypage_password_card {
+  padding: 22px 26px !important;
+}
+
+.st-key-ts_dash_mypage_account_card {
+  margin-top: 40px;
+}
+
+.st-key-ts_dash_mypage_password_card {
+  margin-top: 14px;
+}
+
+.st-key-ts_dash_mypage_account_card .ts-dash-card-title,
+.st-key-ts_dash_mypage_password_card .ts-dash-card-title {
+  margin-bottom: 18px;
+  font-size: 16px !important;
+}
+
+/* ---- form fields: label + gray rounded box, matching the login page's
+   input treatment ---- */
+
+.st-key-ts_dash_mypage_account_card [data-testid="stWidgetLabel"] p,
+.st-key-ts_dash_mypage_password_card [data-testid="stWidgetLabel"] p {
+  color: var(--muted);
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: 4px;
+}
+
+.st-key-ts_dash_mypage_account_card [data-testid="stTextInputRootElement"],
+.st-key-ts_dash_mypage_password_card [data-testid="stTextInputRootElement"] {
+  background: var(--bg);
+  border: none !important;
+  border-radius: var(--input-radius);
+  min-height: 46px;
+}
+
+.st-key-ts_dash_mypage_account_card [data-testid="stTextInputRootElement"] input,
+.st-key-ts_dash_mypage_password_card [data-testid="stTextInputRootElement"] input {
+  color: var(--text);
+  font-size: var(--font-size-base);
+  -webkit-text-fill-color: var(--text);
+}
+
+/* Email field is read-only (email is the account's lookup key) - keep it
+   visually identical to the editable name field rather than looking
+   grayed-out/disabled. */
+.st-key-ts_dash_mypage_account_card [data-testid="stTextInputRootElement"]:has(input:disabled) {
+  opacity: 1;
+}
+
+.st-key-ts_dash_mypage_account_card [data-testid="stTextInputRootElement"] input:disabled {
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
+  opacity: 1;
+}
+
+/* Leading lock icon on the two password fields. */
+.st-key-ts_dash_mypage_password_card [data-testid="stTextInputRootElement"] input {
+  padding-left: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='15' height='15' fill='none' stroke='%23838d99' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='11' width='14' height='9' rx='2'/%3E%3Cpath d='M8 11V7a4 4 0 0 1 8 0v4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 12px center;
+}
+
+/* Save buttons: shrink from the site-wide full-width/52px-tall button down
+   to a compact pill that hugs the "저장" label, right-aligned under the
+   fields via the narrow trailing column each sits in. */
+.st-key-ts_dash_mypage_account_card [data-testid="stColumn"]:has(.st-key-mypage_save_name),
+.st-key-ts_dash_mypage_password_card [data-testid="stColumn"]:has(.st-key-mypage_save_password) {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* The button element itself is inline-flex (auto margins don't resolve on
+   inline-level boxes) sitting inside a plain block [data-testid="stButton"]
+   wrapper that spans the column's full width - shrink that wrapper to the
+   button's own content width and push *it* right with a block-level auto
+   margin, which does resolve, instead of trying to align the button
+   directly. */
+.st-key-ts_dash_mypage_account_card [data-testid="stColumn"]:has(.st-key-mypage_save_name) [data-testid="stButton"],
+.st-key-ts_dash_mypage_password_card [data-testid="stColumn"]:has(.st-key-mypage_save_password) [data-testid="stButton"] {
+  width: fit-content !important;
+  margin-left: auto !important;
+}
+
+.st-key-ts_dash_mypage_account_card [data-testid="stColumn"]:has(.st-key-mypage_save_name) button,
+.st-key-ts_dash_mypage_password_card [data-testid="stColumn"]:has(.st-key-mypage_save_password) button {
+  min-height: 38px !important;
+  padding: 0 26px !important;
+  border-radius: 999px !important;
+  font-size: var(--font-size-sm) !important;
+  margin-top: 4px;
+}
+
+/* ---- footer: 로그아웃 / 회원탈퇴 as plain text links below the cards,
+   not full-width filled buttons. Padding matches the cards' own 26px
+   right inset so 회원탈퇴 lines up with the 저장 buttons above it. ---- */
+
+.st-key-ts_dash_mypage_footer {
+  margin-top: 10px;
+  /* Matches the cards' real rendered content inset (measured 17px, not the
+     nominal 26px padding value - box-sizing/border eats a few px), so
+     로그아웃/회원탈퇴 line up with the label/input text and save buttons
+     directly above them. */
+  padding: 0 17px;
+}
+
+/* 회원탈퇴 uses width="content", so its own element-container already
+   shrink-wraps to the label - but it's a plain block sibling inside the
+   column's inner stVerticalBlock (not a direct flex item the column's own
+   justify-content reaches), so it still defaults to sitting at the left.
+   A block-level auto margin on the shrink-wrapped container itself pushes
+   it flush right instead. */
+.st-key-mypage_delete_link {
+  margin-left: auto !important;
+}
+
+.st-key-mypage_logout_link button,
+.st-key-mypage_delete_link button {
+  width: auto !important;
+  min-height: 0 !important;
+  padding: 4px 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--muted) !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+.st-key-mypage_logout_link button:hover {
+  color: var(--text) !important;
+  background: transparent !important;
+}
+
+.st-key-mypage_delete_link button {
+  color: var(--danger) !important;
+}
+
+.st-key-mypage_delete_link button:hover {
+  color: var(--danger) !important;
+  background: transparent !important;
+  text-decoration: underline;
+}
+
+/* ---- 로그아웃 / 회원탈퇴 confirmation dialogs ---- */
+
+.st-key-mypage_logout_cancel button,
+.st-key-mypage_delete_cancel button {
+  background: transparent !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+.st-key-mypage_delete_confirm button {
+  background: var(--danger) !important;
+}

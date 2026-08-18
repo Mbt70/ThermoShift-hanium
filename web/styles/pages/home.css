@@ -1,0 +1,407 @@
+/* Page-specific styles for the multi-room overview dashboard. Shell
+   (sidebar, topbar, generic "*_card" bordered container, badges, list
+   rows) lives in dash_shell.css, loaded alongside this via
+   apply_mobile_styles's `shared` param. */
+
+/* ---- KPI row ---- */
+
+[class*="_card"][class*="st-key-ts_dash_kpi_card_"] {
+  padding: 8px 14px !important;
+}
+
+.ts-dash-kpi-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0 0 8px;
+  min-width: 0;
+}
+
+.ts-dash-kpi-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-dash-kpi-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+}
+
+.ts-dash-kpi-value {
+  margin: 0 0 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.01em;
+}
+
+.ts-dash-kpi-unit {
+  margin-left: 2px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-dash-kpi-sub {
+  margin: 0;
+  color: var(--placeholder);
+  font-size: 7px;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- room status grid ---- */
+
+[class*="_card"][class*="st-key-ts_dash_room_card_"] {
+  margin-bottom: 8px !important;
+  padding: 9px !important;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--input-radius);
+  position: relative;
+}
+
+[class*="st-key-room_card_btn_"] {
+  position: absolute !important;
+  inset: 0;
+  z-index: 2;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+[class*="st-key-room_card_btn_"] [data-testid="stButton"] {
+  height: 100%;
+}
+
+[class*="st-key-room_card_btn_"] button {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: transparent;
+  box-shadow: none;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ts-dash-room-thumb-empty {
+  /* Placeholder for the room's future 3D/floor-plan render - left blank on
+     purpose for now, see home.py. */
+  height: 44px;
+  border-radius: 8px;
+  margin-bottom: 7px;
+  background: var(--card);
+  border: 1px dashed var(--border);
+}
+
+.ts-dash-room-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ts-dash-room-card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-dash-room-card-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.ts-dash-room-card-stats span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-dash-room-card-stats img {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.ts-dash-inline-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.ts-dash-heat-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  color: var(--placeholder);
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+}
+
+.ts-dash-heat-legend-bar {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgb(91 132 196), rgb(88 164 152), rgb(230 74 69));
+}
+
+/* ---- timeline card selectors ---- */
+
+.st-key-ts_dash_timeline_card [data-testid="stSelectbox"] > div > div {
+  min-height: 26px;
+  border-radius: 999px;
+  border-color: var(--border);
+  background: var(--bg);
+  font-size: 11px;
+}
+
+.st-key-ts_dash_timeline_card [data-testid="stButtonGroup"] {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--bg);
+  border-radius: 999px;
+  padding: 2px;
+}
+
+.st-key-ts_dash_timeline_card button[data-variant="pills"] {
+  background: transparent !important;
+  color: var(--muted) !important;
+  border: none !important;
+  border-radius: 999px !important;
+  padding: 3px 12px !important;
+  min-height: 0 !important;
+  font-size: 11px !important;
+  font-weight: var(--font-weight-semibold) !important;
+  box-shadow: none !important;
+}
+
+.st-key-ts_dash_timeline_card button[data-variant="pills"][data-selected="true"] {
+  background: #fff !important;
+  color: var(--text) !important;
+  box-shadow: 0 1px 6px rgb(20 31 43 / 12%) !important;
+}
+
+/* ---- power ranking bars ---- */
+
+.ts-dash-power-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.ts-dash-power-name {
+  flex: 0 0 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-dash-power-bar-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.ts-dash-power-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary);
+}
+
+.ts-dash-power-value {
+  flex: 0 0 50px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-dash-power-axis {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 4px 0 0 90px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  color: var(--placeholder);
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+}
+
+/* ---- reservation panel ---- */
+
+.ts-dash-reservation-desc {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+}
+
+.st-key-dash_reservation_new button,
+.st-key-dash_reservation_all button {
+  min-height: 30px !important;
+  padding: 0 4px !important;
+  font-size: 10px !important;
+  white-space: nowrap;
+}
+
+.st-key-dash_reservation_all button {
+  background: transparent !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+.st-key-dash_reservation_all button:hover {
+  background: var(--bg) !important;
+}
+
+/* ---- AI panel ---- */
+
+/* Scoped to the dashboard's narrow side column only - room_detail.py's
+   judgment card (same shared classes) keeps the normal shell sizing. */
+.st-key-ts_dash_ai_card .ts-dash-judgment-headline {
+  font-size: 11px;
+}
+
+.st-key-ts_dash_ai_card .ts-dash-judgment-sub {
+  font-size: 10px;
+}
+
+.ts-dash-ai-summary {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+
+/* ---- KPI summary footer ---- */
+
+.ts-dash-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+
+.ts-dash-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border-radius: var(--input-radius);
+}
+
+.ts-dash-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.ts-dash-summary-head img {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.ts-dash-summary-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-dash-summary-value {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: var(--font-weight-extrabold);
+}
+
+/* ---- match 공간현황/타임라인 card height to the 예약+AI column ---- */
+
+/* Stretch that row so the room-grid/timeline columns can be told to fill
+   up to match the reservation+AI column instead of each hugging its own
+   (much shorter) content height. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-ts_dash_room_grid_card) {
+  align-items: stretch !important;
+}
+
+/* Cascade that stretched height down to the room-grid/timeline cards only
+   (not into the reservation+AI column, which holds the reference height
+   and whose own two stacked cards must keep their natural sizes). `>` at
+   every step stops the cascade exactly at the card itself instead of also
+   reaching into its nested room-pair columns. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-ts_dash_room_grid_card) > [data-testid="stColumn"]:has(.st-key-ts_dash_room_grid_card),
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-ts_dash_room_grid_card) > [data-testid="stColumn"]:has(.st-key-ts_dash_timeline_card) {
+  height: 100% !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-ts_dash_room_grid_card) > [data-testid="stColumn"]:has(.st-key-ts_dash_room_grid_card) > [data-testid="stVerticalBlock"],
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-ts_dash_room_grid_card) > [data-testid="stColumn"]:has(.st-key-ts_dash_timeline_card) > [data-testid="stVerticalBlock"] {
+  height: 100% !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-ts_dash_room_grid_card) > [data-testid="stColumn"]:has(.st-key-ts_dash_room_grid_card) > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"],
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-ts_dash_room_grid_card) > [data-testid="stColumn"]:has(.st-key-ts_dash_timeline_card) > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"] {
+  height: 100% !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_room_grid_card,
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_timeline_card {
+  height: 100% !important;
+}
+
+/* ---- power ranking: "more" link ---- */
+
+.st-key-dash_power_more button {
+  min-height: 0 !important;
+  padding: 4px 10px !important;
+  background: var(--bg) !important;
+  color: var(--muted) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+  font-size: 11px !important;
+}
+
+.st-key-dash_power_more button:hover {
+  background: var(--border) !important;
+  color: var(--text) !important;
+}

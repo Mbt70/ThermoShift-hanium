@@ -3,7 +3,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from app.components.auth_store import current_user_name, is_logged_in
+from app.components.auth_store import current_user_email, current_user_name, is_logged_in
 from app.components.mobile_ui import apply_mobile_styles
 from app.components.room_store import list_rooms, room_status
 
@@ -108,7 +108,7 @@ if not is_logged_in():
 
 greeting_header(current_user_name())
 
-rooms = list_rooms()
+rooms = list_rooms(current_user_email())
 
 if rooms:
     st.markdown(

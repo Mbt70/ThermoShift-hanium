@@ -1,0 +1,203 @@
+/* This page uses a full-bleed two-panel layout instead of the padded
+   centered block components.css sets up by default, so undo that here. */
+[data-testid="stMainBlockContainer"]:has(.ts-login) {
+  padding: 0 !important;
+  max-width: none !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.ts-login) [data-testid="stHorizontalBlock"] {
+  gap: 0 !important;
+  min-height: 100vh;
+  align-items: stretch !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.ts-login) [data-testid="stColumn"] {
+  padding: 0 !important;
+}
+
+/* ---- left hero panel ---- */
+
+.ts-auth-hero {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--primary);
+  padding: 64px 64px;
+  color: #fff;
+}
+
+.ts-auth-vector {
+  position: absolute;
+  pointer-events: none;
+  stroke-width: 3px;
+  max-width: none;
+}
+
+.ts-auth-vector-2 {
+  width: 175%;
+  top: 34%;
+  left: -37%;
+  opacity: 0.9;
+}
+
+.ts-auth-vector-3 {
+  width: 115%;
+  bottom: 0;
+  right: -10%;
+  opacity: 0.55;
+}
+
+.ts-auth-hero-content {
+  position: relative;
+  z-index: 1;
+}
+
+.ts-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 64px;
+}
+
+.ts-auth-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: block;
+}
+
+.ts-auth-brand-name {
+  font-size: 24px;
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.02em;
+}
+
+.ts-auth-heading {
+  margin: 0 0 20px;
+  font-size: 42px;
+  font-weight: var(--font-weight-extrabold);
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
+.ts-auth-subheading {
+  margin: 0 0 60px;
+  max-width: 460px;
+  font-size: 16px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.6;
+  color: rgb(255 255 255 / 88%);
+}
+
+.ts-auth-features {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.ts-auth-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.ts-auth-feature-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ts-auth-feature-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.ts-auth-feature-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-auth-feature-desc {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  color: rgb(255 255 255 / 78%);
+}
+
+.ts-auth-hero-image {
+  position: absolute;
+  right: -15px;
+  bottom: -30px;
+  width: 42%;
+  max-width: 420px;
+  z-index: 1;
+}
+
+/* ---- right form panel ---- */
+
+[data-testid="stMainBlockContainer"]:has(.ts-login) [data-testid="stColumn"]:last-of-type {
+  background: var(--card);
+}
+
+.st-key-ts_auth_form_col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 40px;
+}
+
+.st-key-ts_auth_form_col > [data-testid="stVerticalBlock"] {
+  width: 100%;
+  max-width: 380px;
+}
+
+.st-key-ts_auth_tabs {
+  /* Streamlit gives this stVerticalBlock flex-direction:column by default,
+     so horizontal alignment is controlled by align-items, not
+     justify-content (that only centers it on the near-empty column axis). */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 48px;
+}
+
+.st-key-ts_auth_tabs [data-testid="stElementContainer"] {
+  width: fit-content !important;
+}
+
+.st-key-ts_auth_tabs [data-testid="stButtonGroup"] {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--bg);
+  border-radius: 999px;
+  padding: 4px;
+}
+
+.st-key-ts_auth_tabs button[data-variant="pills"] {
+  background: transparent !important;
+  color: var(--muted) !important;
+  border: none !important;
+  border-radius: 999px !important;
+  padding: 10px 32px !important;
+  min-height: 0 !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-semibold) !important;
+  box-shadow: none !important;
+}
+
+.st-key-ts_auth_tabs button[data-variant="pills"][data-selected="true"] {
+  background: #fff !important;
+  color: var(--text) !important;
+  box-shadow: 0 1px 6px rgb(20 31 43 / 12%) !important;
+}
+
+.st-key-ts_auth_form_col [data-testid="stTextInputRootElement"] {
+  background: var(--bg);
+  border: none !important;
+}

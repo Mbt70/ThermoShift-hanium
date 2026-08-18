@@ -1,0 +1,244 @@
+/* Page-specific styles for the single-room detail view. Shell (sidebar,
+   topbar, generic "*_card" bordered container, badges, list rows) lives in
+   dash_shell.css, loaded alongside this via apply_mobile_styles's `shared`
+   param. */
+
+.st-key-ts_dash_room_switch {
+  max-width: 280px;
+  margin-bottom: 18px;
+}
+
+.st-key-ts_dash_room_switch [data-testid="stSelectbox"] > div > div {
+  border-radius: var(--input-radius);
+  border-color: var(--border);
+  background: var(--card);
+}
+
+.ts-dash-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ts-dash-room-title {
+  margin: 0;
+  color: var(--text);
+  /* Streamlit auto-generates a "<scoped-class> h1 { font-size: 2.75rem;
+     padding: 1.25rem 0 1rem }" rule for every markdown-rendered h1, which
+     otherwise wins the font-size specificity tie and always applies its
+     padding since nothing else here touches it. */
+  padding: 0 !important;
+  font-size: var(--font-size-2xl) !important;
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.02em;
+}
+
+.ts-dash-room-location {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+}
+
+.ts-dash-chips {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ts-dash-chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.ts-dash-chip-auto.is-active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary-dark);
+}
+
+.ts-dash-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin: 24px 0;
+}
+
+.ts-dash-tile {
+  padding: 18px 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--input-radius);
+}
+
+.ts-dash-tile-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-dash-tile-value {
+  margin: 0;
+  color: var(--text);
+  font-size: 26px;
+  font-weight: var(--font-weight-extrabold);
+}
+
+.ts-dash-tile-unit {
+  margin-left: 3px;
+  color: var(--muted);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-dash-gauge-wrap {
+  position: relative;
+  width: 148px;
+  height: 148px;
+  margin: 8px auto 0;
+}
+
+.ts-dash-gauge-ring {
+  width: 100%;
+  height: 100%;
+}
+
+.ts-dash-gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.ts-dash-gauge-score {
+  color: var(--text);
+  font-size: 34px;
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.02em;
+}
+
+.ts-dash-gauge-label {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.st-key-ts_dash_mode_card [data-testid="stHorizontalBlock"] {
+  gap: 12px;
+}
+
+[class*="st-key-ts_dash_mode_"] {
+  position: relative;
+  cursor: pointer;
+}
+
+[class*="st-key-dash_mode_btn_"] {
+  position: absolute !important;
+  inset: 0;
+  z-index: 2;
+}
+
+[class*="st-key-dash_mode_btn_"] [data-testid="stButton"] {
+  height: 100%;
+}
+
+[class*="st-key-dash_mode_btn_"] button {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+
+.ts-dash-mode-item {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px;
+  border-radius: 14px;
+  background: var(--bg);
+  text-align: center;
+}
+
+.ts-dash-mode-item.is-active {
+  background: var(--primary-dark);
+}
+
+.ts-dash-mode-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+}
+
+.ts-dash-mode-icon-wrap img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.ts-dash-mode-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-dash-mode-item.is-active .ts-dash-mode-label {
+  color: #fff;
+}
+
+.st-key-ts_dash_target_card [data-testid="stHorizontalBlock"] {
+  margin-top: 4px;
+}
+
+.st-key-dash_target_minus button,
+.st-key-dash_target_plus button {
+  width: 44px !important;
+  height: 44px;
+  min-height: 44px;
+  margin: 0 auto;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 20px;
+  line-height: 1;
+  background: var(--bg) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+.st-key-dash_target_minus button:hover,
+.st-key-dash_target_plus button:hover {
+  background: var(--border) !important;
+  color: var(--text) !important;
+}
+
+.ts-dash-target-value {
+  margin: 0;
+  text-align: center;
+  color: var(--text);
+  font-size: 30px;
+  font-weight: var(--font-weight-extrabold);
+}

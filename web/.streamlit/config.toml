@@ -1,0 +1,9 @@
+[server]
+runOnSave = true
+showEmailPrompt = false
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"

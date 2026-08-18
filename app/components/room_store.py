@@ -15,6 +15,7 @@ _DEFAULT_FIELDS = {
     "reservation_count": 0,
     "last_updated": None,
     "control_mode": "rule",
+    "owner_email": None,
 }
 
 
@@ -35,15 +36,15 @@ def _save_rooms(rooms: list[dict]) -> None:
     )
 
 
-def list_rooms() -> list[dict]:
-    return _load_rooms()
+def list_rooms(owner_email: str) -> list[dict]:
+    return [room for room in _load_rooms() if room.get("owner_email") == owner_email]
 
 
 def get_room(room_id: str) -> dict | None:
     return next((room for room in _load_rooms() if room["id"] == room_id), None)
 
 
-def register_room(name: str, location: str, floor_plan_name: str) -> dict:
+def register_room(name: str, location: str, floor_plan_name: str, owner_email: str) -> dict:
     rooms = _load_rooms()
     room = {
         "id": uuid.uuid4().hex,
@@ -59,6 +60,7 @@ def register_room(name: str, location: str, floor_plan_name: str) -> dict:
         "auto_control": True,
         "reservation_count": random.randint(0, 5),
         "last_updated": datetime.now().isoformat(),
+        "owner_email": owner_email,
     }
     rooms.append(room)
     _save_rooms(rooms)

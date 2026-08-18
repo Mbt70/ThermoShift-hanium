@@ -1,0 +1,157 @@
+/* Page-specific styles for the 공간·디바이스 management page. Shell (sidebar,
+   topbar, generic "*_card" bordered container, badges) lives in
+   dash_shell.css, loaded alongside this via apply_mobile_styles's `shared`
+   param. */
+
+.st-key-ts_dev_tabs {
+  display: flex;
+  margin-bottom: 18px;
+}
+
+.st-key-ts_dev_tabs [data-testid="stElementContainer"] {
+  width: fit-content !important;
+}
+
+.st-key-ts_dev_tabs [data-testid="stButtonGroup"] {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px;
+}
+
+.st-key-ts_dev_tabs button[data-variant="pills"] {
+  background: transparent !important;
+  color: var(--muted) !important;
+  border: none !important;
+  border-radius: 999px !important;
+  padding: 8px 22px !important;
+  min-height: 0 !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-semibold) !important;
+  box-shadow: none !important;
+}
+
+.st-key-ts_dev_tabs button[data-variant="pills"][data-selected="true"] {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+}
+
+/* ---- room list ---- */
+
+.ts-dev-room-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 14px 4px;
+}
+
+.ts-dev-room-header {
+  padding-top: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--placeholder);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-dev-room-name {
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-dev-room-loc {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+[class*="st-key-dev_edit_"],
+[class*="st-key-dev_delete_"] {
+  margin-top: 4px;
+}
+
+[class*="st-key-dev_edit_"] button,
+[class*="st-key-dev_delete_"] button {
+  width: 36px !important;
+  min-height: 36px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg) !important;
+  color: var(--muted) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+[class*="st-key-dev_edit_"] button [data-testid="stMarkdownContainer"],
+[class*="st-key-dev_delete_"] button [data-testid="stMarkdownContainer"] {
+  display: none;
+}
+
+[class*="st-key-dev_edit_"] button [data-testid*="Icon"],
+[class*="st-key-dev_delete_"] button [data-testid*="Icon"] {
+  margin: 0 !important;
+}
+
+[class*="st-key-dev_edit_"] button:hover,
+[class*="st-key-dev_delete_"] button:hover {
+  background: var(--border) !important;
+  color: var(--text) !important;
+}
+
+[class*="st-key-dev_edit_form_"] [data-testid="stHorizontalBlock"] {
+  margin-top: 8px;
+}
+
+/* ---- room registration form: floor-plan upload dropzone, same look as
+   the mobile app's room_form.css so the two flows feel identical. ---- */
+
+.st-key-dev_room_fields {
+  gap: 24px;
+}
+
+[data-testid="stFileUploader"] label p {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.02em;
+}
+
+[data-testid="stFileUploaderDropzone"] {
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--bg);
+  border: 1.5px dashed var(--border);
+  border-radius: var(--input-radius);
+}
+
+[data-testid="stFileUploaderDropzoneInstructions"],
+[data-testid="stFileUploader"] button {
+  display: none !important;
+}
+
+[data-testid="stFileUploaderDropzone"]::before {
+  content: "";
+  display: block;
+  width: 32px;
+  height: 32px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2398a2b1' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 2v6h6'/%3E%3Cpath d='M12 18v-9'/%3E%3Cpath d='M9 12l3-3 3 3'/%3E%3C/svg%3E");
+}
+
+[data-testid="stFileUploaderDropzone"]::after {
+  content: "도면 이미지 업로드";
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
