@@ -17,6 +17,7 @@ _WEEKDAY_LABELS = {
 }
 
 _DEFAULT_FIELDS = {
+    "title": "",
     "precool_enabled": False,
     "precool_minutes_before": 20,
     "repeat_enabled": False,
@@ -67,6 +68,7 @@ def get_schedule(schedule_id: str) -> dict | None:
 def create_schedule(
     *,
     room_id: str,
+    title: str = "",
     schedule_date: date,
     start_time: time,
     end_time: time,
@@ -80,6 +82,7 @@ def create_schedule(
     schedule = {
         "id": uuid.uuid4().hex,
         "room_id": room_id,
+        "title": title,
         "date": schedule_date.isoformat(),
         "start_time": start_time.strftime("%H:%M"),
         "end_time": end_time.strftime("%H:%M"),
@@ -98,6 +101,7 @@ def create_schedule(
 def update_schedule(
     schedule_id: str,
     *,
+    title: str = "",
     schedule_date: date,
     start_time: time,
     end_time: time,
@@ -112,6 +116,7 @@ def update_schedule(
     if schedule is None:
         return
     schedule.update(
+        title=title,
         date=schedule_date.isoformat(),
         start_time=start_time.strftime("%H:%M"),
         end_time=end_time.strftime("%H:%M"),

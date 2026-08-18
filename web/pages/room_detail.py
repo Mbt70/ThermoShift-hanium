@@ -1,6 +1,6 @@
 import random
 import sys
-from datetime import date
+from datetime import date, time
 from pathlib import Path
 
 import altair as alt
@@ -19,7 +19,15 @@ from app.components.room_store import (
     system_judgment,
     trend_series,
 )
-from app.components.schedule_store import list_today_schedules, schedule_status
+from app.components.schedule_store import (
+    create_schedule,
+    delete_schedule,
+    get_schedule,
+    list_schedules,
+    list_today_schedules,
+    schedule_status,
+    update_schedule,
+)
 from components.auth_store import current_user_email, is_logged_in
 from components.dash_shell import render_sidebar
 from components.mobile_ui import apply_mobile_styles, icon_data_uri
@@ -67,6 +75,221 @@ _CHEVRON_ICON = (
     '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" '
     'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>'
 )
+_CLOCK_ICON = (
+    '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '
+    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
+    '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>'
+)
+_BOLT_ICON = (
+    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" '
+    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>'
+)
+_WARNING_ICON = (
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" '
+    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
+    '<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg>'
+)
+
+_WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+_WEEKDAY_LABELS = {"mon": "월", "tue": "화", "wed": "수", "thu": "목", "fri": "금", "sat": "토", "sun": "일"}
+_PRECOOL_OPTIONS = list(range(10, 61, 10))
+
+
+def _close_resv_dialog() -> None:
+    # Also fires when the dialog's own native X is clicked (not just our
+    # buttons) - without this, closing that way would leave the "which
+    # dialog is open" flag stale, silently reopening it on the next
+    # unrelated rerun anywhere else on the page.
+    st.session_state["_resv_dialog"] = None
+    st.session_state["_resv_editing_id"] = None
+
+
+@st.dialog("예약 추가", width="large", on_dismiss=_close_resv_dialog)
+def _reservation_form_dialog(room: dict, editing_id: str | None = None) -> None:
+    st.markdown('<div class="ts-reservation-dialog"></div>', unsafe_allow_html=True)
+    editing = get_schedule(editing_id) if editing_id else None
+
+    form_key = editing_id or "new"
+    if st.session_state.get("_resv_form_key") != form_key:
+        st.session_state["_resv_form_key"] = form_key
+        st.session_state["resv_target_temp"] = editing["target_temperature"] if editing else 23
+
+    st.markdown(
+        '<p class="ts-schedule-form-hint">예약한 시간 동안 입력한 온도로 냉방을 자동 유지합니다</p>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<p class="ts-schedule-field-label">일정 이름</p>', unsafe_allow_html=True)
+    title = st.text_input(
+        "일정 이름", value=editing["title"] if editing else "", key="resv_title", label_visibility="collapsed"
+    )
+
+    st.markdown('<p class="ts-schedule-field-label">날짜</p>', unsafe_allow_html=True)
+    default_date = date.fromisoformat(editing["date"]) if editing else date.today()
+    schedule_date = st.date_input("날짜", value=default_date, key="resv_date", label_visibility="collapsed")
+
+    st.markdown('<p class="ts-schedule-field-label">시작 · 종료 시간</p>', unsafe_allow_html=True)
+    default_start = time.fromisoformat(editing["start_time"]) if editing else time(9, 0)
+    default_end = time.fromisoformat(editing["end_time"]) if editing else time(10, 0)
+    start_col, end_col = st.columns(2, gap="small")
+    with start_col:
+        start_time = st.time_input("시작 시간", value=default_start, key="resv_start", label_visibility="collapsed")
+    with end_col:
+        end_time = st.time_input("종료 시간", value=default_end, key="resv_end", label_visibility="collapsed")
+    time_error = st.empty()
+
+    with st.container(key="ts_resv_temp_card", border=True):
+        st.markdown(f'<p class="ts-schedule-card-title">{_CHIP_ICON}목표 온도</p>', unsafe_allow_html=True)
+        minus_col, value_col, plus_col = st.columns([1, 2, 1], vertical_alignment="center")
+        with minus_col:
+            if st.button("−", key="resv_temp_minus", width="stretch"):
+                st.session_state["resv_target_temp"] = max(16, st.session_state["resv_target_temp"] - 1)
+        with plus_col:
+            if st.button("+", key="resv_temp_plus", width="stretch"):
+                st.session_state["resv_target_temp"] = min(30, st.session_state["resv_target_temp"] + 1)
+        with value_col:
+            st.markdown(
+                f'<p class="ts-schedule-temp-value">{st.session_state["resv_target_temp"]}°</p>',
+                unsafe_allow_html=True,
+            )
+        st.markdown('<p class="ts-schedule-temp-sub">예약 시간 동안 유지</p>', unsafe_allow_html=True)
+    target_temperature = st.session_state["resv_target_temp"]
+
+    with st.container(key="ts_resv_precool_card", border=True):
+        title_col, toggle_col = st.columns([4, 1], vertical_alignment="center")
+        with title_col:
+            st.markdown(
+                f'<p class="ts-schedule-card-title">{_BOLT_ICON}선냉방 (미리 가동)</p>', unsafe_allow_html=True
+            )
+        with toggle_col:
+            precool_enabled = st.toggle(
+                "선냉방", value=editing["precool_enabled"] if editing else False,
+                key="resv_precool_toggle", label_visibility="collapsed",
+            )
+        st.markdown(
+            '<p class="ts-schedule-card-desc">시작 전 미리 냉방해 목표 온도를 맞춰둡니다.</p>',
+            unsafe_allow_html=True,
+        )
+        if precool_enabled:
+            default_minutes = editing["precool_minutes_before"] if editing else 20
+            precool_minutes_before = st.selectbox(
+                "몇 분 전", _PRECOOL_OPTIONS,
+                index=_PRECOOL_OPTIONS.index(default_minutes) if default_minutes in _PRECOOL_OPTIONS else 1,
+                format_func=lambda m: f"시작 {m}분 전",
+                key="resv_precool_minutes", label_visibility="collapsed",
+            )
+        else:
+            precool_minutes_before = editing["precool_minutes_before"] if editing else 20
+
+    with st.container(key="ts_resv_repeat_card", border=True):
+        title_col, toggle_col = st.columns([4, 1], vertical_alignment="center")
+        with title_col:
+            st.markdown(f'<p class="ts-schedule-card-title">{_CALENDAR_ICON}매주 반복</p>', unsafe_allow_html=True)
+        with toggle_col:
+            repeat_enabled = st.toggle(
+                "매주 반복", value=editing["repeat_enabled"] if editing else False,
+                key="resv_repeat_toggle", label_visibility="collapsed",
+            )
+        if repeat_enabled:
+            default_days = editing["repeat_days"] if editing else []
+            repeat_days = st.pills(
+                "반복 요일", options=_WEEKDAYS, format_func=lambda d: _WEEKDAY_LABELS[d],
+                selection_mode="multi", default=[d for d in default_days if d in _WEEKDAYS],
+                key="resv_repeat_days", label_visibility="collapsed",
+            )
+        else:
+            repeat_days = []
+    repeat_days_error = st.empty()
+
+    st.markdown(
+        f'<div class="ts-schedule-note">{_WARNING_ICON}예약 시간이 끝나면 자동으로 절전·종료됩니다</div>',
+        unsafe_allow_html=True,
+    )
+
+    submitted = st.button(
+        "예약 수정" if editing else "예약 저장", key="resv_submit", width="stretch"
+    )
+    if submitted:
+        if start_time >= end_time:
+            with time_error:
+                st.markdown(
+                    '<p class="ts-schedule-time-error">종료 시간을 시작 시간보다 늦게 설정해주세요</p>',
+                    unsafe_allow_html=True,
+                )
+        elif repeat_enabled and not repeat_days:
+            with repeat_days_error:
+                st.markdown(
+                    '<p class="ts-schedule-field-error">반복 요일을 선택해주세요</p>', unsafe_allow_html=True
+                )
+        else:
+            fields = dict(
+                title=title,
+                schedule_date=schedule_date,
+                start_time=start_time,
+                end_time=end_time,
+                target_temperature=target_temperature,
+                precool_enabled=precool_enabled,
+                precool_minutes_before=precool_minutes_before,
+                repeat_enabled=repeat_enabled,
+                repeat_days=list(repeat_days) if repeat_days else [],
+            )
+            st.session_state.pop("resv_target_temp", None)
+            st.session_state.pop("_resv_form_key", None)
+            if editing:
+                update_schedule(editing["id"], **fields)
+            else:
+                create_schedule(room_id=room["id"], **fields)
+            _close_resv_dialog()
+            st.rerun()
+
+
+@st.dialog("예약 냉방", width="large", on_dismiss=_close_resv_dialog)
+def _reservation_list_dialog(room: dict) -> None:
+    st.markdown('<div class="ts-reservation-dialog"></div>', unsafe_allow_html=True)
+    schedules = list_schedules(room["id"])
+    if schedules:
+        for s in schedules:
+            status = schedule_status(s)
+            row_col, edit_col, delete_col = st.columns([6, 1, 1], vertical_alignment="center")
+            with row_col:
+                icon = _CLOCK_ICON if status != "완료" else ""
+                extra = (
+                    f'<p class="ts-reservation-row-sub">목표 {s["target_temperature"]}°C · 냉방</p>'
+                    if status == "진행 중"
+                    else ""
+                )
+                st.markdown(
+                    f"""
+                    <div class="ts-reservation-row">
+                      <span class="ts-reservation-row-icon">{icon}</span>
+                      <div>
+                        <p class="ts-reservation-row-title">{s["start_time"]}–{s["end_time"]} · {s["title"] or "제목 없음"}</p>
+                        {extra}
+                      </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with edit_col:
+                # Streamlit doesn't allow opening a dialog from inside another
+                # dialog - flag which one should be open instead and let the
+                # top-level page body (which reruns every time) call it.
+                if st.button("", key=f"resv_edit_{s['id']}", icon=":material/edit:"):
+                    st.session_state["_resv_dialog"] = "form"
+                    st.session_state["_resv_editing_id"] = s["id"]
+                    st.rerun()
+            with delete_col:
+                if st.button("", key=f"resv_delete_{s['id']}", icon=":material/delete:"):
+                    delete_schedule(s["id"])
+                    st.rerun()
+    else:
+        st.markdown('<p class="ts-dash-list-empty">등록된 예약이 없습니다</p>', unsafe_allow_html=True)
+
+    if st.button("＋ 새 예약 추가", key="resv_list_add", width="stretch"):
+        st.session_state["_resv_dialog"] = "form"
+        st.session_state["_resv_editing_id"] = None
+        st.rerun()
 
 
 def _trend_chart(temps: list[float], co2s: list[float], target: float) -> alt.LayerChart:
@@ -123,6 +346,18 @@ if selected_id is None and rooms:
     st.session_state["_web_selected_room"] = selected_id
 
 room = next((r for r in rooms if r["id"] == selected_id), None) if selected_id else None
+
+# Re-opens the flagged reservation dialog on every rerun (including ones
+# triggered from inside the dialog itself, e.g. clicking "edit" in the
+# list) - Streamlit doesn't allow calling a second @st.dialog while one is
+# already open, so dialog-to-dialog navigation works by setting which one
+# should be showing here rather than calling them directly from nested code.
+if room is not None:
+    active_dialog = st.session_state.get("_resv_dialog")
+    if active_dialog == "list":
+        _reservation_list_dialog(room)
+    elif active_dialog == "form":
+        _reservation_form_dialog(room, editing_id=st.session_state.get("_resv_editing_id"))
 
 sidebar_col, main_col = st.columns([1, 4], gap="small")
 
@@ -238,7 +473,8 @@ with main_col:
                     )
                 with res_link_col:
                     if st.button("예약 목록보기", key="dash_reservation_all", width="stretch"):
-                        st.toast("예약 목록 페이지는 곧 제공될 예정이에요", icon="🛠️")
+                        st.session_state["_resv_dialog"] = "list"
+                        st.rerun()
                 if schedules:
                     rows = "".join(
                         f'<div class="ts-room-reservation-row">'
@@ -256,7 +492,9 @@ with main_col:
                         unsafe_allow_html=True,
                     )
                 if st.button("＋ 새 예약 추가", key="dash_reservation_new", width="stretch"):
-                    st.toast("예약 생성 기능은 곧 제공될 예정이에요", icon="🛠️")
+                    st.session_state["_resv_dialog"] = "form"
+                    st.session_state["_resv_editing_id"] = None
+                    st.rerun()
 
         with right_col:
             with st.container(key="ts_room_manual_card", border=True):
