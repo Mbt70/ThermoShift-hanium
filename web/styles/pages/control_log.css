@@ -1,0 +1,302 @@
+/* Page-specific styles for 제어 로그. Shell (sidebar, topbar, generic
+   bordered card, badges, list-empty state) lives in dash_shell.css,
+   loaded alongside this via apply_mobile_styles's `shared` param. */
+
+.st-key-log_top_room_select [data-testid="stSelectbox"] > div,
+.st-key-log_top_room_select [data-testid="stSelectbox"] > div > div {
+  height: 24px !important;
+  min-height: 0 !important;
+}
+
+.st-key-log_top_room_select [data-testid="stSelectbox"] > div > div {
+  border-radius: 999px;
+  border-color: var(--border);
+  background: var(--card);
+  font-size: 11.5px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.st-key-log_top_room_select input,
+.st-key-log_top_room_select button {
+  min-height: 0 !important;
+  height: 22px !important;
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-log_top_room_select) {
+  align-items: center !important;
+  margin-top: 8px !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-log_top_room_select) [data-testid="stMarkdownContainer"]:has(.ts-dash-topbar-title) {
+  margin-bottom: 0 !important;
+}
+
+/* ---- 전체/성공/실패/주의 status filter ---- */
+
+.st-key-ts_dash_log_filter_card {
+  margin: 14px 0 16px;
+}
+
+.st-key-log_status_filter [role="radiogroup"] {
+  width: fit-content;
+  background: var(--bg);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 2px;
+}
+
+.st-key-log_status_filter [role="radiogroup"] button {
+  padding: 8px 22px !important;
+  min-height: 0 !important;
+  border-radius: 999px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+.st-key-log_status_filter [role="radiogroup"] button[aria-checked="true"] {
+  background: var(--primary-dark) !important;
+}
+
+.st-key-log_status_filter [role="radiogroup"] button[aria-checked="true"] p {
+  color: #fff !important;
+}
+
+/* ---- legend row ---- */
+
+/* Neutralize Streamlit's built-in margin-bottom:-1rem on the markdown
+   wrapper, same fix used elsewhere - otherwise the legend's own
+   margin-bottom below doesn't actually create a gap to the split card. */
+[data-testid="stElementContainer"]:has(.ts-log-legend) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important;
+}
+
+.ts-log-legend {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-bottom: 16px;
+  padding: 14px 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--input-radius);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+}
+
+.ts-log-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-log-legend-item.is-ok {
+  color: var(--success);
+}
+
+.ts-log-legend-item.is-fail {
+  color: var(--danger);
+}
+
+.ts-log-legend-item.is-warn {
+  color: var(--warning);
+}
+
+/* ---- split card: log list (left) / detail (right) ---- */
+
+.st-key-ts_dash_log_split_card {
+  padding: 0 !important;
+}
+
+.st-key-ts_dash_log_split_card [data-testid="stHorizontalBlock"] {
+  gap: 0 !important;
+}
+
+.st-key-ts_dash_log_split_card [data-testid="stColumn"]:first-child {
+  padding: 22px 20px !important;
+}
+
+.st-key-ts_dash_log_split_card [data-testid="stColumn"]:last-child {
+  padding: 26px 24px !important;
+  border-left: 1px solid var(--border);
+  min-height: 420px;
+}
+
+/* ---- log rows ---- */
+
+.ts-log-row {
+  display: grid;
+  grid-template-columns: 2.4fr 0.6fr 0.6fr;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 4px;
+}
+
+/* Grid cells default to left-aligning their content (an <img> doesn't
+   stretch to fill its cell), so icons of different widths were left-
+   edge-aligned instead of sharing a common center - reading as "off the
+   line" once one icon was resized smaller than the rest. Center the
+   method-icon cell explicitly so every icon shares the same center
+   point regardless of its own width. */
+.ts-log-row > *:nth-child(2) {
+  justify-self: center;
+}
+
+.ts-log-row-head {
+  padding-top: 0;
+  padding-bottom: 10px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-log-row-head span:first-child {
+  color: var(--text);
+  font-size: var(--font-size-base);
+}
+
+.ts-log-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-log-content svg {
+  flex-shrink: 0;
+}
+
+.ts-log-content.is-ok svg {
+  color: var(--success);
+}
+
+.ts-log-content.is-fail svg {
+  color: var(--danger);
+}
+
+.ts-log-method-icon {
+  width: 22px;
+  height: 22px;
+}
+
+/* back_hand.svg is a single solid-filled silhouette (no internal
+   strokes/holes) that reads visually heavier than the other two icons'
+   thinner grid/line artwork even at a matched bounding-box size - 17px
+   wasn't enough of a reduction to compensate for that perceived weight.
+   Sized down further, empirically, until it reads as roughly the same
+   visual weight side-by-side rather than by matching geometry alone. */
+.ts-log-method-icon-manual {
+  width: 12px;
+  height: 12px;
+}
+
+.ts-log-time {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Failed rows are clickable (invisible-overlay-button pattern used
+   throughout this shell) - successful rows have no button underneath,
+   so they stay plain, non-interactive text. */
+[class*="st-key-ts_dash_log_row_"] {
+  position: relative;
+}
+
+[class*="st-key-ts_dash_log_row_"]:has([data-testid="stButton"]) {
+  cursor: pointer;
+}
+
+/* Target the button's own stElementContainer directly (it already carries
+   the unique "dash_log_open_{id}" key class) rather than a descendant
+   selector reaching into the row - a nested [data-testid="stButton"] div
+   isn't itself positioned, so position:absolute on it computes against
+   the *next* positioned ancestor up the tree (its own stElementContainer,
+   which Streamlit gives position:relative by default) instead of the row,
+   and that ancestor collapses to 0 height since its only child is now
+   taken out of flow - the classic "invisible button never renders"
+   symptom from the same bug fixed earlier on the sidebar profile link. */
+[class*="st-key-dash_log_open_"] {
+  position: absolute !important;
+  inset: 0;
+  z-index: 2;
+}
+
+[class*="st-key-dash_log_open_"] button {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+
+/* ---- fail detail panel ---- */
+
+.ts-log-fail-icon-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  border: 2px solid var(--danger);
+  color: var(--danger);
+}
+
+.ts-log-fail-icon-chip svg {
+  width: 26px;
+  height: 26px;
+}
+
+.ts-log-fail-title {
+  margin: 0 0 22px;
+  text-align: center;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: var(--font-weight-extrabold);
+}
+
+.ts-log-cause-card,
+.ts-log-checklist-card {
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+
+.ts-log-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-log-cause-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+}
+
+.ts-log-checklist {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.8;
+}

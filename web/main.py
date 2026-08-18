@@ -28,6 +28,8 @@ pages = [
     page("pages/digital_twin.py", title="디지털 트윈·3D", url_path="digital-twin"),
     page("pages/devices.py", title="공간·디바이스", url_path="devices"),
     page("pages/my_page.py", title="마이페이지", url_path="my-page"),
+    page("pages/control_log.py", title="제어 로그", url_path="control-log"),
+    page("pages/report.py", title="성과 리포트", url_path="report"),
 ]
 
 navigation = st.navigation(pages, position="hidden")

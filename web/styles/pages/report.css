@@ -1,0 +1,346 @@
+/* Page-specific styles for 성과 리포트. Shell (sidebar, topbar, generic
+   bordered card) comes from dash_shell.css; KPI-card classes are reused
+   from home.css - both loaded via apply_mobile_styles's `shared` param. */
+
+/* ---- leave a visible strip of page background below the bottom row,
+   same technique used on the digital-twin/room-detail pages - scoped to
+   this page only via its marker div. The flex:1 gauge/trend row shrinks
+   to absorb this extra bottom padding automatically. ---- */
+[data-testid="stMainBlockContainer"]:has(.ts-report) [data-testid="stColumn"]:has(.st-key-ts_dash_sidebar) ~ [data-testid="stColumn"] {
+  padding-bottom: 16px !important;
+}
+
+/* ---- top room-select dropdown - same compact-pill treatment as the
+   digital-twin/room-detail pages' "공간" header. ---- */
+
+.st-key-report_top_room_select [data-testid="stSelectbox"] > div,
+.st-key-report_top_room_select [data-testid="stSelectbox"] > div > div {
+  height: 24px !important;
+  min-height: 0 !important;
+}
+
+.st-key-report_top_room_select [data-testid="stSelectbox"] > div > div {
+  border-radius: 999px;
+  border-color: var(--border);
+  background: var(--card);
+  font-size: 11.5px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.st-key-report_top_room_select input,
+.st-key-report_top_room_select button {
+  min-height: 0 !important;
+  height: 22px !important;
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-report_top_room_select) {
+  align-items: center !important;
+  margin-top: 8px !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-report_top_room_select) [data-testid="stMarkdownContainer"]:has(.ts-dash-topbar-title) {
+  margin-bottom: 0 !important;
+}
+
+/* ---- insight banner ---- */
+
+/* Streamlit wraps every st.markdown block's content in a div with a
+   built-in margin-bottom:-1rem - that pulls the *container's* own
+   computed bottom edge up above the banner's real rendered bottom, so
+   the next row (KPI cards) gets positioned as if the banner (plus its
+   own margin-bottom below) were ~16px shorter than it actually is,
+   landing it 1px into the banner regardless of viewport height. */
+[data-testid="stElementContainer"]:has(.ts-report-insight) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important;
+}
+
+.ts-report-insight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 10px;
+  padding: 10px 16px;
+  border-radius: var(--input-radius);
+  background: var(--primary-light);
+}
+
+.ts-report-insight-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary-dark);
+  color: #fff;
+}
+
+.ts-report-insight-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.ts-report-insight p {
+  margin: 0;
+  color: var(--primary-dark);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ---- custom signal-strength KPI badge (no pre-made icon asset) - sized
+   to match the other cards' plain <img> icons (.ts-dash-kpi-icon is
+   30x30 in home.css) exactly, otherwise this one card's head row - and
+   so the whole card - ends up a few px taller than its row-mates. ---- */
+
+.ts-report-signal-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: #eef1f5;
+  color: #5b6472;
+  flex-shrink: 0;
+}
+
+/* ---- KPI 달성 table ---- */
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-ts_dash_report_table_card) {
+  margin-top: 6px !important;
+}
+
+.ts-report-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.ts-report-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.ts-report-row:last-child {
+  border-bottom: 0;
+}
+
+.ts-report-row-head {
+  padding-top: 2px;
+  padding-bottom: 6px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-report-row-head span:first-child {
+  color: var(--text);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-report-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ts-report-row-title {
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-report-row-goal {
+  color: var(--muted);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.ts-report-row-value,
+.ts-report-row-target {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-report-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-report-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.ts-report-status.is-ok {
+  color: var(--success);
+}
+
+.ts-report-status.is-ok .ts-report-status-dot {
+  background: var(--success);
+}
+
+.ts-report-status.is-warn {
+  color: #a9760f;
+}
+
+.ts-report-status.is-warn .ts-report-status-dot {
+  background: #e0ab34;
+}
+
+/* ---- 전력 사용량 비교 bar chart: match KPI 달성's height with a plain
+   min-height rather than flex-stretching through the column/wrapper
+   chain. The stretch approach caused the *outer* row wrapper (the one
+   that determines where the next row starts) to keep computing its
+   height from the card's original, pre-stretch size - the card visually
+   grew past that wrapper's boundary and the next row got positioned as
+   if it hadn't, producing a real overlap on short viewports. A directly
+   set min-height has no such cross-element desync: the block simply is
+   that tall, and every ancestor's auto-height naturally accounts for it. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_report_bar_card {
+  min-height: 272px !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Center only the bars block in the space below the (fixed-at-top) title -
+   justify-content:center on the card itself would center the title+bars
+   as a pair instead, pushing the title down into the bars. The card's
+   height is a plain min-height (not flex-grown), so margin:auto here is
+   safe and doesn't have the wrapper-desync problem from before. */
+.st-key-ts_dash_report_bar_card > *:has(.ts-report-bars) {
+  margin-top: auto !important;
+  margin-bottom: auto !important;
+}
+
+.ts-report-bar-unit {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-report-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  gap: 12px;
+  height: 150px;
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.ts-report-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.ts-report-bar-value {
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-report-bar {
+  width: 52px;
+  border-radius: 8px 8px 0 0;
+  background: #b7bec8;
+}
+
+.ts-report-bar-col:nth-child(2) .ts-report-bar {
+  background: #6f8fc9;
+}
+
+.ts-report-bar.is-highlight {
+  background: var(--primary-dark);
+}
+
+.ts-report-bar-label {
+  color: var(--muted);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ---- 종합 쾌적도 지수 gauge ---- */
+
+/* Same plain-min-height approach as the bar-chart card above, for the
+   same reason - no flex-stretch chain, so no wrapper-height desync. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-ts_dash_report_gauge_card) {
+  margin-top: 6px !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_report_gauge_card,
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_report_trend_card {
+  min-height: 210px !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Same title-stays-pinned-at-top fix as the bar-chart card: center only
+   the content below the title, not the title+content pair. */
+.st-key-ts_dash_report_gauge_card > *:has(.ts-dash-gauge-wrap),
+.st-key-ts_dash_report_trend_card > [data-testid="stElementContainer"]:has([data-testid="stVegaLiteChart"]) {
+  margin-top: auto !important;
+  margin-bottom: auto !important;
+}
+
+.ts-dash-gauge-wrap {
+  position: relative;
+  width: 148px;
+  height: 148px;
+  margin: 8px auto 0;
+}
+
+.ts-dash-gauge-ring {
+  width: 100%;
+  height: 100%;
+}
+
+.ts-dash-gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.ts-dash-gauge-score {
+  color: var(--text);
+  font-size: 34px;
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.02em;
+}
+
+.ts-report-gauge-caption {
+  margin: 6px 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+/* ---- 일별 쾌적도 지수 추이 ---- */
+
+.ts-report-trend-sub {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+}
