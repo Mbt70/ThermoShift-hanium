@@ -265,7 +265,7 @@ with main_col:
                                 """,
                                 unsafe_allow_html=True,
                             )
-                            if st.button(mode_label, key=f"dash_mode_btn_{mode_id}", use_container_width=True):
+                            if st.button(mode_label, key=f"dash_mode_btn_{mode_id}", width="stretch"):
                                 clicked_mode = mode_id
                 if clicked_mode and clicked_mode != current_mode:
                     set_control_mode(room["id"], clicked_mode)
@@ -275,7 +275,7 @@ with main_col:
                 st.markdown('<p class="ts-dash-card-title">목표 온도</p>', unsafe_allow_html=True)
                 minus_col, value_col, plus_col = st.columns([1, 2, 1], vertical_alignment="center")
                 with minus_col:
-                    if st.button("−", key="dash_target_minus", use_container_width=True):
+                    if st.button("−", key="dash_target_minus", width="stretch"):
                         set_target_temperature(room["id"], max(16, room["target_temperature"] - 1))
                         st.rerun()
                 with value_col:
@@ -284,7 +284,7 @@ with main_col:
                         unsafe_allow_html=True,
                     )
                 with plus_col:
-                    if st.button("+", key="dash_target_plus", use_container_width=True):
+                    if st.button("+", key="dash_target_plus", width="stretch"):
                         set_target_temperature(room["id"], min(30, room["target_temperature"] + 1))
                         st.rerun()
 
@@ -293,7 +293,7 @@ with main_col:
             temps, co2s = trend_series(room)
             st.altair_chart(
                 _trend_chart(temps, co2s, room["target_temperature"]),
-                use_container_width=True,
+                width="stretch",
             )
 
         schedules = list_today_schedules(room["id"])

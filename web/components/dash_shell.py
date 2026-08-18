@@ -64,7 +64,7 @@ def render_sidebar(active: str) -> None:
                             """,
                             unsafe_allow_html=True,
                         )
-                        if st.button(label, key=f"dash_nav_btn_{nav_id}", use_container_width=True):
+                        if st.button(label, key=f"dash_nav_btn_{nav_id}", width="stretch"):
                             st.switch_page(target)
                 else:
                     active_class = "is-active" if is_active else ""

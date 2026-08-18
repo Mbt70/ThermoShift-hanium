@@ -22,7 +22,7 @@ from app.components.room_store import (
 from app.components.schedule_store import list_today_schedules
 from components.auth_store import current_user_email, is_logged_in
 from components.dash_shell import render_sidebar, render_topbar
-from components.mobile_ui import apply_mobile_styles, icon_data_uri
+from components.mobile_ui import apply_mobile_styles, icon_data_uri, recolored_icon_data_uri
 
 # Pre-colored icon badges the user dropped into assets/icons for the KPI
 # row/room cards/summary footer - used as-is (no recoloring) per their request.
@@ -45,21 +45,80 @@ _CALENDAR_ICON = (
     'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
     '<rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 9.5h16M8 3.5v3M16 3.5v3"/></svg>'
 )
+_CHECK_ICON = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" '
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17 19 7"/></svg>'
+)
+_BAR_ICON = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M5 19V11M12 19V5M19 19v-7"/></svg>'
+)
+_ARROW_DOWN_ICON = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M6 8l12 12M18 20H9M18 20v-9"/></svg>'
+)
+_ARROW_UP_ICON = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M6 16 18 4M18 4H9M18 4v9"/></svg>'
+)
+_WARN_ICON = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M12 4 3 20h18L12 4Z"/><path d="M12 10.5v4M12 17.5v.1"/></svg>'
+)
+_OFFLINE_ICON = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M4 4l16 16M8.5 8.5C6.6 9.5 5 11 4 13M20 13a12 12 0 0 0-3-3M16.7 10.4A8 8 0 0 0 12 9c-1 0-2 .18-2.9.5M12 17.5v.1"/></svg>'
+)
 
 _STATUS_CLASS = {"정상": "ok", "주의": "warn", "오류": "err"}
 _METRICS = {"온도": "temperature", "CO2": "co2"}
 # (unit kind, point count, axis date format)
 _PERIODS = {
-    "하루": ("hour", 24, "%H:%M"),
-    "일주일": ("day", 7, "%m/%d"),
-    "한달": ("day", 30, "%m/%d"),
+    "1일": ("hour", 24, "%H:%M"),
+    "7일": ("day", 7, "%m/%d"),
+    "30일": ("day", 30, "%m/%d"),
 }
 _SERIES_COLORS = {
     "평균 온도": "#3457be",
+    "외기 온도": "#3fae66",
     "목표 온도": "#d99a22",
     "평균 CO₂": "#3457be",
     "목표 CO₂": "#d99a22",
 }
+
+# Heatmap scale for room thumbnails - shares the blue/teal/red stops already
+# used by the grid's 18°C-30°C legend bar, so the thumbnail tint and the
+# legend agree with each other.
+_HEAT_STOPS = [(18.0, (91, 132, 196)), (24.0, (88, 164, 152)), (30.0, (230, 74, 69))]
+
+
+def _temp_rgb(temp: float) -> tuple[int, int, int]:
+    if temp <= _HEAT_STOPS[0][0]:
+        return _HEAT_STOPS[0][1]
+    if temp >= _HEAT_STOPS[-1][0]:
+        return _HEAT_STOPS[-1][1]
+    for (t0, c0), (t1, c1) in zip(_HEAT_STOPS, _HEAT_STOPS[1:]):
+        if t0 <= temp <= t1:
+            f = (temp - t0) / (t1 - t0)
+            return tuple(round(c0[i] + (c1[i] - c0[i]) * f) for i in range(3))
+    return _HEAT_STOPS[-1][1]
+
+
+def _heat_thumb_style(room_id: str, temp: float) -> str:
+    # No real floor-plan/render exists yet - stands in with a flat tint
+    # (still keyed to the room's live temperature, same blue->teal->red
+    # scale as the legend) plus a centered room icon, rather than a busy
+    # gradient that read as an odd green blob.
+    r, g, b = _temp_rgb(temp)
+    tint = tuple(round(c + (255 - c) * 0.62) for c in (r, g, b))
+    icon_uri = recolored_icon_data_uri("meeting_room.svg", f"rgba({r},{g},{b},0.55)")
+    return (
+        f"background: url('{icon_uri}') center/28px no-repeat, "
+        f"rgb({tint[0]},{tint[1]},{tint[2]});"
+    )
 
 
 def _occupancy_rate(room: dict) -> int:
@@ -102,6 +161,21 @@ def _history_series(rooms: list[dict], snapshots: dict, metric: str, n_points: i
     return series
 
 
+def _outdoor_series(main_series: list[float], seed_suffix: str) -> list[float]:
+    # Outdoor temperature has no sensor/data source in this app - synthesized
+    # as a cooler, more volatile walk loosely tracking the indoor average,
+    # same synthesis approach as _history_series above.
+    rnd = random.Random(f"outdoor-{seed_suffix}-{len(main_series)}")
+    offset = rnd.uniform(-4.5, -1.5)
+    series = []
+    value = main_series[0] + offset + rnd.uniform(-1.0, 1.0)
+    for indoor in main_series:
+        value += rnd.uniform(-0.6, 0.6)
+        value = value * 0.7 + (indoor + offset) * 0.3
+        series.append(value)
+    return series
+
+
 def _timeline_chart(
     points: list[datetime],
     series: dict[str, list[float]],
@@ -110,6 +184,7 @@ def _timeline_chart(
     metric_label: str,
     unit: str,
     date_format: str,
+    y_domain: tuple[float, float] | None = None,
 ) -> alt.LayerChart:
     rows = [
         {"time": ts, "값": value, "구분": name}
@@ -118,13 +193,14 @@ def _timeline_chart(
     ]
     domain = list(series.keys()) + ([target[0]] if target else [])
     color_scale = alt.Scale(domain=domain, range=[_SERIES_COLORS.get(name, "#5f84c4") for name in domain])
+    y_scale = alt.Scale(domain=list(y_domain), zero=False) if y_domain else alt.Scale(zero=False)
 
     line = (
         alt.Chart(pd.DataFrame(rows))
         .mark_line(strokeWidth=2.2)
         .encode(
             x=alt.X("time:T", title=None, axis=alt.Axis(format=date_format, grid=False)),
-            y=alt.Y("값:Q", title=f"{metric_label} ({unit})", scale=alt.Scale(zero=False)),
+            y=alt.Y("값:Q", title=f"{metric_label} ({unit})", scale=y_scale),
             color=alt.Color("구분:N", scale=color_scale, legend=alt.Legend(title=None, orient="top")),
         )
     )
@@ -138,7 +214,7 @@ def _timeline_chart(
         )
     return (
         alt.layer(*layers)
-        .properties(height=160)
+        .properties(height=250)
         .configure_axis(labelFont="Inter", titleFont="Inter", grid=True, gridColor="#eef2f4", labelFontSize=9)
         .configure_view(strokeWidth=0)
         .configure_legend(labelFont="Inter", symbolType="circle", labelFontSize=10, padding=2)
@@ -174,45 +250,53 @@ with main_col:
     if not rooms:
         st.switch_page("pages/devices.py")
     else:
+        temp_diff = avg_temp - 24
+        temp_state = "근접" if abs(temp_diff) <= 1 else ("초과" if temp_diff > 0 else "미달")
+        co2_ok = avg_co2 < 1000
         kpi_items = [
             (
                 "temp",
                 "평균 온도",
                 f"{avg_temp:.1f}",
                 "°C",
-                f"목표 24°C 대비 {avg_temp - 24:+.1f}°C",
+                "is-positive" if temp_state == "근접" else "is-negative",
+                f"{_CHECK_ICON}목표 24°C {temp_state}",
             ),
             (
                 "co2",
                 "평균 CO₂",
                 f"{avg_co2:.0f}",
                 "ppm",
-                "목표 <1000ppm " + ("충족" if avg_co2 < 1000 else "초과"),
+                "is-positive" if co2_ok else "is-negative",
+                f"{_CHECK_ICON}목표 <1000ppm " + ("충족" if co2_ok else "초과"),
             ),
             (
                 "active",
                 "활성 공간",
                 f"{active_count}",
                 f"/{room_count}",
-                f"재실률 {occupancy_rate}%",
+                "",
+                f"{_BAR_ICON}재실률 {occupancy_rate}%",
             ),
             (
                 "power",
                 "총 HVAC 전력",
                 f"{total_power:.1f}",
                 "kW",
-                f"어제 대비 {power_delta_pct:+.1f}%",
+                "is-positive" if power_delta_pct < 0 else "is-negative",
+                f"{_ARROW_DOWN_ICON if power_delta_pct < 0 else _ARROW_UP_ICON}어제 대비 {power_delta_pct:+.1f}%",
             ),
             (
                 "alert",
                 "경보 수",
                 f"{alert_total}",
                 "건",
-                f"심각 {severity['critical']} · 주의 {severity['warning']}",
+                "is-negative" if alert_total else "",
+                f"{_WARN_ICON}심각 {severity['critical']} · 주의 {severity['warning']}",
             ),
         ]
         kpi_cols = st.columns(5, gap="small")
-        for col, (slug, label, value, unit, sub) in zip(kpi_cols, kpi_items):
+        for col, (slug, label, value, unit, sub_class, sub) in zip(kpi_cols, kpi_items):
             with col:
                 with st.container(key=f"ts_dash_kpi_card_{slug}", border=True):
                     st.markdown(
@@ -222,7 +306,7 @@ with main_col:
                           <img class="ts-dash-kpi-icon" src="{icon_data_uri(_KPI_ICON_FILES[slug])}" alt="" />
                         </div>
                         <p class="ts-dash-kpi-value">{value}<span class="ts-dash-kpi-unit">{unit}</span></p>
-                        <p class="ts-dash-kpi-sub">{sub}</p>
+                        <p class="ts-dash-kpi-sub {sub_class}">{sub}</p>
                         """,
                         unsafe_allow_html=True,
                     )
@@ -244,7 +328,7 @@ with main_col:
                             with st.container(key=f"ts_dash_room_card_{r['id']}"):
                                 st.markdown(
                                     f"""
-                                    <div class="ts-dash-room-thumb-empty"></div>
+                                    <div class="ts-dash-room-thumb" style="{_heat_thumb_style(r["id"], snap["temperature"])}"></div>
                                     <div class="ts-dash-room-card-head">
                                       <span class="ts-dash-room-card-name">{r["name"]}</span>
                                       <span class="ts-dash-status-badge ts-dash-status-{status_class}">{status}</span>
@@ -258,7 +342,7 @@ with main_col:
                                     """,
                                     unsafe_allow_html=True,
                                 )
-                                if st.button(r["name"], key=f"room_card_btn_{r['id']}", use_container_width=True):
+                                if st.button(r["name"], key=f"room_card_btn_{r['id']}", width="stretch"):
                                     st.session_state["_web_selected_room"] = r["id"]
                                     st.switch_page("pages/room_detail.py")
                 st.markdown(
@@ -274,16 +358,16 @@ with main_col:
 
         with timeline_col:
             with st.container(key="ts_dash_timeline_card", border=True):
-                st.markdown('<p class="ts-dash-card-title">과거 타임라인 변화</p>', unsafe_allow_html=True)
-                toggle_col, period_col = st.columns([2, 1], vertical_alignment="center")
-                with toggle_col:
-                    metric_choice = st.pills(
-                        "지표",
-                        list(_METRICS.keys()),
-                        default="온도",
-                        key="dash_timeline_metric",
-                        label_visibility="collapsed",
-                    ) or "온도"
+                title_col, metric_col, period_col = st.columns([2.2, 1.4, 1.4], vertical_alignment="center")
+                with title_col:
+                    st.markdown(
+                        '<p class="ts-dash-card-title" style="margin:0;">과거 타임라인 변화</p>',
+                        unsafe_allow_html=True,
+                    )
+                with metric_col:
+                    metric_choice = st.selectbox(
+                        "지표", list(_METRICS.keys()), key="dash_timeline_metric", label_visibility="collapsed"
+                    )
                 with period_col:
                     period_choice = st.selectbox(
                         "기간", list(_PERIODS.keys()), index=1, key="dash_timeline_period", label_visibility="collapsed"
@@ -293,13 +377,15 @@ with main_col:
                 points = _period_points(period_choice)
                 main_series = _history_series(rooms, snapshots, metric_key, len(points), period_choice)
                 if metric_key == "temperature":
+                    outdoor_series = _outdoor_series(main_series, period_choice)
                     chart = _timeline_chart(
                         points,
-                        {"평균 온도": main_series},
+                        {"평균 온도": main_series, "외기 온도": outdoor_series},
                         target=("목표 온도", 24),
                         metric_label="평균 온도",
                         unit="°C",
                         date_format=date_format,
+                        y_domain=(18, 30),
                     )
                 else:
                     chart = _timeline_chart(
@@ -310,7 +396,7 @@ with main_col:
                         unit="ppm",
                         date_format=date_format,
                     )
-                st.altair_chart(chart, use_container_width=True)
+                st.altair_chart(chart, width="stretch")
 
         with side_col:
             today_schedules = sorted(
@@ -333,10 +419,10 @@ with main_col:
                 )
                 reserve_col, reserve_all_col = st.columns(2, gap="small")
                 with reserve_col:
-                    if st.button("＋ 예약하기", key="dash_reservation_new", use_container_width=True):
+                    if st.button("＋ 예약하기", key="dash_reservation_new", width="stretch"):
                         st.toast("예약 생성 기능은 곧 제공될 예정이에요", icon="🛠️")
                 with reserve_all_col:
-                    if st.button("전체보기", key="dash_reservation_all", use_container_width=True):
+                    if st.button("전체보기", key="dash_reservation_all", width="stretch"):
                         st.toast("예약 목록 페이지는 곧 제공될 예정이에요", icon="🛠️")
 
             with st.container(key="ts_dash_ai_card", border=True):
@@ -346,54 +432,56 @@ with main_col:
                 )
                 flagged_rooms = [r for r in rooms if room_status(r) != "정상"]
                 notable_room = flagged_rooms[0] if flagged_rooms else rooms[0]
-                headline, subline = system_judgment(notable_room)
-                stable_count = room_count - len(flagged_rooms)
+                if not notable_room.get("sensor_connected", True):
+                    headline, subline = "센서 응답이 없어 제어를 보류했습니다", "센서 재연결이 필요해요"
+                else:
+                    headline, subline = system_judgment(notable_room)
                 st.markdown(
                     f"""
                     <p class="ts-dash-judgment-headline">[{notable_room["name"]}] {headline}</p>
                     <p class="ts-dash-judgment-sub">{subline}</p>
-                    <p class="ts-dash-ai-summary">
-                      {active_count}/{room_count}곳 사용 · 평균 {avg_temp:.1f}°C({avg_temp - 24:+.1f}) ·
-                      CO₂ {avg_co2:.0f}ppm · 나머지 {stable_count}곳 정상
-                    </p>
                     """,
                     unsafe_allow_html=True,
                 )
 
         ranked = sorted(rooms, key=lambda r: snapshots[r["id"]]["power"], reverse=True)
-        max_power = max((snapshots[r["id"]]["power"] for r in ranked), default=0) or 1
+        online_powers = [snapshots[r["id"]]["power"] for r in ranked if r.get("sensor_connected", True)]
+        max_power = max(online_powers, default=0) or 1
 
         def _power_rows_html(room_list: list[dict]) -> str:
-            return "".join(
-                f'<div class="ts-dash-power-row">'
-                f'<span class="ts-dash-power-name">{r["name"]}</span>'
-                f'<div class="ts-dash-power-bar-track">'
-                f'<div class="ts-dash-power-bar-fill" style="width:{snapshots[r["id"]]["power"] / max_power * 100:.0f}%"></div>'
-                f"</div>"
-                f'<span class="ts-dash-power-value">{snapshots[r["id"]]["power"]:.2f}kW</span>'
-                f"</div>"
-                for r in room_list
-            )
-
-        @st.dialog("공간별 실시간 전력 전체보기")
-        def _show_all_power_rankings() -> None:
-            st.markdown(_power_rows_html(ranked), unsafe_allow_html=True)
+            rows = []
+            for r in room_list:
+                if not r.get("sensor_connected", True):
+                    rows.append(
+                        f'<div class="ts-dash-power-row">'
+                        f'<span class="ts-dash-power-name">{r["name"]}</span>'
+                        f'<div class="ts-dash-power-bar-track"><span class="ts-dash-power-offline-tag">'
+                        f'{_OFFLINE_ICON}오프라인</span></div>'
+                        f'<span class="ts-dash-power-value">-</span>'
+                        f"</div>"
+                    )
+                    continue
+                rows.append(
+                    f'<div class="ts-dash-power-row">'
+                    f'<span class="ts-dash-power-name">{r["name"]}</span>'
+                    f'<div class="ts-dash-power-bar-track">'
+                    f'<div class="ts-dash-power-bar-fill" style="width:{snapshots[r["id"]]["power"] / max_power * 100:.0f}%"></div>'
+                    f"</div>"
+                    f'<span class="ts-dash-power-value">{snapshots[r["id"]]["power"]:.2f}kW</span>'
+                    f"</div>"
+                )
+            return "".join(rows)
 
         with st.container(key="ts_dash_power_rank_card", border=True):
-            title_col, more_col = st.columns([5, 1], vertical_alignment="center")
-            with title_col:
-                st.markdown(
-                    f'<p class="ts-dash-card-title"><img class="ts-dash-inline-icon" '
-                    f'src="{icon_data_uri("web_bolt.svg")}" alt="" />공간별 실시간 전력'
-                    f'<span class="ts-dash-badge ts-dash-badge-muted">kW · 높은 순</span></p>',
-                    unsafe_allow_html=True,
-                )
-            with more_col:
-                if len(ranked) > 3 and st.button("더보기", key="dash_power_more", use_container_width=True):
-                    _show_all_power_rankings()
+            st.markdown(
+                f'<p class="ts-dash-card-title"><img class="ts-dash-inline-icon" '
+                f'src="{icon_data_uri("web_bolt.svg")}" alt="" />공간별 실시간 전력'
+                f'<span class="ts-dash-badge ts-dash-badge-muted">kW · 높은 순</span></p>',
+                unsafe_allow_html=True,
+            )
             axis_row = "".join(f"<span>{max_power * frac:.0f}kW</span>" for frac in (0, 0.5, 1))
             st.markdown(
-                f'{_power_rows_html(ranked[:3])}<div class="ts-dash-power-axis">{axis_row}</div>',
+                f'{_power_rows_html(ranked)}<div class="ts-dash-power-axis">{axis_row}</div>',
                 unsafe_allow_html=True,
             )
 

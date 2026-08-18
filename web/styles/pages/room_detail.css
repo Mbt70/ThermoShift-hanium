@@ -64,23 +64,41 @@
   color: var(--primary-dark);
 }
 
+/* One unified white box divided into 4 equal sections by gray divider
+   lines (same pattern as the dashboard's KPI 요약 footer), rather than 4
+   separately-bordered tiles. */
 .ts-dash-tile-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  gap: 0;
   margin: 24px 0;
-}
-
-.ts-dash-tile {
-  padding: 18px 20px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--input-radius);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
 }
 
+.ts-dash-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 18px 22px;
+  border-left: 1px solid var(--border);
+}
+
+.ts-dash-tile:first-child {
+  border-left: 0;
+}
+
+/* Centered rather than left-aligned - the 4 cells are already exactly
+   equal width (grid-template-columns: repeat(4, 1fr)), but left-aligned
+   text of different lengths ("58%" vs "977ppm") reads as visually
+   unbalanced even though the cells themselves are identical. Centering
+   makes each cell's content symmetric within its own quarter. */
 .ts-dash-tile-label {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   margin: 0 0 10px;
   color: var(--muted);
@@ -93,6 +111,7 @@
   color: var(--text);
   font-size: 26px;
   font-weight: var(--font-weight-extrabold);
+  text-align: center;
 }
 
 .ts-dash-tile-unit {
