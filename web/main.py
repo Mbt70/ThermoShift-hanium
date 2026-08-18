@@ -29,6 +29,7 @@ pages = [
     page("pages/devices.py", title="공간·디바이스", url_path="devices"),
     page("pages/my_page.py", title="마이페이지", url_path="my-page"),
     page("pages/control_log.py", title="제어 로그", url_path="control-log"),
+    page("pages/alerts.py", title="알림", url_path="alerts"),
     page("pages/report.py", title="성과 리포트", url_path="report"),
 ]
 

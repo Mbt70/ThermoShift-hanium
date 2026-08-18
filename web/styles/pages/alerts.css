@@ -1,0 +1,200 @@
+/* Page-specific styles for 알림. Shell (sidebar, topbar, generic bordered
+   card, list-empty state) lives in dash_shell.css, loaded alongside this
+   via apply_mobile_styles's `shared` param. */
+
+.st-key-alert_top_room_select [data-testid="stSelectbox"] > div,
+.st-key-alert_top_room_select [data-testid="stSelectbox"] > div > div {
+  height: 24px !important;
+  min-height: 0 !important;
+}
+
+.st-key-alert_top_room_select [data-testid="stSelectbox"] > div > div {
+  border-radius: 999px;
+  border-color: var(--border);
+  background: var(--card);
+  font-size: 11.5px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.st-key-alert_top_room_select input,
+.st-key-alert_top_room_select button {
+  min-height: 0 !important;
+  height: 22px !important;
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-alert_top_room_select) {
+  align-items: center !important;
+  margin-top: 8px !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-alert_top_room_select) [data-testid="stMarkdownContainer"]:has(.ts-dash-topbar-title) {
+  margin-bottom: 0 !important;
+}
+
+/* ---- 제어 실패 알림 배너 (제일 위, 카드 바깥) ---- */
+
+/* Neutralize Streamlit's built-in margin-bottom:-1rem on the markdown
+   wrapper - same fix used on report.py's insight banner - otherwise the
+   banner's margin-bottom below doesn't actually create a gap to the card. */
+[data-testid="stElementContainer"]:has(.ts-alert-banner) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stElementContainer"]:has(.ts-alert-banner) {
+  margin-top: 14px !important;
+}
+
+.ts-alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px 18px;
+  border-radius: var(--input-radius);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.ts-alert-banner svg {
+  flex-shrink: 0;
+}
+
+.ts-alert-banner p {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ---- 하나의 카드: 날짜 토글 + 알림 목록 ---- */
+
+.st-key-ts_dash_alert_card {
+  margin-top: 14px;
+}
+
+.st-key-ts_dash_alert_card [data-testid="stHorizontalBlock"]:has(.st-key-alert_year_select) {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Date label and the 년도/월/일 pills share the same 32px row height so
+   the label doesn't look shorter/taller than the toggles next to it. */
+.ts-alert-date-label {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+}
+
+.st-key-alert_year_select [data-testid="stSelectbox"] > div,
+.st-key-alert_month_select [data-testid="stSelectbox"] > div,
+[class*="st-key-alert_day_select_"] [data-testid="stSelectbox"] > div,
+.st-key-alert_year_select [data-testid="stSelectbox"] > div > div,
+.st-key-alert_month_select [data-testid="stSelectbox"] > div > div,
+[class*="st-key-alert_day_select_"] [data-testid="stSelectbox"] > div > div {
+  height: 32px !important;
+  min-height: 0 !important;
+}
+
+.st-key-alert_year_select [data-testid="stSelectbox"] > div > div,
+.st-key-alert_month_select [data-testid="stSelectbox"] > div > div,
+[class*="st-key-alert_day_select_"] [data-testid="stSelectbox"] > div > div {
+  border-radius: 999px;
+  border-color: var(--border);
+  background: var(--bg);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ---- 알림 목록 ---- */
+
+.ts-alert-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ts-alert-row:last-child {
+  border-bottom: 0;
+}
+
+.ts-alert-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--font-size-base);
+}
+
+.ts-alert-content svg {
+  flex-shrink: 0;
+}
+
+.ts-alert-content.is-critical svg {
+  color: var(--danger);
+}
+
+.ts-alert-content.is-warning svg {
+  color: var(--warning);
+}
+
+/* 안 읽음: 굵게 + 진한 텍스트. 읽음: 일반 굵기 + 흐린 텍스트 - 목록을
+   한눈에 훑을 때 뭘 확인했는지 구분되도록. */
+.ts-alert-content.is-unread .ts-alert-title {
+  color: var(--text);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-alert-content.is-read .ts-alert-title {
+  color: var(--muted);
+  font-weight: var(--font-weight-medium);
+}
+
+.ts-alert-unread-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--danger);
+  flex-shrink: 0;
+}
+
+.ts-alert-time {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* 안 읽은 알림만 클릭 가능 - 클릭하면 읽음 처리 (invisible-overlay-button
+   pattern, control_log.py의 실패 로그 클릭과 동일한 방식). */
+[class*="st-key-ts_dash_alert_row_"] {
+  position: relative;
+}
+
+[class*="st-key-ts_dash_alert_row_"]:has([data-testid="stButton"]) {
+  cursor: pointer;
+}
+
+[class*="st-key-alert_mark_read_"] {
+  position: absolute !important;
+  inset: 0;
+  z-index: 2;
+}
+
+[class*="st-key-alert_mark_read_"] button {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
