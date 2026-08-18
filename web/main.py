@@ -26,6 +26,7 @@ pages = [
     page("pages/home.py", title="대시보드", url_path="home"),
     page("pages/room_detail.py", title="공간 상세", url_path="room-detail"),
     page("pages/devices.py", title="공간·디바이스", url_path="devices"),
+    page("pages/my_page.py", title="마이페이지", url_path="my-page"),
 ]
 
 navigation = st.navigation(pages, position="hidden")

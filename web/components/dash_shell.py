@@ -82,19 +82,22 @@ def render_sidebar(active: str) -> None:
         with st.container(key="ts_dash_user_footer"):
             name = current_user_name() or "Thermoshift"
             email = current_user_email() or ""
-            st.markdown(
-                f"""
-                <div class="ts-dash-user-row">
-                  <div class="ts-dash-user-avatar">{name[:1].upper()}</div>
-                  <div class="ts-dash-user-info">
-                    <span class="ts-dash-user-name">{name}</span>
-                    <span class="ts-dash-user-email">{email}</span>
-                  </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            if st.button("로그아웃", key="dash_logout", use_container_width=True):
+            with st.container(key="ts_dash_user_link"):
+                st.markdown(
+                    f"""
+                    <div class="ts-dash-user-row">
+                      <div class="ts-dash-user-avatar">{name[:1].upper()}</div>
+                      <div class="ts-dash-user-info">
+                        <span class="ts-dash-user-name">{name}</span>
+                        <span class="ts-dash-user-email">{email}</span>
+                      </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if st.button("프로필", key="dash_user_profile_btn", width="stretch"):
+                    st.switch_page("pages/my_page.py")
+            if st.button("로그아웃", key="dash_logout", width="stretch"):
                 log_out()
                 st.switch_page("pages/login.py")
 
