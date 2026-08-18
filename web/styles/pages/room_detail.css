@@ -1,235 +1,205 @@
 /* Page-specific styles for the single-room detail view. Shell (sidebar,
    topbar, generic "*_card" bordered container, badges, list rows) lives in
-   dash_shell.css, loaded alongside this via apply_mobile_styles's `shared`
+   dash_shell.css; KPI-card and KPI-summary-footer classes are reused from
+   home.css - both loaded alongside this via apply_mobile_styles's `shared`
    param. */
 
-.st-key-ts_dash_room_switch {
-  max-width: 280px;
-  margin-bottom: 18px;
+/* ---- leave a visible strip of page background below the KPI summary
+   footer, same as the dashboard/digital-twin pages, instead of pinning it
+   flush to the viewport edge - scoped to this page only via its marker
+   div so the shared main-column padding isn't touched for other pages.
+   The flex:1 middle content (trend/manual+AI row) shrinks to absorb this
+   extra bottom padding automatically. ---- */
+[data-testid="stMainBlockContainer"]:has(.ts-room_detail) [data-testid="stColumn"]:has(.st-key-ts_dash_sidebar) ~ [data-testid="stColumn"] {
+  padding-bottom: 14px !important;
 }
 
-.st-key-ts_dash_room_switch [data-testid="stSelectbox"] > div > div {
-  border-radius: var(--input-radius);
+/* ---- header row: a little breathing room above "공간" and below it
+   before the KPI cards start - the flex:1 middle content shrinks to
+   absorb this automatically, so the page still fits without scrolling. ---- */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-roomdetail_top_room_select) {
+  margin-top: 8px !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has([class*="st-key-ts_dash_kpi_card_"]) {
+  margin-top: 0 !important;
+}
+
+/* ---- top room-select dropdown - same compact-pill treatment as the
+   digital-twin page's "공간" header. ---- */
+
+.st-key-roomdetail_top_room_select [data-testid="stSelectbox"] > div,
+.st-key-roomdetail_top_room_select [data-testid="stSelectbox"] > div > div {
+  height: 24px !important;
+  min-height: 0 !important;
+}
+
+.st-key-roomdetail_top_room_select [data-testid="stSelectbox"] > div > div {
+  border-radius: 999px;
   border-color: var(--border);
   background: var(--card);
+  font-size: 11.5px;
+  font-weight: var(--font-weight-semibold);
 }
 
-.ts-dash-title-row {
+.st-key-roomdetail_top_room_select input,
+.st-key-roomdetail_top_room_select button {
+  min-height: 0 !important;
+  height: 22px !important;
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
+}
+
+/* "공간" title vs. the room-select box, and vs. the bell/profile icons -
+   same misalignment pattern fixed on the digital-twin and my-page headers:
+   the site-wide align-items:flex-start reset beats
+   st.columns(vertical_alignment="center"), and the title's markdown
+   wrapper carries a built-in margin-bottom:-1rem that desyncs its box from
+   the height the layout centers against. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-roomdetail_top_room_select) {
+  align-items: center !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-roomdetail_top_room_select) [data-testid="stMarkdownContainer"]:has(.ts-dash-topbar-title) {
+  margin-bottom: 0 !important;
+}
+
+/* ---- custom humidity KPI badge (no pre-made icon asset for this one) ---- */
+
+.ts-room-humidity-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #dbeafe;
+  color: #2f6fb0;
+  flex-shrink: 0;
+}
+
+/* ---- 30분 추이 card: title + legend on one row - same fix as the CFD/
+   digital-twin headers: the title's markdown wrapper carries a built-in
+   margin-bottom:-1rem that pulls the chart below it up into the title
+   row, and the row itself needs align-items:center forced past the
+   site-wide flex-start reset. ---- */
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_trend_card [data-testid="stHorizontalBlock"]:has(.ts-dash-card-title) {
+  align-items: center !important;
+}
+
+.st-key-ts_dash_trend_card [data-testid="stElementContainer"]:has(.ts-dash-card-title) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important;
+}
+
+.st-key-ts_dash_trend_card [data-testid="stVegaLiteChart"] {
+  margin-top: 6px;
+}
+
+.ts-trend-legend {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.ts-trend-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-trend-legend-item::before {
+  content: "";
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.ts-trend-legend-temp::before {
+  background: #171a21;
+}
+
+.ts-trend-legend-co2::before {
+  background: #5f84c4;
+}
+
+/* ---- 예약 냉방 reservation rows ---- */
+
+.ts-room-reservation-row {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
 }
 
-.ts-dash-room-title {
-  margin: 0;
+.ts-room-reservation-row:last-of-type {
+  border-bottom: 0;
+}
+
+.ts-room-reservation-time {
+  flex: 1;
   color: var(--text);
-  /* Streamlit auto-generates a "<scoped-class> h1 { font-size: 2.75rem;
-     padding: 1.25rem 0 1rem }" rule for every markdown-rendered h1, which
-     otherwise wins the font-size specificity tie and always applies its
-     padding since nothing else here touches it. */
-  padding: 0 !important;
-  font-size: var(--font-size-2xl) !important;
-  font-weight: var(--font-weight-extrabold);
-  letter-spacing: -0.02em;
-}
-
-.ts-dash-room-location {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
-}
-
-.ts-dash-chips {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.ts-dash-chip {
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  color: var(--muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
+}
+
+.ts-room-reservation-status {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
   white-space: nowrap;
 }
 
-.ts-dash-chip-auto.is-active {
+.ts-room-reservation-status.is-done {
   background: var(--primary-light);
-  border-color: var(--primary);
   color: var(--primary-dark);
 }
 
-/* One unified white box divided into 4 equal sections by gray divider
-   lines (same pattern as the dashboard's KPI 요약 footer), rather than 4
-   separately-bordered tiles. */
-.ts-dash-tile-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0;
-  margin: 24px 0;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--input-radius);
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+.ts-room-reservation-status.is-active {
+  background: #fff2d6;
+  color: #a9760f;
 }
 
-.ts-dash-tile {
+.ts-room-reservation-chevron {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 18px 22px;
-  border-left: 1px solid var(--border);
-}
-
-.ts-dash-tile:first-child {
-  border-left: 0;
-}
-
-/* Centered rather than left-aligned - the 4 cells are already exactly
-   equal width (grid-template-columns: repeat(4, 1fr)), but left-aligned
-   text of different lengths ("58%" vs "977ppm") reads as visually
-   unbalanced even though the cells themselves are identical. Centering
-   makes each cell's content symmetric within its own quarter. */
-.ts-dash-tile-label {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin: 0 0 10px;
   color: var(--muted);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
 }
 
-.ts-dash-tile-value {
-  margin: 0;
-  color: var(--text);
-  font-size: 26px;
-  font-weight: var(--font-weight-extrabold);
-  text-align: center;
+.st-key-dash_reservation_all button,
+.st-key-dash_reservation_new button {
+  min-height: 32px !important;
+  padding: 0 4px !important;
+  font-size: 11.5px !important;
+  white-space: nowrap;
 }
 
-.ts-dash-tile-unit {
-  margin-left: 3px;
-  color: var(--muted);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-}
-
-.ts-dash-gauge-wrap {
-  position: relative;
-  width: 148px;
-  height: 148px;
-  margin: 8px auto 0;
-}
-
-.ts-dash-gauge-ring {
-  width: 100%;
-  height: 100%;
-}
-
-.ts-dash-gauge-center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.ts-dash-gauge-score {
-  color: var(--text);
-  font-size: 34px;
-  font-weight: var(--font-weight-extrabold);
-  letter-spacing: -0.02em;
-}
-
-.ts-dash-gauge-label {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-bold);
-}
-
-.st-key-ts_dash_mode_card [data-testid="stHorizontalBlock"] {
-  gap: 12px;
-}
-
-[class*="st-key-ts_dash_mode_"] {
-  position: relative;
-  cursor: pointer;
-}
-
-[class*="st-key-dash_mode_btn_"] {
-  position: absolute !important;
-  inset: 0;
-  z-index: 2;
-}
-
-[class*="st-key-dash_mode_btn_"] [data-testid="stButton"] {
-  height: 100%;
-}
-
-[class*="st-key-dash_mode_btn_"] button {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  padding: 0;
+.st-key-dash_reservation_all button {
   background: transparent !important;
-  border: none !important;
+  color: var(--primary-dark) !important;
+  border: 1px solid var(--primary) !important;
   box-shadow: none !important;
-  color: transparent !important;
 }
 
-.ts-dash-mode-item {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 16px 8px;
-  border-radius: 14px;
-  background: var(--bg);
-  text-align: center;
+.st-key-dash_reservation_all button:hover {
+  background: var(--primary-light) !important;
 }
 
-.ts-dash-mode-item.is-active {
-  background: var(--primary-dark);
+.st-key-dash_reservation_new {
+  margin-top: 10px;
 }
 
-.ts-dash-mode-icon-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-}
+/* ---- 에어컨 수동 제어 card ---- */
 
-.ts-dash-mode-icon-wrap img {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-}
-
-.ts-dash-mode-label {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-}
-
-.ts-dash-mode-item.is-active .ts-dash-mode-label {
-  color: #fff;
-}
-
-.st-key-ts_dash_target_card [data-testid="stHorizontalBlock"] {
-  margin-top: 4px;
+.st-key-ts_room_manual_card [data-testid="stHorizontalBlock"] {
+  margin-top: 52px;
+  margin-bottom: 0;
 }
 
 .st-key-dash_target_minus button,
@@ -254,10 +224,129 @@
   color: var(--text) !important;
 }
 
-.ts-dash-target-value {
+.ts-room-manual-value {
   margin: 0;
   text-align: center;
   color: var(--text);
-  font-size: 30px;
+  font-size: 44px;
   font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.02em;
+}
+
+.ts-room-manual-caption {
+  margin: 2px 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.ts-room-manual-note {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+/* ---- AI 운영 설명 card: mint-tinted body. Manual-control card stays the
+   same plain white as every other card. ---- */
+
+.st-key-ts_room_ai_card {
+  background: var(--primary-light) !important;
+  border-color: var(--primary-light) !important;
+}
+
+.st-key-ts_room_manual_card {
+  background: var(--card) !important;
+  border-color: var(--border) !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_room_manual_card {
+  min-height: 230px !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Push the divider + note down to the bottom of the (now taller) card
+   instead of leaving it trailing right under the +/- row, mirroring the
+   digital-twin page's legend-bar-at-bottom fix: target the note's own
+   stElementContainer directly (a class on the inner <p> alone can't pull
+   its outer wrapper down with it). */
+.st-key-ts_room_manual_card > [data-testid="stElementContainer"]:has(.ts-room-manual-note) {
+  margin-top: auto !important;
+  margin-bottom: 14px !important;
+}
+
+/* ---- fill the page: grow the trend/manual+AI row to use whatever space
+   is free between the KPI row above and the KPI summary footer below,
+   with AI 운영 설명 taking the lion's share of the right column's growth
+   (manual-control keeps its natural compact size) - same approach as the
+   digital-twin page's twin/AI column. ---- */
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stHorizontalBlock"]:has(.st-key-ts_dash_trend_card) {
+  flex: 1 !important;
+  align-items: stretch !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_dash_trend_card),
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_room_manual_card) {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Left column has a single card - three levels sit between the stretched
+   column and the card itself (stVerticalBlock > stLayoutWrapper > the
+   card's own stVerticalBlock), and every one of them defaults to
+   flex:0 0 auto, so the flex:1 has to be threaded through all of them or
+   the outer stretch never reaches the card. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_dash_trend_card) > *:has(.st-key-ts_dash_trend_card),
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_dash_trend_card) > * > [data-testid="stLayoutWrapper"]:has(.st-key-ts_dash_trend_card) {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_dash_trend_card {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Chart + reservation list inside that stretched card share the freed
+   height - center the reservation block in whatever room is left rather
+   than leaving it pinned right under the chart. */
+.st-key-ts_dash_trend_card > *:has(.ts-room-reservation-row, .ts-dash-list-empty) {
+  margin-top: auto !important;
+}
+
+/* Right column: only the AI card's wrapper grows - 에어컨 수동 제어 keeps
+   its existing size and just sits above the taller AI card. Same extra
+   stLayoutWrapper level as the left column above. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_room_manual_card) > *:has(.st-key-ts_room_ai_card),
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stColumn"]:has(.st-key-ts_room_manual_card) > * > [data-testid="stLayoutWrapper"]:has(.st-key-ts_room_ai_card) {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) .st-key-ts_room_ai_card {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.st-key-ts_room_ai_card > *:has(.ts-dash-judgment-headline) {
+  margin-top: auto !important;
+  margin-bottom: auto !important;
+}
+
+/* KPI summary footer: small fixed gap above it - the row above already
+   consumes the free space via flex:1, so this lands it close to the
+   bottom of the viewport instead of needing an auto-margin push. */
+.st-key-ts_dash_summary_card {
+  margin-top: 3px !important;
 }

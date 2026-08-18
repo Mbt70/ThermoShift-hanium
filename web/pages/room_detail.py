@@ -1,3 +1,4 @@
+import random
 import sys
 from datetime import date
 from pathlib import Path
@@ -10,44 +11,46 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
-from app.components.alert_store import active_alert_count, list_alerts
-from app.components.control_log_store import list_logs, method_label
 from app.components.room_store import (
     comfort_index,
-    comfort_label,
     environment_snapshot,
     list_rooms,
-    relative_updated,
-    room_status,
-    set_control_mode,
     set_target_temperature,
     system_judgment,
     trend_series,
 )
-from app.components.schedule_store import list_today_schedules
+from app.components.schedule_store import list_today_schedules, schedule_status
 from components.auth_store import current_user_email, is_logged_in
-from components.dash_shell import render_sidebar, render_topbar
-from components.mobile_ui import apply_mobile_styles, recolored_icon_data_uri
+from components.dash_shell import render_sidebar
+from components.mobile_ui import apply_mobile_styles, icon_data_uri
 
-_THERMO_ICON = (
-    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" '
-    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-    '<path d="M12 14.5V4a2 2 0 1 0-4 0v10.5a4 4 0 1 0 4 0Z"/><path d="M12 14.5v-7"/></svg>'
+_KPI_ICON_FILES = {
+    "temp": "temperture.svg",
+    "co2": "co2.svg",
+    "occupancy": "web_door.svg",
+    "power": "web_bolt.svg",
+}
+_CHECK_ICON = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" '
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17 19 7"/></svg>'
 )
-_DROPLET_ICON = (
-    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" '
-    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
+_WARN_ICON = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M12 4 3 20h18L12 4Z"/><path d="M12 10.5v4M12 17.5v.1"/></svg>'
+)
+_ARROW_DOWN_ICON = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M6 8l12 12M18 20H9M18 20v-9"/></svg>'
+)
+_ARROW_UP_ICON = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M6 16 18 4M18 4H9M18 4v9"/></svg>'
+)
+_HUMIDITY_ICON = (
+    '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '
+    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
     '<path d="M12 2.5c4 5 7 8.5 7 12.5a7 7 0 0 1-14 0c0-4 3-7.5 7-12.5Z"/></svg>'
-)
-_CLOUD_ICON = (
-    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" '
-    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-    '<path d="M7 18h10a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 7.16 9.1 4 4 0 0 0 7 18Z"/></svg>'
-)
-_BOLT_ICON = (
-    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" '
-    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-    '<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>'
 )
 _CHIP_ICON = (
     '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" '
@@ -60,27 +63,10 @@ _CALENDAR_ICON = (
     'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
     '<rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 9.5h16M8 3.5v3M16 3.5v3"/></svg>'
 )
-_LOG_ICON = (
+_CHEVRON_ICON = (
     '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" '
-    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-    '<rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>'
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>'
 )
-_ALERT_ICON = (
-    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" '
-    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-    '<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg>'
-)
-
-_CONTROL_MODES = (
-    ("monitoring", "모니터", "monitoring.svg"),
-    ("manual", "수동", "back_hand.svg"),
-    ("rule", "규칙", "rule-based.svg"),
-    ("predictive", "예측", "predictive.svg"),
-)
-_MODE_ICON_INACTIVE = "#98a1ab"
-_MODE_ICON_ACTIVE = "#ffffff"
-
-_STATUS_CLASS = {"정상": "ok", "주의": "warn", "오류": "err"}
 
 
 def _trend_chart(temps: list[float], co2s: list[float], target: float) -> alt.LayerChart:
@@ -105,7 +91,7 @@ def _trend_chart(temps: list[float], co2s: list[float], target: float) -> alt.La
     )
     co2_line = (
         alt.Chart(co2_df)
-        .mark_line(color="#5f84c4", strokeWidth=2, strokeDash=[2, 3])
+        .mark_line(color="#5f84c4", strokeWidth=2)
         .encode(
             x=alt.X("분:Q", axis=None),
             y=alt.Y("값:Q", title="CO₂ (ppm)", scale=alt.Scale(zero=False)),
@@ -116,13 +102,13 @@ def _trend_chart(temps: list[float], co2s: list[float], target: float) -> alt.La
     return (
         alt.layer(temp_group, co2_line)
         .resolve_scale(y="independent")
-        .properties(height=260)
-        .configure_axis(labelFont="Inter", titleFont="Inter", grid=True, gridColor="#eef2f4")
+        .properties(height=210)
+        .configure_axis(labelFont="Inter", titleFont="Inter", grid=True, gridColor="#eef2f4", labelFontSize=9)
         .configure_view(strokeWidth=0)
     )
 
 
-apply_mobile_styles("room_detail", shared=("dash_shell",))
+apply_mobile_styles("room_detail", shared=("dash_shell", "home"))
 
 if not is_logged_in():
     st.switch_page("pages/login.py")
@@ -144,176 +130,122 @@ with sidebar_col:
     render_sidebar("room_detail")
 
 with main_col:
-    render_topbar("공간 상세", alert_count=active_alert_count())
-
-    if room is None:
+    if not rooms or room is None:
         st.switch_page("pages/devices.py")
     else:
-        with st.container(key="ts_dash_room_switch"):
+        snapshot = environment_snapshot(room)
+        occupied = bool(room.get("occupied"))
+        occupancy_estimate = random.Random(f"occ-head-{room['id']}").randint(1, 6) if occupied else 0
+        occupancy_rate = random.Random(f"occ-rate-{room['id']}-{date.today()}").randint(60, 95) if occupied else 0
+        power_delta_pct = round(random.Random(f"power-yday-{room['id']}-{date.today()}").uniform(-9, 6), 1)
+        co2_ok = snapshot["co2"] < 700
+        target_ok = abs(snapshot["temperature"] - room["target_temperature"]) <= 1.5
+
+        title_col, select_col, spacer_col = st.columns([0.6, 0.8, 4.4], vertical_alignment="center")
+        with title_col:
+            st.markdown('<h1 class="ts-dash-topbar-title">공간</h1>', unsafe_allow_html=True)
+        with select_col:
             names = [r["name"] for r in rooms]
             current_index = next((i for i, r in enumerate(rooms) if r["id"] == room["id"]), 0)
             picked = st.selectbox(
-                "공간 선택", names, index=current_index, key="room_detail_select", label_visibility="collapsed"
+                "공간 선택", names, index=current_index, key="roomdetail_top_room_select", label_visibility="collapsed"
             )
             picked_room = next((r for r in rooms if r["name"] == picked), room)
             if picked_room["id"] != room["id"]:
                 st.session_state["_web_selected_room"] = picked_room["id"]
                 st.rerun()
 
-        status = room_status(room)
-        status_class = _STATUS_CLASS.get(status, "ok")
-        auto_class = "is-active" if room.get("auto_control") else ""
-
-        header_col, chip_col = st.columns([3, 2], gap="small", vertical_alignment="center")
-        with header_col:
-            st.markdown(
-                f"""
-                <div class="ts-dash-title-row">
-                  <h1 class="ts-dash-room-title">{room["name"]}</h1>
-                  <span class="ts-dash-status-badge ts-dash-status-{status_class}">{status}</span>
-                </div>
-                <p class="ts-dash-room-location">{room["location"]}</p>
-                """,
-                unsafe_allow_html=True,
-            )
-        with chip_col:
-            st.markdown(
-                f"""
-                <div class="ts-dash-chips">
-                  <span class="ts-dash-chip">업데이트 {relative_updated(room)}</span>
-                  <span class="ts-dash-chip ts-dash-chip-auto {auto_class}">자동 제어</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        snapshot = environment_snapshot(room)
-        tiles = [
-            (_THERMO_ICON, "온도", f"{snapshot['temperature']:.1f}", "°C"),
-            (_DROPLET_ICON, "습도", f"{snapshot['humidity']:.0f}", "%"),
-            (_CLOUD_ICON, "CO₂", f"{snapshot['co2']:.0f}", "ppm"),
-            (_BOLT_ICON, "전력", f"{snapshot['power']:.2f}", "kW"),
+        kpi_items = [
+            (
+                "temp",
+                "온도",
+                f"{snapshot['temperature']:.1f}",
+                "°C",
+                "is-positive" if target_ok else "is-negative",
+                f"{_CHECK_ICON}목표 {room['target_temperature']}°C 근접"
+                if target_ok
+                else f"{_WARN_ICON}목표 {room['target_temperature']}°C 미달",
+            ),
+            (
+                "co2",
+                "CO₂",
+                f"{snapshot['co2']:.0f}",
+                "ppm",
+                "is-positive" if co2_ok else "is-negative",
+                f"{_CHECK_ICON}기준 근접" if co2_ok else f"{_WARN_ICON}기준 초과",
+            ),
+            ("occupancy", "재실추정", f"{occupancy_estimate}", "명", "", f"재실률 {occupancy_rate}%"),
+            ("humidity", "습도", f"{snapshot['humidity']:.0f}", "%", "is-positive", f"{_CHECK_ICON}적정"),
+            (
+                "power",
+                "총 HVAC 전력",
+                f"{snapshot['power']:.1f}",
+                "kW",
+                "is-positive" if power_delta_pct < 0 else "is-negative",
+                f"{_ARROW_DOWN_ICON if power_delta_pct < 0 else _ARROW_UP_ICON}어제 대비 {power_delta_pct:+.1f}%",
+            ),
         ]
-        tiles_html = "".join(
-            f'<div class="ts-dash-tile">'
-            f'<p class="ts-dash-tile-label">{icon}{label}</p>'
-            f'<p class="ts-dash-tile-value">{value}<span class="ts-dash-tile-unit">{unit}</span></p>'
-            f"</div>"
-            for icon, label, value, unit in tiles
-        )
-        st.markdown(f'<div class="ts-dash-tile-grid">{tiles_html}</div>', unsafe_allow_html=True)
-
-        score = comfort_index(room)
-        label = comfort_label(score)
-        label_color = {"좋음": "var(--success)", "보통": "var(--warning)", "나쁨": "var(--danger)"}[label]
-        circumference = 326.73
-        dash = circumference * score / 100
-        headline, subline = system_judgment(room)
-
-        comfort_col, judgment_col = st.columns([1, 2], gap="medium")
-        with comfort_col:
-            with st.container(key="ts_dash_comfort_card", border=True):
-                st.markdown(
-                    f"""
-                    <p class="ts-dash-card-title">쾌적도 지수</p>
-                    <div class="ts-dash-gauge-wrap">
-                      <svg viewBox="0 0 120 120" class="ts-dash-gauge-ring">
-                        <circle cx="60" cy="60" r="52" stroke="var(--border)" stroke-width="14" fill="none" />
-                        <circle cx="60" cy="60" r="52" stroke="{label_color}" stroke-width="14" fill="none"
-                                stroke-linecap="round" stroke-dasharray="{dash:.2f} {circumference:.2f}"
-                                transform="rotate(-90 60 60)" />
-                      </svg>
-                      <div class="ts-dash-gauge-center">
-                        <span class="ts-dash-gauge-score">{score}</span>
-                        <span class="ts-dash-gauge-label">{label}</span>
-                      </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-        with judgment_col:
-            with st.container(key="ts_dash_judgment_card", border=True):
-                st.markdown(
-                    f"""
-                    <p class="ts-dash-card-title">{_CHIP_ICON}시스템 판단 <span class="ts-dash-badge">LLM</span></p>
-                    <p class="ts-dash-judgment-headline">{headline}</p>
-                    <p class="ts-dash-judgment-sub">{subline}</p>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-        mode_col, target_col = st.columns([2, 1], gap="medium")
-        with mode_col:
-            with st.container(key="ts_dash_mode_card", border=True):
-                st.markdown('<p class="ts-dash-card-title">제어 모드</p>', unsafe_allow_html=True)
-                current_mode = room.get("control_mode", "rule")
-                clicked_mode = None
-                mode_cols = st.columns(4, gap="small")
-                for col, (mode_id, mode_label, icon_file) in zip(mode_cols, _CONTROL_MODES):
-                    with col:
-                        with st.container(key=f"ts_dash_mode_{mode_id}"):
-                            is_mode_active = mode_id == current_mode
-                            icon_color = _MODE_ICON_ACTIVE if is_mode_active else _MODE_ICON_INACTIVE
-                            icon_uri = recolored_icon_data_uri(icon_file, icon_color)
-                            active_mode_class = "is-active" if is_mode_active else ""
-                            st.markdown(
-                                f"""
-                                <div class="ts-dash-mode-item {active_mode_class}">
-                                  <div class="ts-dash-mode-icon-wrap"><img src="{icon_uri}" alt="" /></div>
-                                  <p class="ts-dash-mode-label">{mode_label}</p>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
-                            )
-                            if st.button(mode_label, key=f"dash_mode_btn_{mode_id}", width="stretch"):
-                                clicked_mode = mode_id
-                if clicked_mode and clicked_mode != current_mode:
-                    set_control_mode(room["id"], clicked_mode)
-                    st.rerun()
-        with target_col:
-            with st.container(key="ts_dash_target_card", border=True):
-                st.markdown('<p class="ts-dash-card-title">목표 온도</p>', unsafe_allow_html=True)
-                minus_col, value_col, plus_col = st.columns([1, 2, 1], vertical_alignment="center")
-                with minus_col:
-                    if st.button("−", key="dash_target_minus", width="stretch"):
-                        set_target_temperature(room["id"], max(16, room["target_temperature"] - 1))
-                        st.rerun()
-                with value_col:
+        kpi_cols = st.columns(5, gap="small")
+        for col, (slug, label, value, unit, sub_class, sub) in zip(kpi_cols, kpi_items):
+            with col:
+                with st.container(key=f"ts_dash_kpi_card_{slug}", border=True):
+                    icon_html = (
+                        f'<span class="ts-dash-kpi-icon ts-room-humidity-icon">{_HUMIDITY_ICON}</span>'
+                        if slug == "humidity"
+                        else f'<img class="ts-dash-kpi-icon" src="{icon_data_uri(_KPI_ICON_FILES[slug])}" alt="" />'
+                    )
                     st.markdown(
-                        f'<p class="ts-dash-target-value">{room["target_temperature"]}°</p>',
+                        f"""
+                        <div class="ts-dash-kpi-head">
+                          <span class="ts-dash-kpi-label">{label}</span>
+                          {icon_html}
+                        </div>
+                        <p class="ts-dash-kpi-value">{value}<span class="ts-dash-kpi-unit">{unit}</span></p>
+                        <p class="ts-dash-kpi-sub {sub_class}">{sub}</p>
+                        """,
                         unsafe_allow_html=True,
                     )
-                with plus_col:
-                    if st.button("+", key="dash_target_plus", width="stretch"):
-                        set_target_temperature(room["id"], min(30, room["target_temperature"] + 1))
-                        st.rerun()
 
-        with st.container(key="ts_dash_trend_card", border=True):
-            st.markdown('<p class="ts-dash-card-title">30분 추이</p>', unsafe_allow_html=True)
-            temps, co2s = trend_series(room)
-            st.altair_chart(
-                _trend_chart(temps, co2s, room["target_temperature"]),
-                width="stretch",
-            )
+        left_col, right_col = st.columns([2, 1], gap="small")
 
-        schedules = list_today_schedules(room["id"])
-        logs = list_logs(room["id"], date.today())
-        recent_logs = list(reversed(logs))[:6]
-        alerts = list_alerts()
-        alert_count = active_alert_count()
-
-        schedule_col, activity_col = st.columns(2, gap="medium")
-        with schedule_col:
-            with st.container(key="ts_dash_schedule_card", border=True):
-                st.markdown(
-                    f'<p class="ts-dash-card-title">{_CALENDAR_ICON}오늘의 예약</p>',
-                    unsafe_allow_html=True,
+        with left_col:
+            with st.container(key="ts_dash_trend_card", border=True):
+                head_col, legend_col = st.columns([1.4, 1.6], vertical_alignment="center")
+                with head_col:
+                    st.markdown('<p class="ts-dash-card-title" style="margin:0;">30분 추이</p>', unsafe_allow_html=True)
+                with legend_col:
+                    st.markdown(
+                        """
+                        <div class="ts-trend-legend">
+                          <span class="ts-trend-legend-item ts-trend-legend-temp">온도</span>
+                          <span class="ts-trend-legend-item ts-trend-legend-co2">CO₂</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                temps, co2s = trend_series(room)
+                st.altair_chart(
+                    _trend_chart(temps, co2s, room["target_temperature"]),
+                    width="stretch",
                 )
+
+                schedules = list_today_schedules(room["id"])
+                res_head_col, res_link_col = st.columns([2, 1], vertical_alignment="center")
+                with res_head_col:
+                    st.markdown(
+                        f'<p class="ts-dash-card-title" style="margin:0;">{_CALENDAR_ICON}예약 냉방</p>',
+                        unsafe_allow_html=True,
+                    )
+                with res_link_col:
+                    if st.button("예약 목록보기", key="dash_reservation_all", width="stretch"):
+                        st.toast("예약 목록 페이지는 곧 제공될 예정이에요", icon="🛠️")
                 if schedules:
                     rows = "".join(
-                        f'<div class="ts-dash-list-row">'
-                        f'<span class="ts-dash-list-primary">{s["start_time"]} - {s["end_time"]}</span>'
-                        f'<span class="ts-dash-list-secondary">목표 {s["target_temperature"]}°C</span>'
+                        f'<div class="ts-room-reservation-row">'
+                        f'<span class="ts-room-reservation-time">{s["start_time"]}–{s["end_time"]}</span>'
+                        f'<span class="ts-room-reservation-status is-{"done" if schedule_status(s) == "완료" else "active" if schedule_status(s) == "진행 중" else "pending"}">'
+                        f'{schedule_status(s)}</span>'
+                        f'<span class="ts-room-reservation-chevron">{_CHEVRON_ICON}</span>'
                         f"</div>"
                         for s in schedules
                     )
@@ -323,52 +255,70 @@ with main_col:
                         '<p class="ts-dash-list-empty">오늘 예약된 냉방이 없습니다</p>',
                         unsafe_allow_html=True,
                     )
-        with activity_col:
-            with st.container(key="ts_dash_activity_card", border=True):
+                if st.button("＋ 새 예약 추가", key="dash_reservation_new", width="stretch"):
+                    st.toast("예약 생성 기능은 곧 제공될 예정이에요", icon="🛠️")
+
+        with right_col:
+            with st.container(key="ts_room_manual_card", border=True):
+                st.markdown(
+                    f'<p class="ts-dash-card-title">'
+                    f'<img class="ts-dash-kpi-icon" src="{icon_data_uri("snow.svg")}" alt="" />에어컨 수동 제어</p>',
+                    unsafe_allow_html=True,
+                )
+                minus_col, value_col, plus_col = st.columns([1, 2, 1], vertical_alignment="center")
+                with minus_col:
+                    if st.button("−", key="dash_target_minus", width="stretch"):
+                        set_target_temperature(room["id"], max(16, room["target_temperature"] - 1))
+                        st.rerun()
+                with value_col:
+                    st.markdown(
+                        f"""
+                        <p class="ts-room-manual-value">{room["target_temperature"]}°</p>
+                        <p class="ts-room-manual-caption">예약 시간 동안 유지</p>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with plus_col:
+                    if st.button("+", key="dash_target_plus", width="stretch"):
+                        set_target_temperature(room["id"], min(30, room["target_temperature"] + 1))
+                        st.rerun()
+                st.markdown(
+                    '<p class="ts-room-manual-note">수동 제어는 자동 제어보다 항상 우선 실행됩니다</p>',
+                    unsafe_allow_html=True,
+                )
+
+            with st.container(key="ts_room_ai_card", border=True):
+                st.markdown(
+                    f'<p class="ts-dash-card-title">{_CHIP_ICON}AI 운영 설명</p>',
+                    unsafe_allow_html=True,
+                )
+                headline, subline = system_judgment(room)
                 st.markdown(
                     f"""
-                    <p class="ts-dash-card-title">{_LOG_ICON}최근 제어 로그
-                      <span class="ts-dash-badge ts-dash-badge-muted">오늘 {len(logs)}건</span>
-                    </p>
+                    <p class="ts-dash-judgment-headline">{headline}</p>
+                    <p class="ts-dash-judgment-sub">{subline}</p>
                     """,
                     unsafe_allow_html=True,
                 )
-                if recent_logs:
-                    rows = "".join(
-                        f'<div class="ts-dash-list-row">'
-                        f'<span class="ts-dash-list-primary">{"✓" if log["success"] else "✕"} {log["content"]}</span>'
-                        f'<span class="ts-dash-list-secondary">{method_label(log["method"])} · '
-                        f'{log["timestamp"].hour}:{log["timestamp"].minute:02d}</span>'
-                        f"</div>"
-                        for log in recent_logs
-                    )
-                    st.markdown(rows, unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        '<p class="ts-dash-list-empty">오늘 기록된 제어 로그가 없습니다</p>',
-                        unsafe_allow_html=True,
-                    )
 
-        with st.container(key="ts_dash_alert_card", border=True):
-            st.markdown(
-                f"""
-                <p class="ts-dash-card-title">{_ALERT_ICON}활성 알림
-                  <span class="ts-dash-badge ts-dash-badge-danger">{alert_count}건</span>
-                </p>
-                """,
-                unsafe_allow_html=True,
+        comfort = comfort_index(room)
+        with st.container(key="ts_dash_summary_card", border=True):
+            st.markdown('<p class="ts-dash-card-title">KPI 요약 (오늘)</p>', unsafe_allow_html=True)
+            summary_items = [
+                ("power", "HVAC 전력 사용량", f"{snapshot['power'] * 24:.0f}kWh"),
+                ("temp", "평균 온도", f"{snapshot['temperature']:.1f}°C"),
+                ("co2", "평균 CO₂", f"{snapshot['co2']:.0f}ppm"),
+                ("occupancy", "공간 사용률", f"{occupancy_rate}%"),
+                (None, "종합 쾌적도 지수", f"{comfort}/100"),
+            ]
+            items_html = "".join(
+                f'<div class="ts-dash-summary-item">'
+                f'<div class="ts-dash-summary-head">'
+                f'<span class="ts-dash-summary-label">{label}</span>'
+                + (f'<img src="{icon_data_uri(_KPI_ICON_FILES[slug])}" alt="" />' if slug else "")
+                + "</div>"
+                f'<span class="ts-dash-summary-value">{value}</span>'
+                f"</div>"
+                for slug, label, value in summary_items
             )
-            if alerts:
-                rows = "".join(
-                    f'<div class="ts-dash-list-row">'
-                    f'<span class="ts-dash-list-primary">{a["title"]}</span>'
-                    f'<span class="ts-dash-list-secondary">{a["room"]} · {a["time"]}</span>'
-                    f"</div>"
-                    for a in alerts
-                )
-                st.markdown(rows, unsafe_allow_html=True)
-            else:
-                st.markdown(
-                    '<p class="ts-dash-list-empty">활성 알림이 없습니다</p>',
-                    unsafe_allow_html=True,
-                )
+            st.markdown(f'<div class="ts-dash-summary-grid">{items_html}</div>', unsafe_allow_html=True)
