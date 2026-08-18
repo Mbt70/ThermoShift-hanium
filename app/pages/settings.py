@@ -44,7 +44,7 @@ _CHEVRON_ICON = (
 )
 _SENSOR_ICON_FILES = {
     "env": "device_thermostat.svg",
-    "motion": "sensors.svg",
+    "pir": "sensors.svg",
     "ir": "settings_remote.svg",
     "plug": "plug.svg",
     "door": "door.svg",

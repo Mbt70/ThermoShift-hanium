@@ -350,3 +350,298 @@
 .st-key-ts_dash_summary_card {
   margin-top: 3px !important;
 }
+
+/* ==== 예약 냉방 dialogs (list + add/edit) ====
+   components.css pins every st.dialog to a mobile-sized "min(90vw, 360px)"
+   box (it's shared across the old mobile-style dialogs too, like my_page's
+   logout/delete confirms) - override width only for dialogs that carry
+   this page's marker div, so those other dialogs stay untouched. */
+[data-testid="stDialog"]:has(.ts-reservation-dialog) > div {
+  width: min(92vw, 560px) !important;
+  max-height: min(94vh, 860px) !important;
+}
+
+[data-testid="stDialog"]:has(.ts-reservation-dialog) [data-testid="stDialogContent"] {
+  gap: 4px;
+}
+
+/* The stacked form (hint, labels, inputs, three cards, note, submit) added
+   up to more than the dialog's max-height on ordinary laptop screens, and
+   the submit button - the very last element - ended up scrolled far out of
+   view (not just a little clipped). Tightening the default gap Streamlit
+   puts between every stacked element is the single biggest lever for
+   getting the whole form, submit button included, to actually fit. */
+[data-testid="stDialog"]:has(.ts-reservation-dialog) [data-testid="stVerticalBlock"] {
+  gap: 0.3rem !important;
+}
+
+/* Streamlit's own dialog title text is small/muted by default - bump it up
+   to read as a real modal heading, matching the reference design. */
+[data-testid="stDialog"]:has(.ts-reservation-dialog) [data-testid="stMarkdownContainer"] > h2,
+[data-testid="stDialog"]:has(.ts-reservation-dialog) [data-testid="stDialogTitle"] {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: var(--font-weight-extrabold);
+}
+
+/* ---- list dialog rows ----
+   Scoped via :has(.ts-reservation-row) specifically - both dialogs share
+   the .ts-reservation-dialog marker (for the width/height override above),
+   so a bare [data-testid="stHorizontalBlock"] selector here would also
+   catch the *form* dialog's time-input row, temp +/- row, and toggle rows
+   and pad/underline those too. */
+[data-testid="stDialog"]:has(.ts-reservation-dialog) [data-testid="stHorizontalBlock"]:has(.ts-reservation-row) {
+  align-items: center !important;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+[data-testid="stDialog"]:has(.ts-reservation-dialog) [data-testid="stHorizontalBlock"]:has(.ts-reservation-row):last-of-type {
+  border-bottom: 0;
+}
+
+.ts-reservation-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ts-reservation-row-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.ts-reservation-row-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-reservation-row-sub {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+[class*="st-key-resv_edit_"] button,
+[class*="st-key-resv_delete_"] button {
+  width: 36px !important;
+  min-height: 36px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  background: var(--bg) !important;
+  color: var(--muted) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+[class*="st-key-resv_edit_"] button [data-testid="stMarkdownContainer"],
+[class*="st-key-resv_delete_"] button [data-testid="stMarkdownContainer"] {
+  display: none;
+}
+
+[class*="st-key-resv_edit_"] button:hover,
+[class*="st-key-resv_delete_"] button:hover {
+  background: var(--border) !important;
+  color: var(--text) !important;
+}
+
+.st-key-resv_list_add {
+  margin-top: 12px;
+}
+
+/* ---- add/edit form dialog ---- */
+
+.ts-schedule-form-hint {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.ts-schedule-field-label {
+  margin: 0 0 3px;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+[data-testid="stDialog"]:has(.ts-reservation-dialog) [data-testid="stElementContainer"]:has(.ts-schedule-field-label) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important;
+}
+
+[data-testid="stDialog"]:has(.ts-reservation-dialog) [data-testid="stTextInput"] input,
+[data-testid="stDialog"]:has(.ts-reservation-dialog) [data-testid="stDateInput"] input,
+[data-testid="stDialog"]:has(.ts-reservation-dialog) [data-testid="stTimeInput"] input {
+  border-radius: var(--input-radius);
+  border-color: var(--border);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.st-key-ts_resv_temp_card,
+.st-key-ts_resv_precool_card,
+.st-key-ts_resv_repeat_card {
+  margin: 4px 0 !important;
+  padding: 10px 16px !important;
+}
+
+.ts-schedule-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.st-key-ts_resv_temp_card [data-testid="stElementContainer"]:has(.ts-schedule-card-title) [data-testid="stMarkdownContainer"],
+.st-key-ts_resv_precool_card [data-testid="stElementContainer"]:has(.ts-schedule-card-title) [data-testid="stMarkdownContainer"],
+.st-key-ts_resv_repeat_card [data-testid="stElementContainer"]:has(.ts-schedule-card-title) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important;
+}
+
+.st-key-resv_temp_minus button,
+.st-key-resv_temp_plus button {
+  width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  margin: 0 auto;
+  display: flex !important;
+  border-radius: 50%;
+  font-size: 18px;
+  font-weight: var(--font-weight-bold);
+  color: var(--text) !important;
+  background: #fff !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.ts-schedule-temp-value {
+  margin: 0;
+  text-align: center;
+  color: var(--text);
+  font-size: 30px;
+  font-weight: var(--font-weight-extrabold);
+}
+
+.ts-schedule-temp-sub {
+  margin: 4px 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.ts-schedule-card-desc {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+
+.st-key-ts_resv_precool_card [data-testid="stElementContainer"]:has(.ts-schedule-card-desc) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important;
+}
+
+.st-key-resv_precool_minutes {
+  margin-top: 10px;
+}
+
+.st-key-resv_repeat_days {
+  margin-top: 10px;
+}
+
+.st-key-resv_repeat_days [data-testid="stButtonGroup"] {
+  display: flex;
+  gap: 4px;
+}
+
+.st-key-resv_repeat_days button[data-variant="pills"] {
+  flex: 1;
+  background: var(--bg) !important;
+  color: var(--muted) !important;
+  border-color: var(--border) !important;
+  border-radius: 999px !important;
+}
+
+.st-key-resv_repeat_days button[data-variant="pills"][aria-pressed="true"] {
+  background: var(--primary-dark) !important;
+  color: #fff !important;
+  border-color: var(--primary-dark) !important;
+}
+
+/* Custom toggle art (same assets/icons/toggleon.svg + toggleoff.svg used
+   on the 공간·디바이스 sensor table) swapped in place of the native switch
+   track; the native thumb is hidden since the artwork already draws its
+   own knob. */
+[class*="st-key-resv_precool_toggle"] [data-testid="stCheckbox"] label > div:first-of-type,
+[class*="st-key-resv_repeat_toggle"] [data-testid="stCheckbox"] label > div:first-of-type {
+  width: 46px !important;
+  height: 28px !important;
+  background-color: transparent !important;
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDYiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCA0NiAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ2IiBoZWlnaHQ9IjI4IiByeD0iMTQiIGZpbGw9IiM5OEExQUIiLz4KPGcgZmlsdGVyPSJ1cmwoI2ZpbHRlcjBfZF8yMTlfMTY3KSI+CjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSIyMiIgaGVpZ2h0PSIyMiIgcng9IjExIiBmaWxsPSJ3aGl0ZSIvPgo8L2c+CjxkZWZzPgo8ZmlsdGVyIGlkPSJmaWx0ZXIwX2RfMjE5XzE2NyIgeD0iMSIgeT0iMiIgd2lkdGg9IjI2IiBoZWlnaHQ9IjI2IiBmaWx0ZXJVbml0cz0idXNlclNwYWNlT25Vc2UiIGNvbG9yLWludGVycG9sYXRpb24tZmlsdGVycz0ic1JHQiI+CjxmZUZsb29kIGZsb29kLW9wYWNpdHk9IjAiIHJlc3VsdD0iQmFja2dyb3VuZEltYWdlRml4Ii8+CjxmZUNvbG9yTWF0cml4IGluPSJTb3VyY2VBbHBoYSIgdHlwZT0ibWF0cml4IiB2YWx1ZXM9IjAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMTI3IDAiIHJlc3VsdD0iaGFyZEFscGhhIi8+CjxmZU9mZnNldCBkeT0iMSIvPgo8ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIxIi8+CjxmZUNvbXBvc2l0ZSBpbjI9ImhhcmRBbHBoYSIgb3BlcmF0b3I9Im91dCIvPgo8ZmVDb2xvck1hdHJpeCB0eXBlPSJtYXRyaXgiIHZhbHVlcz0iMCAwIDAgMCAwLjA2Mjc0NTEgMCAwIDAgMCAwLjA5NDExNzYgMCAwIDAgMCAwLjE1Njg2MyAwIDAgMCAwLjA1IDAiLz4KPGZlQmxlbmQgbW9kZT0ibm9ybWFsIiBpbjI9IkJhY2tncm91bmRJbWFnZUZpeCIgcmVzdWx0PSJlZmZlY3QxX2Ryb3BTaGFkb3dfMjE5XzE2NyIvPgo8ZmVCbGVuZCBtb2RlPSJub3JtYWwiIGluPSJTb3VyY2VHcmFwaGljIiBpbjI9ImVmZmVjdDFfZHJvcFNoYWRvd18yMTlfMTY3IiByZXN1bHQ9InNoYXBlIi8+CjwvZmlsdGVyPgo8L2RlZnM+Cjwvc3ZnPgo=");
+  background-size: 46px 28px;
+  background-repeat: no-repeat;
+  border-radius: 0;
+}
+
+[class*="st-key-resv_precool_toggle"] [data-testid="stCheckbox"] label:has(input:checked) > div:first-of-type,
+[class*="st-key-resv_repeat_toggle"] [data-testid="stCheckbox"] label:has(input:checked) > div:first-of-type {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDYiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCA0NiAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ2IiBoZWlnaHQ9IjI4IiByeD0iMTQiIGZpbGw9IiMwMDlFOUIiLz4KPGcgZmlsdGVyPSJ1cmwoI2ZpbHRlcjBfZF8yMTlfMTU5KSI+CjxyZWN0IHg9IjIxIiB5PSIzIiB3aWR0aD0iMjIiIGhlaWdodD0iMjIiIHJ4PSIxMSIgZmlsbD0id2hpdGUiLz4KPC9nPgo8ZGVmcz4KPGZpbHRlciBpZD0iZmlsdGVyMF9kXzIxOV8xNTkiIHg9IjE5IiB5PSIyIiB3aWR0aD0iMjYiIGhlaWdodD0iMjYiIGZpbHRlclVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj4KPGZlRmxvb2QgZmxvb2Qtb3BhY2l0eT0iMCIgcmVzdWx0PSJCYWNrZ3JvdW5kSW1hZ2VGaXgiLz4KPGZlQ29sb3JNYXRyaXggaW49IlNvdXJjZUFscGhhIiB0eXBlPSJtYXRyaXgiIHZhbHVlcz0iMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAxMjcgMCIgcmVzdWx0PSJoYXJkQWxwaGEiLz4KPGZlT2Zmc2V0IGR5PSIxIi8+CjxmZUdhdXNzaWFuQmx1ciBzdGREZXZpYXRpb249IjEiLz4KPGZlQ29tcG9zaXRlIGluMj0iaGFyZEFscGhhIiBvcGVyYXRvcj0ib3V0Ii8+CjxmZUNvbG9yTWF0cml4IHR5cGU9Im1hdHJpeCIgdmFsdWVzPSIwIDAgMCAwIDAuMDYyNzQ1MSAwIDAgMCAwIDAuMDk0MTE3NiAwIDAgMCAwIDAuMTU2ODYzIDAgMCAwIDAuMDUgMCIvPgo8ZmVCbGVuZCBtb2RlPSJub3JtYWwiIGluMj0iQmFja2dyb3VuZEltYWdlRml4IiByZXN1bHQ9ImVmZmVjdDFfZHJvcFNoYWRvd18yMTlfMTU5Ii8+CjxmZUJsZW5kIG1vZGU9Im5vcm1hbCIgaW49IlNvdXJjZUdyYXBoaWMiIGluMj0iZWZmZWN0MV9kcm9wU2hhZG93XzIxOV8xNTkiIHJlc3VsdD0ic2hhcGUiLz4KPC9maWx0ZXI+CjwvZGVmcz4KPC9zdmc+Cg==");
+}
+
+[class*="st-key-resv_precool_toggle"] [data-testid="stCheckbox"] label > div:first-of-type > div,
+[class*="st-key-resv_repeat_toggle"] [data-testid="stCheckbox"] label > div:first-of-type > div {
+  display: none;
+}
+
+.ts-schedule-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--input-radius);
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-schedule-note svg {
+  flex-shrink: 0;
+}
+
+[data-testid="stDialog"]:has(.ts-reservation-dialog) [data-testid="stElementContainer"]:has(.ts-schedule-note) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important;
+}
+
+.ts-schedule-time-error,
+.ts-schedule-field-error {
+  margin: -8px 0 12px;
+  color: var(--danger);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.st-key-resv_submit button {
+  background: var(--primary-dark) !important;
+  color: #fff !important;
+  border: none !important;
+  font-weight: var(--font-weight-bold) !important;
+}

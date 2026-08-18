@@ -2,6 +2,12 @@
 # `_MOCK_ALERTS` (and the body of list_alerts/get_alert) with the API call;
 # the rest of the app only depends on the dict shape returned here.
 
+import json
+from datetime import date, datetime
+from pathlib import Path
+
+_READ_STORE_PATH = Path(__file__).resolve().parents[2] / ".data" / "alert_reads.json"
+
 ALERT_TYPE_CONFIG = {
     "sensor_offline": {"icon": "sensors.svg", "filter_label": "센서 오류", "severity": "critical"},
     "co2_high": {"icon": "control_error.svg", "filter_label": "CO₂ 초과", "severity": "warning"},
@@ -112,3 +118,63 @@ def alert_severity_counts() -> dict:
         severity = ALERT_TYPE_CONFIG.get(alert["type"], {}).get("severity", "warning")
         counts[severity] += 1
     return counts
+
+
+# ---- per-room, per-day alerts (web 대시보드 알림 페이지) ----
+# Rooms are user-registered (no fixed demo IDs), so - same approach as
+# control_log_store's _DEMO_TEMPLATE - this generates mock alerts for
+# whichever room is asked for, rather than pulling from the fixed
+# _MOCK_ALERTS list above (which predates per-room/per-day scoping and
+# still backs the older mobile alert list/list_alerts API).
+#
+# Only shown for *today* - a freshly registered room has no alert history,
+# so every other date is legitimately empty rather than replaying the same
+# demo alerts on every day like control_log_store's demo template does.
+_ROOM_DEMO_TEMPLATE = [
+    (13, 0, "control_failed", "에어컨 동작 미확인"),
+    (9, 25, "co2_high", "CO2 농도 초과"),
+]
+
+
+def _load_read_ids() -> set[str]:
+    if not _READ_STORE_PATH.exists():
+        return set()
+    return set(json.loads(_READ_STORE_PATH.read_text(encoding="utf-8")))
+
+
+def _save_read_ids(ids: set[str]) -> None:
+    _READ_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _READ_STORE_PATH.write_text(
+        json.dumps(sorted(ids), ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def mark_alert_read(alert_id: str) -> None:
+    ids = _load_read_ids()
+    if alert_id not in ids:
+        ids.add(alert_id)
+        _save_read_ids(ids)
+
+
+def _room_demo_entry(room_id: str, day: date, entry: tuple, read_ids: set[str]) -> dict:
+    hour, minute, alert_type, title = entry
+    timestamp = datetime.combine(day, datetime.min.time()).replace(hour=hour, minute=minute)
+    config = ALERT_TYPE_CONFIG.get(alert_type, {})
+    alert_id = f"{room_id}_{day.isoformat()}_{hour:02d}{minute:02d}"
+    return {
+        "id": alert_id,
+        "room_id": room_id,
+        "timestamp": timestamp,
+        "type": alert_type,
+        "title": title,
+        "severity": config.get("severity", "warning"),
+        "read": alert_id in read_ids,
+    }
+
+
+def list_room_alerts(room_id: str, day: date) -> list[dict]:
+    if day != date.today():
+        return []
+    read_ids = _load_read_ids()
+    entries = [_room_demo_entry(room_id, day, entry, read_ids) for entry in _ROOM_DEMO_TEMPLATE]
+    return sorted(entries, key=lambda alert: alert["timestamp"])
