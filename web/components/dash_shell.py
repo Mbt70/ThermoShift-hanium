@@ -14,7 +14,6 @@ _NAV_SECTIONS = (
             ("dashboard", "대시보드", "home.svg", "pages/home.py"),
             ("room_detail", "공간 상세", "meeting_room.svg", "pages/room_detail.py"),
             ("digital_twin", "디지털 트윈·3D", "deployed_code.svg", "pages/digital_twin.py"),
-            ("control_sim", "제어 시뮬레이션", "settings_remote.svg", None),
         ),
     ),
     (
