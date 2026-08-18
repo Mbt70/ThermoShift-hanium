@@ -186,10 +186,84 @@
   text-overflow: clip;
 }
 
-/* ---- control-mode tiles reused from room_detail.css but in a 2x2 grid
-   here instead of 1x4 - column ratio is already st.columns(2), so no
-   extra grid CSS is needed beyond what dash_shell/room_detail provide,
-   just spacing between the two stacked rows. */
+/* ---- control-mode tiles: base look + invisible-overlay-button click
+   target. This used to live in room_detail.css and get pulled in via the
+   `shared` param, but room_detail's own redesign dropped its control-mode
+   section entirely (and the CSS along with it) - this page still uses the
+   same key prefixes for its 2x2 grid, so the base rules now live here
+   instead of depending on another page's stylesheet for them. */
+
+[class*="st-key-ts_dash_mode_"] {
+  position: relative;
+  cursor: pointer;
+}
+
+[class*="st-key-dash_mode_btn_"] {
+  position: absolute !important;
+  inset: 0;
+  z-index: 2;
+}
+
+[class*="st-key-dash_mode_btn_"] [data-testid="stButton"] {
+  height: 100%;
+}
+
+[class*="st-key-dash_mode_btn_"] button {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+
+.ts-dash-mode-item {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px;
+  border-radius: 14px;
+  background: var(--bg);
+  text-align: center;
+}
+
+.ts-dash-mode-item.is-active {
+  background: var(--primary-dark);
+}
+
+.ts-dash-mode-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+}
+
+.ts-dash-mode-icon-wrap img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.ts-dash-mode-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ts-dash-mode-item.is-active .ts-dash-mode-label {
+  color: #fff;
+}
+
+/* ---- control-mode tiles in a 2x2 grid here instead of 1x4 - column
+   ratio is already st.columns(2), so no extra grid CSS is needed beyond
+   the base rules above, just spacing between the two stacked rows. ---- */
 
 /* The column-internal gap between the stacked top/bottom tiles is set by
    a nested stVerticalBlock, but dash_shell.css's site-wide
@@ -311,4 +385,12 @@
    the viewport instead of needing an auto-margin push. */
 .st-key-ts_dash_summary_card {
   margin-top: 3px !important;
+}
+
+/* Leave a bit more page background visible below the summary footer -
+   scoped to this page only via its marker div so the shared main-column
+   padding isn't touched elsewhere. The flex:1 twin/AI row shrinks to
+   absorb the extra bottom padding automatically. */
+[data-testid="stMainBlockContainer"]:has(.ts-digital_twin) [data-testid="stColumn"]:has(.st-key-ts_dash_sidebar) ~ [data-testid="stColumn"] {
+  padding-bottom: 14px !important;
 }

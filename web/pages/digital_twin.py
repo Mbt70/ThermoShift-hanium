@@ -9,7 +9,6 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
-from app.components.alert_store import active_alert_count
 from app.components.control_log_store import list_logs
 from app.components.room_store import (
     comfort_index,
@@ -59,17 +58,6 @@ _HUMIDITY_ICON = (
     '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '
     'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
     '<path d="M12 2.5c4 5 7 8.5 7 12.5a7 7 0 0 1-14 0c0-4 3-7.5 7-12.5Z"/></svg>'
-)
-_BELL_ICON = (
-    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" '
-    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-    '<path d="M6 10a6 6 0 1 1 12 0c0 3.4 1 5 1.5 5.5H4.5C5 15 6 13.4 6 10Z"/>'
-    '<path d="M10 19.5a2 2 0 0 0 4 0"/></svg>'
-)
-_PROFILE_ICON = (
-    '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '
-    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-    '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg>'
 )
 _CHIP_ICON = (
     '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" '
@@ -136,9 +124,7 @@ with main_col:
         )
         power_delta_pct = round(random.Random(f"power-yday-{date.today()}").uniform(-9, 6), 1)
 
-        title_col, select_col, spacer_col, icons_col = st.columns(
-            [0.6, 0.8, 3.8, 0.6], vertical_alignment="center"
-        )
+        title_col, select_col, spacer_col = st.columns([0.6, 0.8, 4.4], vertical_alignment="center")
         with title_col:
             st.markdown('<h1 class="ts-dash-topbar-title">공간</h1>', unsafe_allow_html=True)
         with select_col:
@@ -151,18 +137,6 @@ with main_col:
             if picked_room["id"] != room["id"]:
                 st.session_state["_web_selected_room"] = picked_room["id"]
                 st.rerun()
-        with icons_col:
-            alert_count = active_alert_count()
-            badge = f'<span class="ts-dash-topbar-badge">{alert_count}</span>' if alert_count else ""
-            st.markdown(
-                f"""
-                <div class="ts-dash-topbar-actions">
-                  <span class="ts-dash-topbar-icon">{_BELL_ICON}{badge}</span>
-                  <span class="ts-dash-topbar-icon">{_PROFILE_ICON}</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
 
         co2_ok = avg_co2 < 700
         kpi_items = [
