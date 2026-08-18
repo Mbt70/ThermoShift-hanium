@@ -111,7 +111,7 @@ with right_col:
                 )
                 password_error = st.empty()
                 submitted = st.form_submit_button(
-                    "로그인", key="login_submit", use_container_width=True
+                    "로그인", key="login_submit", width="stretch"
                 )
 
             if submitted:
@@ -172,7 +172,7 @@ with right_col:
                 )
                 password_match_error = st.empty()
                 signup_submitted = st.button(
-                    "가입하기", key="signup_submit", use_container_width=True
+                    "가입하기", key="signup_submit", width="stretch"
                 )
 
             email_format_ok = (
