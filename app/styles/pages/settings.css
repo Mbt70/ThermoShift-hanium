@@ -161,7 +161,7 @@
 }
 
 .ts-settings-row-value {
-  margin: 0;
+  margin: 0 !important;
   color: var(--muted);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
@@ -273,7 +273,7 @@
   border-radius: 0;
 }
 
-[data-testid="stCheckbox"] label:has(input[role="switch"]:checked) > div:first-of-type {
+[data-testid="stCheckbox"] label:has(input:checked) > div:first-of-type {
   background-image: var(--toggle-on);
 }
 
@@ -340,7 +340,6 @@
 .st-key-settings_logout_confirm button:focus {
   background: var(--danger-bg) !important;
   color: var(--danger) !important;
-  filter: brightness(0.96);
 }
 
 .ts-settings-dialog-desc {

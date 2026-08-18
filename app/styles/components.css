@@ -5,15 +5,54 @@ body,
   font-family: var(--font-family);
 }
 
+html:has([data-testid="stDialog"]),
+body:has([data-testid="stDialog"]) {
+  overflow: hidden !important;
+}
+
 [data-testid="stDialog"] {
+  display: flex !important;
+  justify-content: center !important;
   align-items: center !important;
   padding-top: 0 !important;
+  background-color: rgba(15, 20, 30, 0.55) !important;
+  position: fixed !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 50% !important;
+  right: auto !important;
+  width: min(100%, var(--page-width)) !important;
+  height: 100dvh !important;
+  transform: translateX(-50%) !important;
 }
 
 [data-testid="stDialog"] > div {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: none !important;
+  background: transparent !important;
+  overflow: visible !important;
+}
+
+[data-testid="stDialog"] > div > div {
   width: min(90vw, 360px) !important;
-  max-height: min(80vh, 600px);
+  max-height: min(80vh, 600px) !important;
   overflow-y: auto;
+}
+
+/* Popups shouldn't give any visual feedback on hover. */
+[data-testid="stDialog"] button:hover {
+  filter: none !important;
+  transform: none !important;
+}
+
+:where([data-testid="stDialog"]) .stButton button:hover,
+:where([data-testid="stDialog"]) [data-testid="stFormSubmitButton"] button:hover {
+  background: var(--primary) !important;
+  color: #fff !important;
 }
 
 [data-testid="stHorizontalBlock"] {
@@ -187,10 +226,15 @@ footer {
   box-shadow: none;
 }
 
+[data-testid="stTextInput"] [data-baseweb="base-input"],
+[data-testid="stTextInputRootElement"] > div {
+  background: var(--card) !important;
+}
+
 [data-testid="stTextInput"] [data-baseweb="input"]:focus-within,
 [data-testid="stTextInputRootElement"]:focus-within {
-  border-color: var(--primary) !important;
-  box-shadow: 0 0 0 2px rgb(88 164 162 / 13%);
+  border-color: var(--border) !important;
+  box-shadow: none !important;
 }
 
 [data-testid="stTextInput"] input {
@@ -201,6 +245,7 @@ footer {
   font-size: var(--font-size-base);
   outline: none !important;
   box-shadow: none !important;
+  border: none !important;
 }
 
 [data-testid="stTextInput"] input:-webkit-autofill,
@@ -245,7 +290,8 @@ footer {
 .stButton button:focus,
 [data-testid="stFormSubmitButton"] button:focus {
   color: #fff;
-  box-shadow: 0 0 0 3px rgb(88 164 162 / 20%);
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .st-key-onboarding_login,
