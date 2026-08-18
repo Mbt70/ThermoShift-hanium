@@ -3,13 +3,32 @@ from pathlib import Path
 
 _STORE_PATH = Path(__file__).resolve().parents[2] / ".data" / "sensors.json"
 
+_TYPE_LABELS = {
+    "env": "온습도 CO2 센서",
+    "pir": "인체감지 센서",
+    "ir": "IR 송신기",
+    "plug": "스마트 플러그 (전력)",
+    "door": "도어 센서",
+}
+
+# (type, name, enabled, location, connection status ("success"/"disconnected"/None))
+# type/name prefix follows the device_type spec: env/pir/door/ir/plug.
+# location text follows the enclosure's internal layout diagram - env
+# (SHT31+SCD41) sits in the top 환경 측정 영역, PIR/IR share the front-bottom
+# OCC 노드 slot.
 _DEFAULT_TYPES = [
-    ("env", "env_01", True),
-    ("motion", "pir_02", True),
-    ("ir", "ir_01", False),
-    ("plug", "plug_01", True),
-    ("door", "door_01", False),
+    ("env", "env_01", True, "상단 환경 측정부", "success"),
+    ("ir", "ir_01", True, "정면 하단 (OCC 노드)", "disconnected"),
+    ("pir", "pir_01", True, "정면 하단 (OCC 노드)", None),
+    ("door", "door_01", True, "문틀", None),
+    ("plug", "plug_01", True, "", None),
+    ("env", "env_04", False, "", None),
+    ("ir", "ir_02", False, "", None),
 ]
+
+
+def sensor_type_label(sensor_type: str) -> str:
+    return _TYPE_LABELS.get(sensor_type, sensor_type)
 
 
 def _default_sensors(room_id: str) -> list[dict]:
@@ -20,8 +39,10 @@ def _default_sensors(room_id: str) -> list[dict]:
             "name": name,
             "type": sensor_type,
             "enabled": enabled,
+            "location": location,
+            "status": status,
         }
-        for sensor_type, name, enabled in _DEFAULT_TYPES
+        for sensor_type, name, enabled, location, status in _DEFAULT_TYPES
     ]
 
 

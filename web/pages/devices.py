@@ -8,9 +8,10 @@ if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
 from app.components.room_store import delete_room, list_rooms, register_room, update_room
+from app.components.sensor_store import list_sensors, sensor_type_label, set_sensor_enabled
 from components.auth_store import current_user_email, is_logged_in
 from components.dash_shell import render_sidebar, render_topbar
-from components.mobile_ui import apply_mobile_styles, inline_error
+from components.mobile_ui import apply_mobile_styles, inline_error, recolored_icon_data_uri
 
 _BUILDING_ICON = (
     '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" '
@@ -18,6 +19,7 @@ _BUILDING_ICON = (
     '<rect x="7" y="7" width="10" height="10" rx="1.5"/>'
     '<path d="M9.5 7V4M14.5 7V4M9.5 20v-3M14.5 20v-3M7 9.5H4M7 14.5H4M20 9.5h-3M20 14.5h-3"/></svg>'
 )
+_STATUS_LABELS = {"success": "성공", "disconnected": "끊김"}
 apply_mobile_styles("devices", shared=("dash_shell",))
 
 if not is_logged_in():
@@ -39,11 +41,62 @@ with main_col:
         ) or "공간"
 
     if tab_choice == "센서 장비":
+        selected_room_id = st.session_state.get("_web_selected_room") or (
+            rooms[0]["id"] if rooms else None
+        )
+        sensors = list_sensors(selected_room_id) if selected_room_id else []
+
         with st.container(key="ts_dash_sensor_card", border=True):
+            sensor_icon_uri = recolored_icon_data_uri("sensors.svg", "#397f80")
             st.markdown(
-                '<p class="ts-dash-list-empty">센서 장비 관리 기능은 준비 중입니다</p>',
+                f'<p class="ts-dash-card-title"><img class="ts-sensor-title-icon" src="{sensor_icon_uri}" alt="" />센서 장비</p>',
                 unsafe_allow_html=True,
             )
+            if sensors:
+                head_cols = st.columns([1.1, 1.7, 1.5, 1.2, 0.8], vertical_alignment="center")
+                for col, label in zip(head_cols, ["노드", "유형", "설치위치", "통신 상태", "활성"]):
+                    with col:
+                        st.markdown(f'<span class="ts-sensor-head">{label}</span>', unsafe_allow_html=True)
+
+                for sensor in sensors:
+                    row_cols = st.columns([1.1, 1.7, 1.5, 1.2, 0.8], vertical_alignment="center")
+                    with row_cols[0]:
+                        st.markdown(f'<span class="ts-sensor-node">{sensor["name"]}</span>', unsafe_allow_html=True)
+                    with row_cols[1]:
+                        st.markdown(
+                            f'<span class="ts-sensor-type">{sensor_type_label(sensor["type"])}</span>',
+                            unsafe_allow_html=True,
+                        )
+                    with row_cols[2]:
+                        if sensor.get("location"):
+                            st.markdown(
+                                f'<span class="ts-sensor-location">{sensor["location"]}</span>',
+                                unsafe_allow_html=True,
+                            )
+                    with row_cols[3]:
+                        status = sensor.get("status")
+                        if status:
+                            status_class = "is-success" if status == "success" else "is-error"
+                            st.markdown(
+                                f'<span class="ts-sensor-status {status_class}">'
+                                f'<span class="ts-sensor-status-dot"></span>{_STATUS_LABELS[status]}</span>',
+                                unsafe_allow_html=True,
+                            )
+                    with row_cols[4]:
+                        enabled = st.toggle(
+                            sensor["name"],
+                            value=sensor["enabled"],
+                            key=f"dev_sensor_toggle_{sensor['id']}",
+                            label_visibility="collapsed",
+                        )
+                        if enabled != sensor["enabled"]:
+                            set_sensor_enabled(sensor["id"], enabled)
+                            st.rerun()
+            else:
+                st.markdown(
+                    '<p class="ts-dash-list-empty">등록된 센서 장비가 없습니다</p>',
+                    unsafe_allow_html=True,
+                )
     else:
         list_col, form_col = st.columns([3, 2], gap="medium")
 

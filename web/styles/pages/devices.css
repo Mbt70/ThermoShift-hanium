@@ -3,6 +3,13 @@
    dash_shell.css, loaded alongside this via apply_mobile_styles's `shared`
    param. */
 
+/* The page title sits right at the very top edge by default - nudge the
+   whole topbar row down a bit so it doesn't feel cramped against the
+   window edge. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stElementContainer"]:has(.ts-dash-topbar) {
+  margin-top: 10px;
+}
+
 .st-key-ts_dev_tabs {
   display: flex;
   margin-bottom: 18px;
@@ -73,6 +80,14 @@
   margin-top: 4px;
 }
 
+/* Pull the delete icon toward the edit icon - they're two separate
+   Streamlit columns sharing the same row-level column gap as row_col, so
+   narrowing it here (rather than on the whole st.columns call) only
+   tightens the space between the two icons, not the text-to-icon gap. */
+[class*="st-key-dev_delete_"] {
+  margin-left: -20px;
+}
+
 [class*="st-key-dev_edit_"] button,
 [class*="st-key-dev_delete_"] button {
   width: 36px !important;
@@ -81,6 +96,10 @@
   display: flex !important;
   align-items: center;
   justify-content: center;
+  /* Hug the right edge of each icon's own column instead of sitting at its
+     left, so the (already-tightened) pair sits close to the card's right
+     edge instead of floating right after the text column. */
+  margin-left: auto;
   background: var(--bg) !important;
   color: var(--muted) !important;
   border: 1px solid var(--border) !important;
@@ -154,4 +173,121 @@
   color: var(--muted);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
+}
+
+/* ---- 센서 장비 table ---- */
+
+.ts-sensor-title-icon {
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  vertical-align: -4px;
+}
+
+.st-key-ts_dash_sensor_card [data-testid="stHorizontalBlock"] {
+  align-items: center !important;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.st-key-ts_dash_sensor_card [data-testid="stHorizontalBlock"]:last-of-type {
+  border-bottom: 0;
+}
+
+.ts-sensor-head {
+  color: var(--placeholder);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-sensor-node {
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-extrabold);
+}
+
+.ts-sensor-type {
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-sensor-location {
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-sensor-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
+}
+
+.ts-sensor-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.ts-sensor-status.is-success {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.ts-sensor-status.is-success .ts-sensor-status-dot {
+  background: var(--success);
+}
+
+.ts-sensor-status.is-error {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.ts-sensor-status.is-error .ts-sensor-status-dot {
+  background: var(--danger);
+}
+
+/* 활성 토글: 모바일 앱(app/styles/pages/schedule.css)의 센서 on/off 토글과
+   동일한 assets/icons/toggleon.svg + toggleoff.svg 아트워크를 그대로 사용.
+   네이티브 switch 트랙을 이 배경 이미지로 바꿔치기하고, 기본 thumb는 숨김
+   (아트워크 안에 이미 원이 그려져 있음). 데이터 URI는 그 파일들을 그대로
+   base64 인코딩한 것 - 값 자체는 schedule.css와 동일. */
+:root {
+  --sensor-toggle-off: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDYiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCA0NiAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ2IiBoZWlnaHQ9IjI4IiByeD0iMTQiIGZpbGw9IiM5OEExQUIiLz4KPGcgZmlsdGVyPSJ1cmwoI2ZpbHRlcjBfZF8yMTlfMTY3KSI+CjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSIyMiIgaGVpZ2h0PSIyMiIgcng9IjExIiBmaWxsPSJ3aGl0ZSIvPgo8L2c+CjxkZWZzPgo8ZmlsdGVyIGlkPSJmaWx0ZXIwX2RfMjE5XzE2NyIgeD0iMSIgeT0iMiIgd2lkdGg9IjI2IiBoZWlnaHQ9IjI2IiBmaWx0ZXJVbml0cz0idXNlclNwYWNlT25Vc2UiIGNvbG9yLWludGVycG9sYXRpb24tZmlsdGVycz0ic1JHQiI+CjxmZUZsb29kIGZsb29kLW9wYWNpdHk9IjAiIHJlc3VsdD0iQmFja2dyb3VuZEltYWdlRml4Ii8+CjxmZUNvbG9yTWF0cml4IGluPSJTb3VyY2VBbHBoYSIgdHlwZT0ibWF0cml4IiB2YWx1ZXM9IjAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMTI3IDAiIHJlc3VsdD0iaGFyZEFscGhhIi8+CjxmZU9mZnNldCBkeT0iMSIvPgo8ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIxIi8+CjxmZUNvbXBvc2l0ZSBpbjI9ImhhcmRBbHBoYSIgb3BlcmF0b3I9Im91dCIvPgo8ZmVDb2xvck1hdHJpeCB0eXBlPSJtYXRyaXgiIHZhbHVlcz0iMCAwIDAgMCAwLjA2Mjc0NTEgMCAwIDAgMCAwLjA5NDExNzYgMCAwIDAgMCAwLjE1Njg2MyAwIDAgMCAwLjA1IDAiLz4KPGZlQmxlbmQgbW9kZT0ibm9ybWFsIiBpbjI9IkJhY2tncm91bmRJbWFnZUZpeCIgcmVzdWx0PSJlZmZlY3QxX2Ryb3BTaGFkb3dfMjE5XzE2NyIvPgo8ZmVCbGVuZCBtb2RlPSJub3JtYWwiIGluPSJTb3VyY2VHcmFwaGljIiBpbjI9ImVmZmVjdDFfZHJvcFNoYWRvd18yMTlfMTY3IiByZXN1bHQ9InNoYXBlIi8+CjwvZmlsdGVyPgo8L2RlZnM+Cjwvc3ZnPgo=");
+  --sensor-toggle-on: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDYiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCA0NiAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ2IiBoZWlnaHQ9IjI4IiByeD0iMTQiIGZpbGw9IiMwMDlFOUIiLz4KPGcgZmlsdGVyPSJ1cmwoI2ZpbHRlcjBfZF8yMTlfMTU5KSI+CjxyZWN0IHg9IjIxIiB5PSIzIiB3aWR0aD0iMjIiIGhlaWdodD0iMjIiIHJ4PSIxMSIgZmlsbD0id2hpdGUiLz4KPC9nPgo8ZGVmcz4KPGZpbHRlciBpZD0iZmlsdGVyMF9kXzIxOV8xNTkiIHg9IjE5IiB5PSIyIiB3aWR0aD0iMjYiIGhlaWdodD0iMjYiIGZpbHRlclVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj4KPGZlRmxvb2QgZmxvb2Qtb3BhY2l0eT0iMCIgcmVzdWx0PSJCYWNrZ3JvdW5kSW1hZ2VGaXgiLz4KPGZlQ29sb3JNYXRyaXggaW49IlNvdXJjZUFscGhhIiB0eXBlPSJtYXRyaXgiIHZhbHVlcz0iMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAxMjcgMCIgcmVzdWx0PSJoYXJkQWxwaGEiLz4KPGZlT2Zmc2V0IGR5PSIxIi8+CjxmZUdhdXNzaWFuQmx1ciBzdGREZXZpYXRpb249IjEiLz4KPGZlQ29tcG9zaXRlIGluMj0iaGFyZEFscGhhIiBvcGVyYXRvcj0ib3V0Ii8+CjxmZUNvbG9yTWF0cml4IHR5cGU9Im1hdHJpeCIgdmFsdWVzPSIwIDAgMCAwIDAuMDYyNzQ1MSAwIDAgMCAwIDAuMDk0MTE3NiAwIDAgMCAwIDAuMTU2ODYzIDAgMCAwIDAuMDUgMCIvPgo8ZmVCbGVuZCBtb2RlPSJub3JtYWwiIGluMj0iQmFja2dyb3VuZEltYWdlRml4IiByZXN1bHQ9ImVmZmVjdDFfZHJvcFNoYWRvd18yMTlfMTU5Ii8+CjxmZUJsZW5kIG1vZGU9Im5vcm1hbCIgaW49IlNvdXJjZUdyYXBoaWMiIGluMj0iZWZmZWN0MV9kcm9wU2hhZG93XzIxOV8xNTkiIHJlc3VsdD0ic2hhcGUiLz4KPC9maWx0ZXI+CjwvZGVmcz4KPC9zdmc+Cg==");
+}
+
+[class*="st-key-dev_sensor_toggle_"] [data-testid="stCheckbox"] label > div:first-of-type {
+  width: 46px !important;
+  height: 28px !important;
+  background-color: transparent !important;
+  background-image: var(--sensor-toggle-off);
+  background-size: 46px 28px;
+  background-repeat: no-repeat;
+  border-radius: 0;
+}
+
+[class*="st-key-dev_sensor_toggle_"] [data-testid="stCheckbox"] label:has(input:checked) > div:first-of-type {
+  background-image: var(--sensor-toggle-on);
+}
+
+[class*="st-key-dev_sensor_toggle_"] [data-testid="stCheckbox"] label > div:first-of-type > div {
+  display: none;
+}
+
+/* ---- 공간 탭: 카드 제목과 내용 사이 간격 ---- */
+
+.st-key-ts_dash_room_list_card [data-testid="stElementContainer"]:has(.ts-dash-card-title) [data-testid="stMarkdownContainer"],
+.st-key-ts_dash_room_form_card [data-testid="stElementContainer"]:has(.ts-dash-card-title) [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important;
+}
+
+.st-key-ts_dash_room_list_card > *:has(.ts-dash-card-title) + *,
+.st-key-ts_dash_room_form_card > *:has(.ts-dash-card-title) + * {
+  margin-top: 16px !important;
 }
