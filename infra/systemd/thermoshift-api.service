@@ -1,0 +1,18 @@
+[Unit]
+Description=ThermoShift API (프론트용 데이터·제어 API)
+After=network.target thermoshift-gateway.service
+
+[Service]
+Type=simple
+User=thermo
+WorkingDirectory=/home/thermo/ThermoShift-hanium
+Environment="THERMOSHIFT_DB=/home/thermo/thermoshift-data/thermoshift.db"
+Environment="THERMOSHIFT_TZ=Asia/Seoul"
+ExecStart=/home/thermo/ThermoShift-hanium/.venv/bin/python -m uvicorn api.app.main:app --host 0.0.0.0 --port 8100
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
