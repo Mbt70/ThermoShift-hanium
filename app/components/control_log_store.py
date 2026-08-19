@@ -6,7 +6,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
-from app.components.api_client import api_get
+from shared.api_client import api_get
 
 _METHOD_LABELS = {"rule": "규칙", "manual": "수동", "predict": "예측"}
 

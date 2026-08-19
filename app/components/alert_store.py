@@ -6,7 +6,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
-from app.components.api_client import api_get, api_patch
+from shared.api_client import api_get, api_patch
 
 # Kept only for the legacy mobile pages (app/pages/alert.py, log_list.py)
 # that still import these - the web app no longer reads them (severity/

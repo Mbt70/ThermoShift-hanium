@@ -6,7 +6,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
-from app.components.api_client import api_delete, api_get, api_patch, api_post
+from shared.api_client import api_delete, api_get, api_patch, api_post
 
 _WEEKDAY_CODES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 _WEEKDAY_LABELS = {

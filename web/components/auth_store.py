@@ -8,7 +8,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
-from app.components.api_client import api_delete, api_get, api_patch, api_post
+from shared.api_client import api_delete, api_get, api_patch, api_post
 
 _CURRENT_USER_KEY = "_ts_current_user"  # {"user_id": int, "name": str, "email": str}
 _PENDING_LOGIN_KEY = "_ts_pending_login_result"

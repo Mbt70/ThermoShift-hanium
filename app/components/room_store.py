@@ -6,7 +6,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
-from app.components.api_client import api_delete, api_get, api_patch, api_post
+from shared.api_client import api_delete, api_get, api_patch, api_post
 
 # UI control-mode buttons use "predictive" for the 4th mode (digital_twin.py's
 # _CONTROL_MODES); the DB's control_mode enum spells the same mode "mpc".
