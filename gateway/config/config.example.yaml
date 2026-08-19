@@ -1,0 +1,46 @@
+mqtt:
+  host: "localhost"
+  port: 1883
+  client_id: "thermoshift_gateway_1"
+  topics:
+    - "thermoshift/#"
+    - "esp32/device/#"
+
+app:
+  # 통합 SQLite(단일 진실원). api 와 같은 파일을 본다.
+  db_path: "/home/thermo/thermoshift-data/thermoshift.db"
+  # 담당 공간 ID. null 이면 devices 테이블에 배정된 공간을 자동으로 따른다.
+  room_id: null
+  control_mode: "shadow"  # shadow, active, manual_lockout, failsafe
+  log_level: "INFO"
+
+control:
+  decision_interval_sec: 30
+  target_temperature_c: 25.0
+  cooling_on_temperature_c: 26.5
+  cooling_on_duration_sec: 180
+  cooling_off_temperature_c: 24.0
+  cooling_off_duration_sec: 300
+  minimum_on_time_sec: 600
+  minimum_off_time_sec: 300
+  empty_confirmation_sec: 900
+  manual_lockout_sec: 1800
+  command_rate_limit_sec: 120
+  co2_ventilation_warning_ppm: 1200
+  co2_ventilation_warning_duration_sec: 300
+  co2_critical_ppm: 1500
+  env_data_stale_sec: 120
+  occ_data_stale_sec: 180
+
+hmm:
+  transition_matrix_30s:
+    - [0.985, 0.014, 0.001]
+    - [0.100, 0.600, 0.300]
+    - [0.003, 0.027, 0.970]
+
+ir:
+  codes:
+    POWER_OFF: "POWER_OFF_RAW_HASH_PLACEHOLDER"
+    COOL_24_AUTO: "COOL_24_AUTO_RAW_HASH_PLACEHOLDER"
+    COOL_25_AUTO: "COOL_25_AUTO_RAW_HASH_PLACEHOLDER"
+    COOL_26_AUTO: "COOL_26_AUTO_RAW_HASH_PLACEHOLDER"
