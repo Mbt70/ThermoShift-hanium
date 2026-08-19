@@ -5,6 +5,7 @@ import streamlit as st
 
 from app.components.auth_store import (
     current_user_email,
+    current_user_id,
     current_user_name,
     delete_user,
     is_logged_in,
@@ -200,7 +201,7 @@ with st.container(key="ts_account_card", border=True):
         _confirm_logout()
 
 st.markdown('<p class="ts-settings-section-label">공간 설정</p>', unsafe_allow_html=True)
-rooms = list_rooms(current_user_email())
+rooms = list_rooms(current_user_id())
 room_icon_uri = _icon_data_uri("meeting_room.svg")
 with st.container(key="ts_rooms_card", border=True):
     for room in rooms:

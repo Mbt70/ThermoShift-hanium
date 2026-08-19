@@ -1,6 +1,6 @@
 import streamlit as st
 
-from app.components.auth_store import current_user_email, is_logged_in
+from app.components.auth_store import current_user_id, is_logged_in
 from app.components.mobile_ui import apply_mobile_styles, inline_error, page_header
 from app.components.room_store import register_room
 
@@ -42,5 +42,5 @@ if submitted:
         with floor_plan_error:
             inline_error("이미지 형식이 올바르지 않습니다")
     if valid:
-        register_room(name, location, floor_plan.name, current_user_email())
+        register_room(name, location, floor_plan.name, current_user_id())
         st.switch_page("pages/room_list.py")
