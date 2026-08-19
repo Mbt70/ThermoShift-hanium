@@ -1,6 +1,6 @@
 import streamlit as st
 
-from app.components.auth_store import is_logged_in
+from app.components.auth_store import current_user_id, is_logged_in
 from app.components.control_log_store import get_log
 from app.components.inquiry_store import ADMIN_PHONE, submit_inquiry
 from app.components.mobile_ui import apply_mobile_styles, page_header
@@ -40,7 +40,7 @@ def _show_inquiry_dialog(room_id: str, log: dict) -> None:
         if not message.strip():
             st.warning("문의 내용을 입력해 주세요")
         else:
-            submit_inquiry(room_id=room_id, log_id=log["id"], message=message)
+            submit_inquiry(room_id=room_id, log_id=log["id"], user_id=current_user_id(), message=message)
             st.toast("문의가 접수됐어요")
             st.rerun()
 
