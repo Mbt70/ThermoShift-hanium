@@ -45,3 +45,6 @@ CREATE UNIQUE INDEX uq_sess_one_active
 
 -- simulations
 CREATE INDEX ix_sim_room_time ON simulations (room_id, created_at DESC);
+
+-- inquiries
+CREATE INDEX ix_inquiries_room ON inquiries (room_id, created_at DESC);

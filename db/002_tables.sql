@@ -1,10 +1,12 @@
 -- =====================================================================
--- ThermoShift 002_tables.sql  —  14 테이블 정의
+-- ThermoShift 002_tables.sql  —  15 테이블 정의
 -- 기준: 데이터 정의서 v2.3 / PostgreSQL 15+
 -- 실행 순서: 001_types.sql 다음.
 --
 -- [v2.3 변경분 표시]  각 컬럼 옆 주석에 [v2.3] 로 표기
 -- [확인 필요] 표시된 항목은 문서에 명시가 없어 제안값으로 채운 부분
+-- [DB 연동] inquiries 테이블은 원래 스키마엔 없었으나, 앱의 1:1 문의 기능을
+--          DB 연동하며 추가 (docs/api-status.md 참고)
 -- =====================================================================
 
 
@@ -342,6 +344,26 @@ CREATE TABLE simulations (
     CONSTRAINT fk_sim_room FOREIGN KEY (room_id)
         REFERENCES rooms (room_id) ON DELETE CASCADE,
     CONSTRAINT fk_sim_creator FOREIGN KEY (created_by)
+        REFERENCES users (user_id) ON DELETE SET NULL
+);
+
+
+-- ---------------------------------------------------------------------
+-- 15. inquiries — 1:1 문의 (앱 제어 로그 상세에서 접수)
+-- ---------------------------------------------------------------------
+CREATE TABLE inquiries (
+    inquiry_id  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    room_id     bigint        NOT NULL,
+    command_id  bigint,                    -- 어떤 제어 로그(hvac_commands)에 대한 문의인지, 없을 수도 있음
+    user_id     bigint,                    -- 문의한 사용자, 탈퇴 시 NULL로 남김
+    message     varchar(1000) NOT NULL,
+    created_at  timestamptz   NOT NULL DEFAULT now(),
+    CONSTRAINT ck_inquiries_message CHECK (length(trim(message)) > 0),
+    CONSTRAINT fk_inquiries_room FOREIGN KEY (room_id)
+        REFERENCES rooms (room_id) ON DELETE CASCADE,
+    CONSTRAINT fk_inquiries_command FOREIGN KEY (command_id)
+        REFERENCES hvac_commands (command_id) ON DELETE SET NULL,
+    CONSTRAINT fk_inquiries_user FOREIGN KEY (user_id)
         REFERENCES users (user_id) ON DELETE SET NULL
 );
 
