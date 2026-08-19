@@ -2,13 +2,16 @@
 
 ## 초기 세팅
 
-아직 기술 스택 확정 전입니다. 확정 후 아래 항목을 채웁니다.
-
-- Runtime:
-- Package manager:
+- Runtime: Python 3.13 (`.venv`), Node.js 24 (PWA 빌드용)
+- Package manager: pip (`requirements.txt`), npm (`package.json`, PWA 빌드 전용 - 런타임 의존성 없음)
 - Backend start command:
+  1. DB: `docker compose -f infra/docker-compose.yml up -d` (최초 실행 시 `db/001~003_*.sql`, `seed.sql`이 자동 적용됨)
+  2. API: `.venv\Scripts\uvicorn api.main:app --reload --port 8000`
 - Frontend start command:
-- Environment variables:
+  - 모바일 앱 (로컬 실행): `npm run dev` → `streamlit run app/main.py`
+  - 웹 관리자 콘솔: `npm run dev:web` → `streamlit run web/main.py --server.port 8502`
+  - 모바일 앱 (PWA 배포): `npm run build` → `pwa/` 산출물을 Vercel이 배포 (`vercel.json` 참고). **PWA 배포 관련 미해결 이슈는 [docs/api-status.md](./api-status.md) 참고.**
+- Environment variables: `.env.example` 참고 (DB 접속 정보, API 베이스 URL). 로컬 개발은 기본값만으로도 동작함 - `docker-compose.yml`의 기본 계정과 `api/db.py`/`shared/api_client.py`의 기본값이 서로 맞춰져 있음.
 
 ## 추천 개발 순서
 
