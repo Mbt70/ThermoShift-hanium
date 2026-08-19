@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from . import backend
+
 _STORE_PATH = Path(__file__).resolve().parents[2] / ".data" / "sensors.json"
 
 _TYPE_LABELS = {
@@ -60,6 +62,12 @@ def _save_sensors(sensors: list[dict]) -> None:
 
 
 def list_sensors(room_id: str) -> list[dict]:
+    # API의 devices 응답은 이미 센서 dict와 같은 키를 갖는다
+    # (id / room_id / name / type / enabled / location / status).
+    devices = backend.get(f"/api/rooms/{room_id}/devices")
+    if devices is not None:
+        return devices
+
     sensors = _load_sensors()
     if any(sensor["room_id"] == room_id for sensor in sensors):
         return [sensor for sensor in sensors if sensor["room_id"] == room_id]
@@ -69,6 +77,9 @@ def list_sensors(room_id: str) -> list[dict]:
 
 
 def set_sensor_enabled(sensor_id: str, enabled: bool) -> None:
+    if backend.patch(f"/api/devices/{sensor_id}", {"enabled": enabled}) is not None:
+        return
+
     sensors = _load_sensors()
     sensor = next((s for s in sensors if s["id"] == sensor_id), None)
     if sensor is None:

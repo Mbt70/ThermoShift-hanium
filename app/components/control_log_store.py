@@ -3,6 +3,8 @@ import uuid
 from datetime import date, datetime
 from pathlib import Path
 
+from . import backend
+
 _STORE_PATH = Path(__file__).resolve().parents[2] / ".data" / "control_logs.json"
 
 _METHOD_LABELS = {"rule": "규칙", "manual": "수동", "predict": "예측"}
@@ -111,6 +113,23 @@ def record_log(
     failure_title: str | None = None,
     error_code: str | None = None,
 ) -> dict:
+    created = backend.post(
+        "/api/control/commands",
+        json={"action": content, "method": method},
+        params={"room_id": room_id},
+    )
+    if created is not None:
+        return {
+            "id": f"command:{created['id']}",
+            "room_id": room_id,
+            "timestamp": datetime.now(),
+            "method": method,
+            "content": content,
+            "success": success,
+            "failure_title": failure_title,
+            "error_code": error_code if not success else None,
+        }
+
     logs = _load_recorded()
     entry = {
         "id": uuid.uuid4().hex,
@@ -127,6 +146,39 @@ def record_log(
     return entry
 
 
+def _from_api(entry: dict) -> dict:
+    """API 로그 응답을 프론트가 쓰던 dict 형태로 맞춘다.
+
+    가장 중요한 차이는 timestamp 다. 페이지들은 datetime 객체를 기대하는데
+    API는 ISO 문자열(로컬 시간대)을 준다.
+    """
+    timestamp = entry.get("timestamp")
+    if isinstance(timestamp, str):
+        try:
+            parsed = datetime.fromisoformat(timestamp)
+            # 이후 비교/표시는 모두 로컬 naive 기준이라 tz 정보를 떼어낸다.
+            timestamp = parsed.replace(tzinfo=None)
+        except ValueError:
+            timestamp = None
+    return {
+        "id": entry["id"],
+        "room_id": entry.get("room_id"),
+        "timestamp": timestamp,
+        "method": entry.get("method"),
+        "content": entry.get("content"),
+        "success": entry.get("success", True),
+        "failure_title": entry.get("failure_title"),
+        "error_code": entry.get("error_code"),
+        # API에만 있는 부가 정보. 상세 화면에서 제어 근거를 보여줄 때 쓴다.
+        "reason_codes": entry.get("reason_codes", []),
+        "simulated": entry.get("simulated", False),
+        "control_mode": entry.get("control_mode"),
+        "occupancy_state": entry.get("occupancy_state"),
+        "temperature": entry.get("temperature"),
+        "co2": entry.get("co2"),
+    }
+
+
 def _with_catalog_fields(entry: dict) -> dict:
     catalog_entry = ERROR_CATALOG.get(entry["error_code"], {}) if entry["error_code"] else {}
     return {
@@ -138,6 +190,14 @@ def _with_catalog_fields(entry: dict) -> dict:
 
 
 def list_logs(room_id: str, day: date, method: str | None = None) -> list[dict]:
+    remote = backend.get(
+        "/api/control/logs",
+        {"room_id": room_id, "date": day.isoformat(), **({"method": method} if method else {})},
+    )
+    if remote is not None:
+        logs = [_with_catalog_fields(_from_api(entry)) for entry in remote]
+        return sorted(logs, key=lambda log: log["timestamp"] or datetime.min)
+
     entries = _demo_entries(room_id, day) + [
         log for log in _load_recorded() if log["room_id"] == room_id
     ]
@@ -174,6 +234,9 @@ def _alert_as_log(alert_id: str) -> dict | None:
 def get_log(log_id: str) -> dict | None:
     if log_id.startswith("alert_"):
         return _alert_as_log(log_id[len("alert_") :])
+    if log_id.startswith(("decision:", "command:")):
+        remote = backend.get(f"/api/control/logs/{log_id}")
+        return _with_catalog_fields(_from_api(remote)) if remote else None
     recorded = next((log for log in _load_recorded() if log["id"] == log_id), None)
     if recorded is not None:
         return _with_catalog_fields(recorded)

@@ -3,6 +3,8 @@ import uuid
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
+from . import backend
+
 _STORE_PATH = Path(__file__).resolve().parents[2] / ".data" / "schedules.json"
 
 _WEEKDAY_CODES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -43,6 +45,10 @@ def _save_schedules(schedules: list[dict]) -> None:
 
 
 def list_schedules(room_id: str) -> list[dict]:
+    remote = backend.get("/api/schedules", {"room_id": room_id})
+    if remote is not None:
+        return sorted(remote, key=lambda s: s["start_time"])
+
     schedules = [s for s in _load_schedules() if s["room_id"] == room_id]
     return sorted(schedules, key=lambda s: s["start_time"])
 
@@ -60,6 +66,9 @@ def list_today_schedules(room_id: str) -> list[dict]:
 
 
 def get_schedule(schedule_id: str) -> dict | None:
+    remote = backend.get(f"/api/schedules/{schedule_id}")
+    if remote is not None:
+        return remote
     return next(
         (s for s in _load_schedules() if s["id"] == schedule_id), None
     )
@@ -78,6 +87,21 @@ def create_schedule(
     repeat_enabled: bool,
     repeat_days: list[str],
 ) -> dict:
+    payload = {
+        "title": title,
+        "date": schedule_date.isoformat(),
+        "start_time": start_time.strftime("%H:%M"),
+        "end_time": end_time.strftime("%H:%M"),
+        "target_temperature": target_temperature,
+        "precool_enabled": precool_enabled,
+        "precool_minutes_before": precool_minutes_before,
+        "repeat_enabled": repeat_enabled,
+        "repeat_days": repeat_days,
+    }
+    created = backend.post("/api/schedules", json=payload, params={"room_id": room_id})
+    if created is not None:
+        return created
+
     schedules = _load_schedules()
     schedule = {
         "id": uuid.uuid4().hex,
@@ -111,6 +135,20 @@ def update_schedule(
     repeat_enabled: bool,
     repeat_days: list[str],
 ) -> None:
+    payload = {
+        "title": title,
+        "date": schedule_date.isoformat(),
+        "start_time": start_time.strftime("%H:%M"),
+        "end_time": end_time.strftime("%H:%M"),
+        "target_temperature": target_temperature,
+        "precool_enabled": precool_enabled,
+        "precool_minutes_before": precool_minutes_before,
+        "repeat_enabled": repeat_enabled,
+        "repeat_days": repeat_days,
+    }
+    if backend.put(f"/api/schedules/{schedule_id}", payload) is not None:
+        return
+
     schedules = _load_schedules()
     schedule = next((s for s in schedules if s["id"] == schedule_id), None)
     if schedule is None:
@@ -130,6 +168,8 @@ def update_schedule(
 
 
 def delete_schedule(schedule_id: str) -> None:
+    if backend.delete(f"/api/schedules/{schedule_id}") is not None:
+        return
     schedules = [s for s in _load_schedules() if s["id"] != schedule_id]
     _save_schedules(schedules)
 

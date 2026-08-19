@@ -6,6 +6,8 @@ import json
 from datetime import date, datetime
 from pathlib import Path
 
+from . import backend
+
 _READ_STORE_PATH = Path(__file__).resolve().parents[2] / ".data" / "alert_reads.json"
 
 ALERT_TYPE_CONFIG = {
@@ -91,8 +93,47 @@ _MOCK_ALERTS = [
 ]
 
 
+def _api_alerts(params: dict | None = None) -> list[dict] | None:
+    """API 알림을 프론트 dict 형태로 변환한다.
+
+    프론트는 시각을 'HH:MM' 문자열로, 공간을 이름 문자열로 기대한다.
+    """
+    remote = backend.get("/api/alerts", params or {"status": "active"})
+    if remote is None:
+        return None
+
+    alerts = []
+    for item in remote:
+        created_at = item.get("created_at")
+        timestamp = None
+        if created_at:
+            try:
+                timestamp = datetime.fromisoformat(created_at).replace(tzinfo=None)
+            except ValueError:
+                timestamp = None
+        alerts.append(
+            {
+                "id": item["id"],
+                "room_id": item.get("room_id"),
+                "room": item.get("room") or "-",
+                "device_id": item.get("device_id"),
+                "type": item["type"],
+                "severity": item.get("severity", "warning"),
+                "title": item["title"],
+                "message": item.get("message") or "",
+                "timestamp": timestamp,
+                "time": timestamp.strftime("%H:%M") if timestamp else "",
+                "status": item.get("status", "active"),
+                "read": item.get("read", False),
+            }
+        )
+    return alerts
+
+
 def list_alerts(filter_label: str | None = None) -> list[dict]:
-    alerts = list(_MOCK_ALERTS)
+    alerts = _api_alerts()
+    if alerts is None:
+        alerts = list(_MOCK_ALERTS)
     if filter_label and filter_label != "전체":
         alert_type = next(
             (t for t, cfg in ALERT_TYPE_CONFIG.items() if cfg["filter_label"] == filter_label),
@@ -103,14 +144,27 @@ def list_alerts(filter_label: str | None = None) -> list[dict]:
 
 
 def get_alert(alert_id: str) -> dict | None:
+    alerts = _api_alerts({"status": "all"})
+    if alerts is not None:
+        return next((alert for alert in alerts if alert["id"] == alert_id), None)
     return next((alert for alert in _MOCK_ALERTS if alert["id"] == alert_id), None)
 
 
 def active_alert_count() -> int:
+    summary = backend.get("/api/alerts/summary")
+    if summary is not None:
+        return summary.get("active", 0)
     return sum(1 for alert in _MOCK_ALERTS if alert["status"] == "active")
 
 
 def alert_severity_counts() -> dict:
+    summary = backend.get("/api/alerts/summary")
+    if summary is not None:
+        return {
+            "critical": summary.get("critical", 0),
+            "warning": summary.get("warning", 0),
+        }
+
     counts = {"critical": 0, "warning": 0}
     for alert in _MOCK_ALERTS:
         if alert["status"] != "active":
@@ -150,6 +204,9 @@ def _save_read_ids(ids: set[str]) -> None:
 
 
 def mark_alert_read(alert_id: str) -> None:
+    if backend.post(f"/api/alerts/{alert_id}/read") is not None:
+        return
+
     ids = _load_read_ids()
     if alert_id not in ids:
         ids.add(alert_id)
@@ -173,6 +230,14 @@ def _room_demo_entry(room_id: str, day: date, entry: tuple, read_ids: set[str]) 
 
 
 def list_room_alerts(room_id: str, day: date) -> list[dict]:
+    remote = _api_alerts({"room_id": room_id, "status": "all"})
+    if remote is not None:
+        same_day = [
+            alert for alert in remote
+            if alert["timestamp"] is not None and alert["timestamp"].date() == day
+        ]
+        return sorted(same_day, key=lambda alert: alert["timestamp"])
+
     if day != date.today():
         return []
     read_ids = _load_read_ids()
