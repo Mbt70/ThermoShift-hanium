@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: thermoshift-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: thermoshift
+      POSTGRES_PASSWORD: thermoshift1234
+      POSTGRES_DB: thermoshift
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U thermoshift -d thermoshift"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
