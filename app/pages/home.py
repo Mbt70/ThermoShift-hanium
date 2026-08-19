@@ -306,6 +306,11 @@ with st.container(key="ts_reservation_card", border=True):
 
 temps, co2s = trend_series(room)
 with st.container(key="ts_trend_card", border=True):
+    trend_body = (
+        _trend_svg(temps, co2s, room["target_temperature"])
+        if temps and co2s
+        else '<p class="ts-trend-empty">최근 30분간 수신된 센서 데이터가 없어요</p>'
+    )
     st.markdown(
         f"""
         <div class="ts-trend-header">
@@ -315,7 +320,7 @@ with st.container(key="ts_trend_card", border=True):
             <span class="ts-legend-item ts-legend-co2">CO₂</span>
           </div>
         </div>
-        {_trend_svg(temps, co2s, room["target_temperature"])}
+        {trend_body}
         """,
         unsafe_allow_html=True,
     )
