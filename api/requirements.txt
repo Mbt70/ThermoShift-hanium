@@ -1,0 +1,5 @@
+# 프론트(requirements.txt)가 고정한 starlette/uvicorn 버전과 한 가상환경에서
+# 공존할 수 있는 조합입니다. fastapi 0.115.x 는 starlette<0.42 를 요구해 충돌합니다.
+fastapi==0.141.1
+uvicorn[standard]==0.51.0
+pydantic==2.10.4
