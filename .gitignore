@@ -42,3 +42,6 @@ outputs/
 
 # 게이트웨이 로컬 설정 (example만 커밋)
 gateway/config/config.yaml
+
+# stlite 빌드가 생성하는 API 주소 설정 (pwa/ 로 구워짐)
+app/api_config.json

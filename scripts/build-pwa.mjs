@@ -85,6 +85,20 @@ function main() {
     filesManifest[`app/${rel}`] = { url: `./app/${rel}` };
   }
 
+  // 브라우저에서는 환경변수를 읽을 수 없으므로, 백엔드 주소를 빌드 시점에
+  // 설정 파일로 구워 넣는다. Vercel 프로젝트 설정의 THERMOSHIFT_API_BASE
+  // 환경변수를 그대로 쓴다. 비어 있으면 app/components/backend.py 가
+  // API를 끄고 로컬 목데이터로 동작한다.
+  const apiBase = (process.env.THERMOSHIFT_API_BASE || "").replace(/\/$/, "");
+  const apiConfigPath = path.join(PWA_APP_OUT, "api_config.json");
+  writeFileSync(apiConfigPath, JSON.stringify({ api_base: apiBase }, null, 2), "utf8");
+  filesManifest["app/api_config.json"] = { url: "./app/api_config.json" };
+  console.log(
+    apiBase
+      ? `[build-pwa] api_base = ${apiBase}`
+      : "[build-pwa] api_base 미설정 - 목데이터 모드로 동작합니다",
+  );
+
   const indexHtml = renderIndexHtml(filesManifest);
   writeFileSync(path.join(PWA_OUT, "index.html"), indexHtml, "utf8");
 
@@ -123,6 +137,9 @@ function renderIndexHtml(filesManifest) {
 
       mount(
         {
+          // requests 는 Pyodide에서 소켓을 못 써 동작하지 않는다.
+          // app/components/backend.py 가 이를 감지해 동기 XMLHttpRequest
+          // 전송으로 자동 전환하므로, 여기에 추가하지 않는다.
           requirements: [],
           entrypoint: "app/main.py",
           files,
