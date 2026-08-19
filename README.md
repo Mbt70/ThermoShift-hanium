@@ -90,30 +90,50 @@ ThermoShift는 실증 공간의 **센서 데이터 수집**, **HVAC 제어**, **
 
 ```text
 .
-├── README.md                    # 프로젝트 소개와 빠른 시작
-├── CONTRIBUTING.md              # 협업 규칙
-├── docs/
-│   ├── project-brief.md          # 문제정의/목표/범위
-│   ├── architecture.md           # 시스템 구조 초안
-│   ├── development-guide.md      # 개발 환경/브랜치/커밋 규칙
-│   ├── decision-log.md           # 주요 의사결정 기록
-│   └── meetings/                 # 회의록
-└── .github/
-    ├── PULL_REQUEST_TEMPLATE.md
-    └── ISSUE_TEMPLATE/
-        ├── bug_report.md
-        └── feature_request.md
+├── README.md
+├── CONTRIBUTING.md
+├── firmware/                    # ESP32 센서 노드 스케치
+├── gateway/                     # 제어 두뇌: MQTT 수집 · 재실 추정 · HVAC 제어
+│   ├── app/                     #   controller / occupancy_hmm / ir_adapter ...
+│   └── config/                  #   config.example.yaml (로컬 config.yaml은 미커밋)
+├── api/                         # FastAPI. 프론트용 데이터·제어 API
+│   └── app/routers/             #   auth / rooms / devices / control / alerts / schedules
+├── db/
+│   ├── schema/schema.sql        # 통합 SQLite 스키마 (단일 관리 지점)
+│   └── migrate.py               # 마이그레이션 (반복 실행 안전)
+├── app/                         # Streamlit 모바일 화면
+│   └── components/              #   *_store.py — 두 프론트가 공유하는 데이터 계층
+├── web/                         # Streamlit 데스크톱 대시보드
+├── infra/systemd/               # 서비스 등록 파일과 install.sh
+└── docs/
+    ├── project-brief.md
+    ├── architecture.md          # 실제 동작 구조
+    ├── development-guide.md
+    ├── decision-log.md
+    └── meetings/
 ```
 
-추후 개발이 시작되면 아래처럼 확장합니다.
+데이터 흐름과 역할 경계는 [`docs/architecture.md`](./docs/architecture.md)에
+정리되어 있습니다.
 
-```text
-backend/       # API 서버, DB 연동, 추천/제어 로직
-frontend/      # 웹/앱 대시보드
-ml/            # 재실 추정, 제어 고도화, 실험 노트
-hardware/      # 센서/IoT 연동 코드와 회로/장비 문서
-data/          # 샘플 데이터 또는 데이터 스키마 문서
-scripts/       # 개발/분석/배포 보조 스크립트
+## 빠른 시작
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt -r api/requirements.txt -r gateway/requirements.txt
+python3 db/migrate.py
+cp gateway/config/config.example.yaml gateway/config/config.yaml
+
+# 라즈베리파이에서 3개 서비스 등록
+bash infra/systemd/install.sh
+```
+
+프론트만 띄워 화면 작업을 할 때는 백엔드가 없어도 됩니다.
+`THERMOSHIFT_API_BASE` 를 설정하지 않으면 store가 자동으로 목데이터로
+동작합니다.
+
+```bash
+.venv/bin/python -m streamlit run web/main.py
 ```
 
 ## 협업 흐름
