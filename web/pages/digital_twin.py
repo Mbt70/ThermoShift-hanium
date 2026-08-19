@@ -17,7 +17,7 @@ from app.components.room_store import (
     set_control_mode,
     system_judgment,
 )
-from components.auth_store import current_user_email, is_logged_in
+from components.auth_store import current_user_id, is_logged_in
 from components.dash_shell import render_sidebar
 from components.mobile_ui import apply_mobile_styles, icon_data_uri, recolored_icon_data_uri
 
@@ -87,7 +87,7 @@ apply_mobile_styles("digital_twin", shared=("dash_shell", "home", "room_detail")
 if not is_logged_in():
     st.switch_page("pages/login.py")
 
-rooms = list_rooms(current_user_email())
+rooms = list_rooms(current_user_id())
 
 selected_id = st.session_state.get("_web_selected_room")
 if selected_id and not any(r["id"] == selected_id for r in rooms):

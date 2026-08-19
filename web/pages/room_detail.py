@@ -28,7 +28,7 @@ from app.components.schedule_store import (
     schedule_status,
     update_schedule,
 )
-from components.auth_store import current_user_email, is_logged_in
+from components.auth_store import current_user_id, is_logged_in
 from components.dash_shell import render_sidebar
 from components.mobile_ui import apply_mobile_styles, icon_data_uri
 
@@ -336,7 +336,7 @@ apply_mobile_styles("room_detail", shared=("dash_shell", "home"))
 if not is_logged_in():
     st.switch_page("pages/login.py")
 
-rooms = list_rooms(current_user_email())
+rooms = list_rooms(current_user_id())
 
 selected_id = st.session_state.get("_web_selected_room")
 if selected_id and not any(r["id"] == selected_id for r in rooms):
@@ -463,7 +463,6 @@ with main_col:
                     _trend_chart(temps, co2s, room["target_temperature"]),
                     width="stretch",
                 )
-
                 schedules = list_today_schedules(room["id"])
                 res_head_col, res_link_col = st.columns([2, 1], vertical_alignment="center")
                 with res_head_col:

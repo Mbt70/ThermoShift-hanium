@@ -20,7 +20,7 @@ from app.components.room_store import (
     system_judgment,
 )
 from app.components.schedule_store import list_today_schedules
-from components.auth_store import current_user_email, is_logged_in
+from components.auth_store import current_user_id, is_logged_in
 from components.dash_shell import render_sidebar, render_topbar
 from components.mobile_ui import apply_mobile_styles, icon_data_uri, recolored_icon_data_uri
 
@@ -226,16 +226,23 @@ apply_mobile_styles("home", shared=("dash_shell",))
 if not is_logged_in():
     st.switch_page("pages/login.py")
 
-rooms = list_rooms(current_user_email())
+rooms = list_rooms(current_user_id())
 snapshots = {r["id"]: environment_snapshot(r) for r in rooms}
 room_count = len(rooms)
 
-avg_temp = sum(s["temperature"] for s in snapshots.values()) / room_count if room_count else 0.0
-avg_co2 = sum(s["co2"] for s in snapshots.values()) / room_count if room_count else 0.0
-total_power = sum(s["power"] for s in snapshots.values())
+# A brand-new room (or one whose sensor hasn't reported yet) has no reading
+# at all rather than a mock-random float, so temperature/co2/power can be
+# None here - average/sum only over the rooms that actually have a value.
+temps = [s["temperature"] for s in snapshots.values() if s["temperature"] is not None]
+co2s = [s["co2"] for s in snapshots.values() if s["co2"] is not None]
+powers = [s["power"] for s in snapshots.values() if s["power"] is not None]
+
+avg_temp = sum(temps) / len(temps) if temps else 0.0
+avg_co2 = sum(co2s) / len(co2s) if co2s else 0.0
+total_power = sum(powers)
 active_count = sum(1 for r in rooms if r.get("occupied"))
 occupancy_rate = round(active_count / room_count * 100) if room_count else 0
-severity = alert_severity_counts()
+severity = alert_severity_counts([r["id"] for r in rooms])
 alert_total = severity["critical"] + severity["warning"]
 power_delta_pct = round(random.Random(f"power-yday-{datetime.now().date()}").uniform(-9, 6), 1)
 

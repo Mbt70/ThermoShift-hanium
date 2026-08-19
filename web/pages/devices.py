@@ -9,7 +9,7 @@ if str(_REPOSITORY_ROOT) not in sys.path:
 
 from app.components.room_store import delete_room, list_rooms, register_room, update_room
 from app.components.sensor_store import list_sensors, sensor_type_label, set_sensor_enabled
-from components.auth_store import current_user_email, is_logged_in
+from components.auth_store import current_user_id, is_logged_in
 from components.dash_shell import render_sidebar, render_topbar
 from components.mobile_ui import apply_mobile_styles, inline_error, recolored_icon_data_uri
 
@@ -19,13 +19,14 @@ _BUILDING_ICON = (
     '<rect x="7" y="7" width="10" height="10" rx="1.5"/>'
     '<path d="M9.5 7V4M14.5 7V4M9.5 20v-3M14.5 20v-3M7 9.5H4M7 14.5H4M20 9.5h-3M20 14.5h-3"/></svg>'
 )
-_STATUS_LABELS = {"success": "성공", "disconnected": "끊김"}
+_STATUS_LABELS = {"normal": "정상", "offline": "오프라인", "error": "오류"}
+_STATUS_CLASSES = {"normal": "is-success", "offline": "is-offline", "error": "is-error"}
 apply_mobile_styles("devices", shared=("dash_shell",))
 
 if not is_logged_in():
     st.switch_page("pages/login.py")
 
-rooms = list_rooms(current_user_email())
+rooms = list_rooms(current_user_id())
 
 sidebar_col, main_col = st.columns([1, 4], gap="small")
 
@@ -75,10 +76,11 @@ with main_col:
                             )
                     with row_cols[3]:
                         status = sensor.get("status")
-                        if status:
-                            status_class = "is-success" if status == "success" else "is-error"
+                        # "unknown" (the DB default for a never-reported device) reads the
+                        # same as "no status yet" did in the old mock - no badge at all.
+                        if status and status != "unknown":
                             st.markdown(
-                                f'<span class="ts-sensor-status {status_class}">'
+                                f'<span class="ts-sensor-status {_STATUS_CLASSES[status]}">'
                                 f'<span class="ts-sensor-status-dot"></span>{_STATUS_LABELS[status]}</span>',
                                 unsafe_allow_html=True,
                             )
@@ -185,7 +187,7 @@ with main_col:
                 if submitted:
                     if name and location:
                         register_room(
-                            name, location, floor_plan.name if floor_plan else "", current_user_email()
+                            name, location, floor_plan.name if floor_plan else "", current_user_id()
                         )
                         st.toast(f"'{name}' 공간이 등록됐어요", icon="✅")
                         st.rerun()

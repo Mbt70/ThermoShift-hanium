@@ -1,9 +1,12 @@
-import json
-import uuid
+import sys
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
-_STORE_PATH = Path(__file__).resolve().parents[2] / ".data" / "schedules.json"
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPOSITORY_ROOT))
+
+from app.components.api_client import api_delete, api_get, api_patch, api_post
 
 _WEEKDAY_CODES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 _WEEKDAY_LABELS = {
@@ -15,59 +18,98 @@ _WEEKDAY_LABELS = {
     "sat": "토",
     "sun": "일",
 }
+# DB repeat_days is smallint[] using ISO weekday numbers (1=Mon..7=Sun).
+_CODE_TO_DB_DAY = {code: i + 1 for i, code in enumerate(_WEEKDAY_CODES)}
+_DB_DAY_TO_CODE = {i + 1: code for i, code in enumerate(_WEEKDAY_CODES)}
 
-_DEFAULT_FIELDS = {
-    "title": "",
-    "precool_enabled": False,
-    "precool_minutes_before": 20,
-    "repeat_enabled": False,
-    "repeat_days": [],
-}
-
-
-def _load_schedules() -> list[dict]:
-    if not _STORE_PATH.exists():
-        return []
-    schedules = json.loads(_STORE_PATH.read_text(encoding="utf-8"))
-    for schedule in schedules:
-        for field, default in _DEFAULT_FIELDS.items():
-            schedule.setdefault(field, default)
-    return schedules
+# Repeating schedules can't be open-ended in the DB (ck_sched_no_infinite),
+# so a repeat with no explicit end date gets a long-but-bounded window.
+_DEFAULT_REPEAT_WINDOW_DAYS = 180
 
 
-def _save_schedules(schedules: list[dict]) -> None:
-    _STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _STORE_PATH.write_text(
-        json.dumps(schedules, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+def _from_api(row: dict) -> dict:
+    repeat_days = [_DB_DAY_TO_CODE[d] for d in row.get("repeat_days") or [] if d in _DB_DAY_TO_CODE]
+    precooling_min = row.get("precooling_min") or 0
+    return {
+        "id": row["schedule_id"],
+        "room_id": row["room_id"],
+        "title": row.get("title") or "",
+        "date": row["valid_from"],
+        "valid_until": row.get("valid_until"),
+        "start_time": row["start_time"][:5],
+        "end_time": row["end_time"][:5],
+        "target_temperature": row["target_temp"],
+        "precool_enabled": precooling_min > 0,
+        "precool_minutes_before": precooling_min if precooling_min > 0 else 20,
+        "repeat_enabled": bool(repeat_days),
+        "repeat_days": repeat_days,
+    }
 
 
-def list_schedules(room_id: str) -> list[dict]:
-    schedules = [s for s in _load_schedules() if s["room_id"] == room_id]
+def list_schedules(room_id: int) -> list[dict]:
+    rows = api_get(f"/rooms/{room_id}/schedules") or []
+    schedules = [_from_api(row) for row in rows]
     return sorted(schedules, key=lambda s: s["start_time"])
 
 
-def list_today_schedules(room_id: str) -> list[dict]:
+def list_today_schedules(room_id: int) -> list[dict]:
     today = date.today()
     today_code = _WEEKDAY_CODES[today.weekday()]
     schedules = []
     for schedule in list_schedules(room_id):
-        is_anchor_date = schedule["date"] == today.isoformat()
-        is_repeat_today = schedule["repeat_enabled"] and today_code in schedule["repeat_days"]
-        if is_anchor_date or is_repeat_today:
+        valid_from = date.fromisoformat(schedule["date"])
+        if schedule["repeat_enabled"]:
+            valid_until = (
+                date.fromisoformat(schedule["valid_until"]) if schedule["valid_until"] else None
+            )
+            in_window = valid_from <= today and (valid_until is None or today <= valid_until)
+            if in_window and today_code in schedule["repeat_days"]:
+                schedules.append(schedule)
+        elif valid_from == today:
             schedules.append(schedule)
     return schedules
 
 
-def get_schedule(schedule_id: str) -> dict | None:
-    return next(
-        (s for s in _load_schedules() if s["id"] == schedule_id), None
+def get_schedule(schedule_id: int) -> dict | None:
+    row = api_get(f"/schedules/{schedule_id}", ignore_404=True)
+    return _from_api(row) if row else None
+
+
+def _request_fields(
+    *,
+    title: str,
+    schedule_date: date,
+    start_time: time,
+    end_time: time,
+    target_temperature: int,
+    precool_enabled: bool,
+    precool_minutes_before: int,
+    repeat_enabled: bool,
+    repeat_days: list[str],
+    created_by: int | None = None,
+) -> dict:
+    db_days = sorted(_CODE_TO_DB_DAY[code] for code in repeat_days if code in _CODE_TO_DB_DAY)
+    valid_until = (
+        (schedule_date + timedelta(days=_DEFAULT_REPEAT_WINDOW_DAYS)).isoformat()
+        if repeat_enabled and db_days
+        else None
     )
+    return {
+        "title": title or None,
+        "valid_from": schedule_date.isoformat(),
+        "valid_until": valid_until,
+        "start_time": start_time.strftime("%H:%M"),
+        "end_time": end_time.strftime("%H:%M"),
+        "repeat_days": db_days if repeat_enabled else [],
+        "target_temp": target_temperature,
+        "precooling_min": precool_minutes_before if precool_enabled else 0,
+        "created_by": created_by,
+    }
 
 
 def create_schedule(
     *,
-    room_id: str,
+    room_id: int,
     title: str = "",
     schedule_date: date,
     start_time: time,
@@ -78,28 +120,18 @@ def create_schedule(
     repeat_enabled: bool,
     repeat_days: list[str],
 ) -> dict:
-    schedules = _load_schedules()
-    schedule = {
-        "id": uuid.uuid4().hex,
-        "room_id": room_id,
-        "title": title,
-        "date": schedule_date.isoformat(),
-        "start_time": start_time.strftime("%H:%M"),
-        "end_time": end_time.strftime("%H:%M"),
-        "target_temperature": target_temperature,
-        "precool_enabled": precool_enabled,
-        "precool_minutes_before": precool_minutes_before,
-        "repeat_enabled": repeat_enabled,
-        "repeat_days": repeat_days,
-        "created_at": datetime.now().isoformat(),
-    }
-    schedules.append(schedule)
-    _save_schedules(schedules)
-    return schedule
+    fields = _request_fields(
+        title=title, schedule_date=schedule_date, start_time=start_time, end_time=end_time,
+        target_temperature=target_temperature, precool_enabled=precool_enabled,
+        precool_minutes_before=precool_minutes_before, repeat_enabled=repeat_enabled,
+        repeat_days=repeat_days,
+    )
+    row = api_post(f"/rooms/{room_id}/schedules", json=fields)
+    return _from_api(row)
 
 
 def update_schedule(
-    schedule_id: str,
+    schedule_id: int,
     *,
     title: str = "",
     schedule_date: date,
@@ -111,27 +143,17 @@ def update_schedule(
     repeat_enabled: bool,
     repeat_days: list[str],
 ) -> None:
-    schedules = _load_schedules()
-    schedule = next((s for s in schedules if s["id"] == schedule_id), None)
-    if schedule is None:
-        return
-    schedule.update(
-        title=title,
-        date=schedule_date.isoformat(),
-        start_time=start_time.strftime("%H:%M"),
-        end_time=end_time.strftime("%H:%M"),
-        target_temperature=target_temperature,
-        precool_enabled=precool_enabled,
-        precool_minutes_before=precool_minutes_before,
-        repeat_enabled=repeat_enabled,
+    fields = _request_fields(
+        title=title, schedule_date=schedule_date, start_time=start_time, end_time=end_time,
+        target_temperature=target_temperature, precool_enabled=precool_enabled,
+        precool_minutes_before=precool_minutes_before, repeat_enabled=repeat_enabled,
         repeat_days=repeat_days,
     )
-    _save_schedules(schedules)
+    api_patch(f"/schedules/{schedule_id}", json=fields)
 
 
-def delete_schedule(schedule_id: str) -> None:
-    schedules = [s for s in _load_schedules() if s["id"] != schedule_id]
-    _save_schedules(schedules)
+def delete_schedule(schedule_id: int) -> None:
+    api_delete(f"/schedules/{schedule_id}", ignore_404=True)
 
 
 def repeat_days_label(schedule: dict) -> str:
