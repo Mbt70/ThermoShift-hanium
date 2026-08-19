@@ -4,6 +4,7 @@ from contextlib import contextmanager
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
@@ -11,22 +12,29 @@ DB_USER = os.getenv("DB_USER", "thermoshift")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "thermoshift1234")
 DB_NAME = os.getenv("DB_NAME", "thermoshift")
 
+_CONNINFO = psycopg.conninfo.make_conninfo(
+    host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, dbname=DB_NAME
+)
+
+# Every request was opening a brand-new TCP + auth handshake to Postgres
+# (psycopg.connect() per call), which is most of why every click felt
+# laggy - a pool reuses a small set of already-open connections instead.
+_pool = ConnectionPool(
+    _CONNINFO,
+    min_size=1,
+    max_size=10,
+    kwargs={"row_factory": dict_row},
+    open=False,
+)
+_pool.open()
+
 
 @contextmanager
 def get_conn() -> Iterator[psycopg.Connection]:
-    """Opens a psycopg connection with dict-row results, closing it on exit.
+    """Borrows a pooled connection with dict-row results, returning it to
+    the pool (not closing it) on exit.
 
     Usage: `with get_conn() as conn, conn.cursor() as cur: ...`
     """
-    conn = psycopg.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        dbname=DB_NAME,
-        row_factory=dict_row,
-    )
-    try:
+    with _pool.connection() as conn:
         yield conn
-    finally:
-        conn.close()

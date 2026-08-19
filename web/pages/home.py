@@ -107,12 +107,15 @@ def _temp_rgb(temp: float) -> tuple[int, int, int]:
     return _HEAT_STOPS[-1][1]
 
 
-def _heat_thumb_style(room_id: str, temp: float) -> str:
+def _heat_thumb_style(room_id: str, temp: float | None) -> str:
     # No real floor-plan/render exists yet - stands in with a flat tint
     # (still keyed to the room's live temperature, same blue->teal->red
     # scale as the legend) plus a centered room icon, rather than a busy
     # gradient that read as an odd green blob.
-    r, g, b = _temp_rgb(temp)
+    # A room with no env sensor reading yet (freshly registered, no
+    # devices installed) has temp=None rather than the mock's always-on
+    # random float - fall back to a neutral gray tint instead of crashing.
+    r, g, b = _temp_rgb(temp) if temp is not None else (152, 161, 171)
     tint = tuple(round(c + (255 - c) * 0.62) for c in (r, g, b))
     icon_uri = recolored_icon_data_uri("meeting_room.svg", f"rgba({r},{g},{b},0.55)")
     return (
@@ -145,11 +148,8 @@ def _history_series(rooms: list[dict], snapshots: dict, metric: str, n_points: i
     # room's *current* live values), so this synthesizes a plausible walk
     # that ends at today's real average - same deterministic-seed approach
     # room_store.trend_series already uses for its single-room 30-point chart.
-    base = (
-        sum(snapshots[r["id"]][metric] for r in rooms) / len(rooms)
-        if rooms
-        else (24.0 if metric == "temperature" else 700.0)
-    )
+    values = [snapshots[r["id"]][metric] for r in rooms if snapshots[r["id"]][metric] is not None]
+    base = sum(values) / len(values) if values else (24.0 if metric == "temperature" else 700.0)
     step = 0.3 if metric == "temperature" else 18
     rnd = random.Random(f"history-{metric}-{seed_suffix}-{len(rooms)}")
     value = base + rnd.uniform(-step * 3, step * 3)
@@ -341,10 +341,10 @@ with main_col:
                                       <span class="ts-dash-status-badge ts-dash-status-{status_class}">{status}</span>
                                     </div>
                                     <div class="ts-dash-room-card-stats">
-                                      <span><img src="{icon_data_uri("temperture.svg")}" alt="" />{snap["temperature"]:.1f}°C</span>
-                                      <span><img src="{icon_data_uri("co2.svg")}" alt="" />CO₂ {snap["co2"]:.0f}ppm</span>
+                                      <span><img src="{icon_data_uri("temperture.svg")}" alt="" />{f'{snap["temperature"]:.1f}°C' if snap["temperature"] is not None else "--"}</span>
+                                      <span><img src="{icon_data_uri("co2.svg")}" alt="" />CO₂ {f'{snap["co2"]:.0f}ppm' if snap["co2"] is not None else "--"}</span>
                                       <span><img src="{icon_data_uri("web_door.svg")}" alt="" />사용율 {usage_pct}%</span>
-                                      <span><img src="{icon_data_uri("web_bolt.svg")}" alt="" />전력 {snap["power"]:.2f}kW</span>
+                                      <span><img src="{icon_data_uri("web_bolt.svg")}" alt="" />전력 {f'{snap["power"]:.2f}kW' if snap["power"] is not None else "--"}</span>
                                     </div>
                                     """,
                                     unsafe_allow_html=True,
@@ -451,14 +451,19 @@ with main_col:
                     unsafe_allow_html=True,
                 )
 
-        ranked = sorted(rooms, key=lambda r: snapshots[r["id"]]["power"], reverse=True)
-        online_powers = [snapshots[r["id"]]["power"] for r in ranked if r.get("sensor_connected", True)]
+        # power can be None (no plug device reporting yet) independent of
+        # sensor_connected (which only reflects the env sensor) - treat
+        # either case as "offline" for ranking/display rather than crashing.
+        ranked = sorted(rooms, key=lambda r: snapshots[r["id"]]["power"] or 0, reverse=True)
+        online_powers = [
+            snapshots[r["id"]]["power"] for r in ranked if snapshots[r["id"]]["power"] is not None
+        ]
         max_power = max(online_powers, default=0) or 1
 
         def _power_rows_html(room_list: list[dict]) -> str:
             rows = []
             for r in room_list:
-                if not r.get("sensor_connected", True):
+                if not r.get("sensor_connected", True) or snapshots[r["id"]]["power"] is None:
                     rows.append(
                         f'<div class="ts-dash-power-row">'
                         f'<span class="ts-dash-power-name">{r["name"]}</span>'

@@ -109,10 +109,17 @@ with main_col:
     else:
         snapshots = {r["id"]: environment_snapshot(r) for r in rooms}
         room_count = len(rooms)
-        avg_temp = sum(s["temperature"] for s in snapshots.values()) / room_count
-        avg_co2 = sum(s["co2"] for s in snapshots.values()) / room_count
-        avg_humidity = sum(s["humidity"] for s in snapshots.values()) / room_count
-        total_power = sum(s["power"] for s in snapshots.values())
+        # A room with no env/power sensor reading yet has None fields rather
+        # than the mock's always-on random floats - average/sum only over
+        # the rooms that actually have a value.
+        temps = [s["temperature"] for s in snapshots.values() if s["temperature"] is not None]
+        co2s = [s["co2"] for s in snapshots.values() if s["co2"] is not None]
+        humidities = [s["humidity"] for s in snapshots.values() if s["humidity"] is not None]
+        powers = [s["power"] for s in snapshots.values() if s["power"] is not None]
+        avg_temp = sum(temps) / len(temps) if temps else 0.0
+        avg_co2 = sum(co2s) / len(co2s) if co2s else 0.0
+        avg_humidity = sum(humidities) / len(humidities) if humidities else 0.0
+        total_power = sum(powers)
         active_count = sum(1 for r in rooms if r.get("occupied"))
         occupancy_rate = round(active_count / room_count * 100) if room_count else 0
         # No real per-room headcount sensor exists - synthesize a plausible
