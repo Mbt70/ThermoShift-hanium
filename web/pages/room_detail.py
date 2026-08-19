@@ -28,7 +28,7 @@ from app.components.schedule_store import (
     schedule_status,
     update_schedule,
 )
-from components.auth_store import current_user_email, is_logged_in
+from components.auth_store import current_user_id, is_logged_in
 from components.dash_shell import render_sidebar
 from components.mobile_ui import apply_mobile_styles, icon_data_uri
 
@@ -336,7 +336,7 @@ apply_mobile_styles("room_detail", shared=("dash_shell", "home"))
 if not is_logged_in():
     st.switch_page("pages/login.py")
 
-rooms = list_rooms(current_user_email())
+rooms = list_rooms(current_user_id())
 
 selected_id = st.session_state.get("_web_selected_room")
 if selected_id and not any(r["id"] == selected_id for r in rooms):
@@ -373,8 +373,18 @@ with main_col:
         occupancy_estimate = random.Random(f"occ-head-{room['id']}").randint(1, 6) if occupied else 0
         occupancy_rate = random.Random(f"occ-rate-{room['id']}-{date.today()}").randint(60, 95) if occupied else 0
         power_delta_pct = round(random.Random(f"power-yday-{room['id']}-{date.today()}").uniform(-9, 6), 1)
-        co2_ok = snapshot["co2"] < 700
-        target_ok = abs(snapshot["temperature"] - room["target_temperature"]) <= 1.5
+        # A room with no sensor reading yet has None fields rather than the
+        # mock's always-on random floats - fall back to "--" placeholders
+        # and treat the KPI comparisons as unmet rather than crashing.
+        temp_val, co2_val, humidity_val, power_val = (
+            snapshot["temperature"], snapshot["co2"], snapshot["humidity"], snapshot["power"],
+        )
+        co2_ok = co2_val is not None and co2_val < 700
+        target_ok = temp_val is not None and abs(temp_val - room["target_temperature"]) <= 1.5
+        temp_display = f"{temp_val:.1f}" if temp_val is not None else "--"
+        co2_display = f"{co2_val:.0f}" if co2_val is not None else "--"
+        humidity_display = f"{humidity_val:.0f}" if humidity_val is not None else "--"
+        power_display = f"{power_val:.1f}" if power_val is not None else "--"
 
         title_col, select_col, spacer_col = st.columns([0.6, 0.8, 4.4], vertical_alignment="center")
         with title_col:
@@ -394,7 +404,7 @@ with main_col:
             (
                 "temp",
                 "온도",
-                f"{snapshot['temperature']:.1f}",
+                temp_display,
                 "°C",
                 "is-positive" if target_ok else "is-negative",
                 f"{_CHECK_ICON}목표 {room['target_temperature']}°C 근접"
@@ -404,17 +414,17 @@ with main_col:
             (
                 "co2",
                 "CO₂",
-                f"{snapshot['co2']:.0f}",
+                co2_display,
                 "ppm",
                 "is-positive" if co2_ok else "is-negative",
                 f"{_CHECK_ICON}기준 근접" if co2_ok else f"{_WARN_ICON}기준 초과",
             ),
             ("occupancy", "재실추정", f"{occupancy_estimate}", "명", "", f"재실률 {occupancy_rate}%"),
-            ("humidity", "습도", f"{snapshot['humidity']:.0f}", "%", "is-positive", f"{_CHECK_ICON}적정"),
+            ("humidity", "습도", humidity_display, "%", "is-positive", f"{_CHECK_ICON}적정"),
             (
                 "power",
                 "총 HVAC 전력",
-                f"{snapshot['power']:.1f}",
+                power_display,
                 "kW",
                 "is-positive" if power_delta_pct < 0 else "is-negative",
                 f"{_ARROW_DOWN_ICON if power_delta_pct < 0 else _ARROW_UP_ICON}어제 대비 {power_delta_pct:+.1f}%",
@@ -463,7 +473,6 @@ with main_col:
                     _trend_chart(temps, co2s, room["target_temperature"]),
                     width="stretch",
                 )
-
                 schedules = list_today_schedules(room["id"])
                 res_head_col, res_link_col = st.columns([2, 1], vertical_alignment="center")
                 with res_head_col:
@@ -543,9 +552,9 @@ with main_col:
         with st.container(key="ts_dash_summary_card", border=True):
             st.markdown('<p class="ts-dash-card-title">KPI 요약 (오늘)</p>', unsafe_allow_html=True)
             summary_items = [
-                ("power", "HVAC 전력 사용량", f"{snapshot['power'] * 24:.0f}kWh"),
-                ("temp", "평균 온도", f"{snapshot['temperature']:.1f}°C"),
-                ("co2", "평균 CO₂", f"{snapshot['co2']:.0f}ppm"),
+                ("power", "HVAC 전력 사용량", f"{power_val * 24:.0f}kWh" if power_val is not None else "--"),
+                ("temp", "평균 온도", f"{temp_display}°C" if temp_val is not None else "--"),
+                ("co2", "평균 CO₂", f"{co2_display}ppm" if co2_val is not None else "--"),
                 ("occupancy", "공간 사용률", f"{occupancy_rate}%"),
                 (None, "종합 쾌적도 지수", f"{comfort}/100"),
             ]

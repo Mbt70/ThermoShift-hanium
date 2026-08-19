@@ -1,70 +1,80 @@
-import json
-import random
-import uuid
+import sys
 from datetime import datetime
 from pathlib import Path
 
-_STORE_PATH = Path(__file__).resolve().parents[2] / ".data" / "rooms.json"
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPOSITORY_ROOT))
+
+from shared.api_client import api_delete, api_get, api_patch, api_post
+
+# UI control-mode buttons use "predictive" for the 4th mode (digital_twin.py's
+# _CONTROL_MODES); the DB's control_mode enum spells the same mode "mpc".
+_MODE_UI_TO_DB = {"predictive": "mpc"}
+_MODE_DB_TO_UI = {"mpc": "predictive"}
+
+# Power draw above this is treated as "AC is actually running" - there's no
+# direct boolean for this in the schema, but seed data (and any real plug
+# reading) runs ~950-1100W with cooling on vs a few W idle, so a simple
+# threshold is a reasonable proxy.
+_AC_ON_POWER_THRESHOLD_W = 50
 
 
-_DEFAULT_FIELDS = {
-    "co2": 600,
-    "occupied": False,
-    "target_temperature": 24,
-    "auto_control": True,
-    "reservation_count": 0,
-    "last_updated": None,
-    "control_mode": "rule",
-    "owner_email": None,
-}
-
-
-def _load_rooms() -> list[dict]:
-    if not _STORE_PATH.exists():
-        return []
-    rooms = json.loads(_STORE_PATH.read_text(encoding="utf-8"))
-    for room in rooms:
-        for field, default in _DEFAULT_FIELDS.items():
-            room.setdefault(field, default)
-    return rooms
-
-
-def _save_rooms(rooms: list[dict]) -> None:
-    _STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _STORE_PATH.write_text(
-        json.dumps(rooms, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-
-
-def list_rooms(owner_email: str) -> list[dict]:
-    return [room for room in _load_rooms() if room.get("owner_email") == owner_email]
-
-
-def get_room(room_id: str) -> dict | None:
-    return next((room for room in _load_rooms() if room["id"] == room_id), None)
-
-
-def register_room(name: str, location: str, floor_plan_name: str, owner_email: str) -> dict:
-    rooms = _load_rooms()
-    room = {
-        "id": uuid.uuid4().hex,
-        "name": name,
-        "location": location,
-        "floor_plan_name": floor_plan_name,
-        "temperature": round(random.uniform(20.0, 28.0), 1),
-        "co2": random.randint(500, 1100),
-        "occupied": random.choice([True, False]),
-        "aircon_on": random.choice([True, False]),
-        "sensor_connected": random.choice([True, False]),
-        "target_temperature": 24,
-        "auto_control": True,
-        "reservation_count": random.randint(0, 5),
-        "last_updated": datetime.now().isoformat(),
-        "owner_email": owner_email,
-    }
-    rooms.append(room)
-    _save_rooms(rooms)
+def _with_latest(room: dict) -> dict:
+    latest = api_get(f"/rooms/{room['id']}/latest", ignore_404=True) or {}
+    env = latest.get("env") or {}
+    power = latest.get("power") or {}
+    occupancy = latest.get("occupancy") or {}
+    power_w = power.get("power_w")
+    room["temperature"] = env.get("temperature")
+    room["humidity"] = env.get("humidity")
+    room["co2"] = env.get("co2")
+    room["power"] = power_w
+    room["occupied"] = occupancy.get("occupancy_state") == "occupied"
+    room["occupancy_count"] = occupancy.get("estimated_count")
+    room["aircon_on"] = bool(power_w and power_w >= _AC_ON_POWER_THRESHOLD_W)
+    room["sensor_connected"] = env.get("measured_at") is not None
+    room["last_updated"] = env.get("measured_at") or room.get("last_updated")
     return room
+
+
+def _from_api(row: dict) -> dict:
+    room = {
+        "id": row["room_id"],
+        "owner_user_id": row["owner_user_id"],
+        "name": row["name"],
+        "location": row.get("location") or "",
+        "floor_plan_name": row.get("floor_plan_url") or "",
+        "target_temperature": round(row["target_temp"]),
+        "control_mode": _MODE_DB_TO_UI.get(row["control_mode"], row["control_mode"]),
+        "last_updated": row.get("updated_at"),
+    }
+    return _with_latest(room)
+
+
+def list_rooms(owner_user_id: int) -> list[dict]:
+    if owner_user_id is None:
+        return []
+    rows = api_get("/rooms", params={"owner_user_id": owner_user_id}) or []
+    return [_from_api(row) for row in rows]
+
+
+def get_room(room_id: int) -> dict | None:
+    row = api_get(f"/rooms/{room_id}", ignore_404=True)
+    return _from_api(row) if row else None
+
+
+def register_room(name: str, location: str, floor_plan_name: str, owner_user_id: int) -> dict:
+    row = api_post(
+        "/rooms",
+        json={
+            "owner_user_id": owner_user_id,
+            "name": name,
+            "location": location,
+            "floor_plan_url": floor_plan_name or None,
+        },
+    )
+    return _from_api(row)
 
 
 def room_status(room: dict) -> str:
@@ -77,8 +87,10 @@ def room_status(room: dict) -> str:
 
 def comfort_index(room: dict) -> int:
     temp = room["temperature"]
+    if temp is None:
+        return 0
     target = room.get("target_temperature", 24)
-    co2 = room.get("co2", 600)
+    co2 = room.get("co2") or 600
     score = 100.0
     score -= min(abs(temp - target) * 12, 60)
     score -= max(co2 - 800, 0) * 0.05
@@ -96,63 +108,53 @@ def comfort_label(score: int) -> str:
 def system_judgment(room: dict) -> tuple[str, str]:
     temp = room["temperature"]
     target = room.get("target_temperature", 24)
-    diff = temp - target
     occupancy = "재실 중" if room.get("occupied") else "공실"
-    if diff > 1:
-        comparison, action = "초과", "냉방 강화 권장"
-    elif diff < -1:
-        comparison, action = "미달", "냉방 완화 권장"
+    if temp is None:
+        headline = f"{occupancy} · 센서 데이터 없음"
     else:
-        comparison, action = "근접", "현재 설정 유지"
-    headline = (
-        f"{occupancy} · 온도 {temp:.1f}°C로 목표({target}°C) {comparison} → {action}"
-    )
-    aircon_state = "ON" if room["aircon_on"] else "OFF"
+        diff = temp - target
+        if diff > 1:
+            comparison, action = "초과", "냉방 강화 권장"
+        elif diff < -1:
+            comparison, action = "미달", "냉방 완화 권장"
+        else:
+            comparison, action = "근접", "현재 설정 유지"
+        headline = f"{occupancy} · 온도 {temp:.1f}°C로 목표({target}°C) {comparison} → {action}"
+    aircon_state = "ON" if room.get("aircon_on") else "OFF"
     subline = f"규칙 rule-01 · 냉방 {aircon_state} · 목표 {target}°C"
     return headline, subline
 
 
 def trend_series(room: dict, points: int = 30) -> tuple[list[float], list[float]]:
-    rng = random.Random(room["id"])
-    temp = room["temperature"]
-    co2 = room.get("co2", 600)
-    start_temp = temp - rng.uniform(1.0, 2.5)
-    start_co2 = co2 - rng.uniform(80, 200)
-    temps = []
-    co2s = []
-    for i in range(points):
-        t = i / (points - 1)
-        temps.append(
-            round(start_temp + (temp - start_temp) * t + rng.uniform(-0.15, 0.15), 2)
-        )
-        co2s.append(
-            round(start_co2 + (co2 - start_co2) * t + rng.uniform(-15, 15), 1)
-        )
+    """Real temperature/CO2 history for the room's env sensor, most recent
+    `points` minutes. Returns two empty lists if there's no env device or no
+    readings in that window yet (a brand-new room, or one whose sensor hasn't
+    reported recently) - callers should handle that rather than getting a
+    synthetic fallback series.
+    """
+    readings = api_get(f"/rooms/{room['id']}/trend", params={"minutes": points}) or []
+    temps = [r["temperature"] for r in readings if r["temperature"] is not None]
+    co2s = [r["co2"] for r in readings if r["co2"] is not None]
     return temps, co2s
 
 
 def environment_snapshot(room: dict) -> dict:
-    rng = random.Random(f"{room['id']}-env")
-    temp = room["temperature"]
-    co2 = room.get("co2", 600)
-    humidity = max(30.0, min(70.0, 55 - (temp - 24) * 1.5 + rng.uniform(-4, 4)))
-    base_power = 1.8 if room.get("aircon_on") else 0.15
-    power = max(0.0, base_power + rng.uniform(-0.2, 0.2))
     return {
-        "temperature": temp,
-        "humidity": round(humidity, 1),
-        "co2": co2,
-        "power": round(power, 2),
+        "temperature": room.get("temperature"),
+        "humidity": room.get("humidity"),
+        "co2": room.get("co2"),
+        "power": round(room["power"] / 1000, 2) if room.get("power") is not None else None,
     }
-
-
 
 
 def relative_updated(room: dict) -> str:
     last_updated = room.get("last_updated")
     if not last_updated:
         return "방금"
-    seconds = int((datetime.now() - datetime.fromisoformat(last_updated)).total_seconds())
+    if isinstance(last_updated, str):
+        last_updated = datetime.fromisoformat(last_updated)
+    now = datetime.now(last_updated.tzinfo) if last_updated.tzinfo else datetime.now()
+    seconds = int((now - last_updated).total_seconds())
     if seconds < 60:
         return f"{max(seconds, 0)}초 전"
     minutes = seconds // 60
@@ -161,39 +163,21 @@ def relative_updated(room: dict) -> str:
     return f"{minutes // 60}시간 전"
 
 
-def set_target_temperature(room_id: str, target_temperature: int) -> None:
-    rooms = _load_rooms()
-    room = next((r for r in rooms if r["id"] == room_id), None)
-    if room is None:
-        return
-    room["target_temperature"] = target_temperature
-    room["last_updated"] = datetime.now().isoformat()
-    _save_rooms(rooms)
+def set_target_temperature(room_id: int, target_temperature: int) -> None:
+    api_patch(f"/rooms/{room_id}/target-temp", json={"target_temp": target_temperature})
 
 
-def set_control_mode(room_id: str, control_mode: str) -> None:
-    rooms = _load_rooms()
-    room = next((r for r in rooms if r["id"] == room_id), None)
-    if room is None:
-        return
-    room["control_mode"] = control_mode
-    _save_rooms(rooms)
+def set_control_mode(room_id: int, control_mode: str) -> None:
+    db_mode = _MODE_UI_TO_DB.get(control_mode, control_mode)
+    api_patch(f"/rooms/{room_id}/control-mode", json={"control_mode": db_mode})
 
 
-def update_room(
-    room_id: str, *, name: str, location: str, floor_plan_name: str | None
-) -> None:
-    rooms = _load_rooms()
-    room = next((r for r in rooms if r["id"] == room_id), None)
-    if room is None:
-        return
-    room["name"] = name
-    room["location"] = location
-    if floor_plan_name:
-        room["floor_plan_name"] = floor_plan_name
-    _save_rooms(rooms)
+def update_room(room_id: int, *, name: str, location: str, floor_plan_name: str | None) -> None:
+    api_patch(
+        f"/rooms/{room_id}",
+        json={"name": name, "location": location, "floor_plan_url": floor_plan_name or None},
+    )
 
 
-def delete_room(room_id: str) -> None:
-    rooms = [room for room in _load_rooms() if room["id"] != room_id]
-    _save_rooms(rooms)
+def delete_room(room_id: int) -> None:
+    api_delete(f"/rooms/{room_id}", ignore_404=True)

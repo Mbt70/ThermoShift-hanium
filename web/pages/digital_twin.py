@@ -17,7 +17,7 @@ from app.components.room_store import (
     set_control_mode,
     system_judgment,
 )
-from components.auth_store import current_user_email, is_logged_in
+from components.auth_store import current_user_id, is_logged_in
 from components.dash_shell import render_sidebar
 from components.mobile_ui import apply_mobile_styles, icon_data_uri, recolored_icon_data_uri
 
@@ -87,7 +87,7 @@ apply_mobile_styles("digital_twin", shared=("dash_shell", "home", "room_detail")
 if not is_logged_in():
     st.switch_page("pages/login.py")
 
-rooms = list_rooms(current_user_email())
+rooms = list_rooms(current_user_id())
 
 selected_id = st.session_state.get("_web_selected_room")
 if selected_id and not any(r["id"] == selected_id for r in rooms):
@@ -109,10 +109,17 @@ with main_col:
     else:
         snapshots = {r["id"]: environment_snapshot(r) for r in rooms}
         room_count = len(rooms)
-        avg_temp = sum(s["temperature"] for s in snapshots.values()) / room_count
-        avg_co2 = sum(s["co2"] for s in snapshots.values()) / room_count
-        avg_humidity = sum(s["humidity"] for s in snapshots.values()) / room_count
-        total_power = sum(s["power"] for s in snapshots.values())
+        # A room with no env/power sensor reading yet has None fields rather
+        # than the mock's always-on random floats - average/sum only over
+        # the rooms that actually have a value.
+        temps = [s["temperature"] for s in snapshots.values() if s["temperature"] is not None]
+        co2s = [s["co2"] for s in snapshots.values() if s["co2"] is not None]
+        humidities = [s["humidity"] for s in snapshots.values() if s["humidity"] is not None]
+        powers = [s["power"] for s in snapshots.values() if s["power"] is not None]
+        avg_temp = sum(temps) / len(temps) if temps else 0.0
+        avg_co2 = sum(co2s) / len(co2s) if co2s else 0.0
+        avg_humidity = sum(humidities) / len(humidities) if humidities else 0.0
+        total_power = sum(powers)
         active_count = sum(1 for r in rooms if r.get("occupied"))
         occupancy_rate = round(active_count / room_count * 100) if room_count else 0
         # No real per-room headcount sensor exists - synthesize a plausible

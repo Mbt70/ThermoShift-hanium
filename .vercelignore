@@ -1,0 +1,16 @@
+# Vercel only needs to build the PWA (scripts/build-pwa.mjs reads app/ and
+# writes pwa/). Everything below is backend/infra that must never be picked
+# up as a Python serverless function or bundled into the deployment -
+# api/**/*.py + root requirements.txt was being auto-detected as Vercel
+# Python Functions, which broke the build (it's meant to run as our own
+# FastAPI server, not as Vercel functions).
+api/
+db/
+infra/
+gateway/
+firmware/
+shared/
+web/
+docs/
+.venv/
+.data/
