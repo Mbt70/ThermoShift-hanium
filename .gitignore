@@ -39,3 +39,6 @@ pwa/
 *.joblib
 artifacts/
 outputs/
+
+# 게이트웨이 로컬 설정 (example만 커밋)
+gateway/config/config.yaml
