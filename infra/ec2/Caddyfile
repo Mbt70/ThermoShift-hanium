@@ -1,0 +1,29 @@
+# EC2 리버스 프록시 + 자동 HTTPS
+#
+#   sudo cp infra/ec2/Caddyfile /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# <도메인> 에 넣을 값
+#   - 도메인이 있으면 그대로 (예: thermoshift.example.com)
+#   - 없으면 sslip.io 를 쓴다: 3-15-27-99.sslip.io  (EC2 공인 IP의 점을 하이픈으로)
+#     sslip.io 가 IP를 DNS로 매핑해 주므로 Let's Encrypt 인증서가 발급된다.
+
+<도메인> {
+	encode gzip
+
+	# API — 파이로 뚫린 리버스 SSH 터널로 넘긴다.
+	# 터널이 죽어 있으면 502 가 난다 (파이가 꺼진 것과 같은 의미).
+	handle /api/* {
+		reverse_proxy 127.0.0.1:18100
+	}
+
+	# 대시보드 — EC2에서 서버 렌더링되는 Streamlit.
+	# Streamlit 은 WebSocket 을 쓰므로 Caddy 의 기본 업그레이드 처리가 필요하다.
+	handle {
+		reverse_proxy 127.0.0.1:8501
+	}
+
+	log {
+		output file /var/log/caddy/thermoshift.log
+	}
+}

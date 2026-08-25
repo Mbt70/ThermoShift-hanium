@@ -15,8 +15,8 @@
 | 데이터 보관·조회 | 파이가 꺼져도 데이터를 봐야 할 때 |
 | 무거운 연산 (CFD 사전계산, AI) | 3D 시각화·AI를 붙일 때 |
 
-지금 막혀 있는 건 **서버가 없어서가 아니라, 밖에서 파이로 들어갈 길이 없어서**
-입니다. 이건 서버를 사도 해결되지 않고, 서버 없이도 해결됩니다.
+핵심은 **밖에서 파이로 들어갈 길**을 만드는 것입니다. 서버를 사는 것과는
+별개의 문제이고, 서버가 있어도 이 통로는 따로 뚫어야 합니다.
 
 ## 준비: 보안 확인
 
@@ -38,117 +38,156 @@ export THERMOSHIFT_ALLOWED_ORIGINS="https://thermoshift.vercel.app"
 
 ---
 
-## 방법 A — Cloudflare Tunnel (권장, 0원, 30분)
+## 방법 A — EC2 + 리버스 SSH 터널 (권장)
 
-파이에서 **바깥으로 나가는 연결만** 쓰기 때문에 공인 IP도, 포트포워딩도,
-학교 방화벽 협의도 필요 없습니다. 학교 네트워크에서는 이게 결정적입니다.
+EC2를 **시스템의 복사본이 아니라 공개 창구**로 씁니다. 데이터 원본과 제어는
+파이에 그대로 두므로 동기화 문제가 아예 생기지 않습니다.
 
 ```text
-Vercel 앱 ──HTTPS──> api.<도메인> ──터널──> 파이 :8100
-                     (Cloudflare)              ↓
-                                        gateway → IR → 에어컨
+인터넷 ──HTTPS──> EC2 (탄력적 IP)
+                    │ Caddy (자동 인증서)
+                    ├─ /       → Streamlit 대시보드 (EC2에서 서버 렌더링)
+                    └─ /api/*  → 리버스 SSH 터널 ──> 파이 :8100
+                                                        ↓
+                                                 gateway → IR → 에어컨
 ```
 
-### 설치
+이 구조를 고른 이유
+
+- **데이터 동기화가 필요 없습니다.** 원본 SQLite는 파이 하나뿐입니다.
+- **AI 키를 안전하게 둘 수 있습니다.** 대시보드가 서버에서 렌더링되므로
+  키가 브라우저로 나가지 않습니다. stlite 로는 불가능한 일입니다.
+- **stlite 제약이 사라집니다.** 진짜 WebSocket, 빠른 로딩, 정상적인 인증.
+- 파이는 **아웃바운드 연결만** 씁니다. 공인 IP·포트포워딩·학교 방화벽 협의가
+  필요 없습니다.
+- 터널은 EC2의 **루프백에만** 바인딩합니다. API가 인터넷에 직접 노출되지
+  않고, Caddy 를 거친 요청만 파이에 닿습니다.
+
+한계: 파이가 꺼지면 `/api/*` 가 502 를 냅니다. 어차피 파이가 꺼지면 에어컨
+제어도 불가능하므로 실질적인 손해는 데이터 조회뿐입니다. 이게 문제가 되면
+아래 "나중에" 절의 MQTT 브리지를 붙입니다.
+
+### 1) EC2 준비
+
+인스턴스는 **t4g.small (2 vCPU ARM, 2GB)** 이면 충분합니다. 파이와 같은
+aarch64 라 파이썬 휠도 동일하게 동작합니다.
+
+보안그룹에서 **22(SSH), 80(HTTP, 인증서 발급용), 443(HTTPS)** 만 엽니다.
+그 외 포트는 열지 않습니다.
 
 ```bash
-# 1) cloudflared 설치 (arm64)
-curl -L -o /tmp/cloudflared.deb \
-  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb
-sudo dpkg -i /tmp/cloudflared.deb
-
-# 2) Cloudflare 계정 로그인 (브라우저가 열립니다)
-cloudflared tunnel login
-
-# 3) 터널 생성
-cloudflared tunnel create thermoshift
-
-# 4) 도메인 연결 (Cloudflare에 등록된 도메인 필요)
-cloudflared tunnel route dns thermoshift api.<도메인>
-
-# 5) 설정 파일 배치 후 서비스 등록
-sudo cp infra/cloudflared/config.yml /etc/cloudflared/config.yml
-sudo cloudflared service install
-sudo systemctl enable --now cloudflared
+# EC2에 접속해서
+git clone https://github.com/Mbt70/ThermoShift-hanium.git
+cd ThermoShift-hanium
+bash infra/ec2/setup.sh <도메인>
 ```
 
-설정 예시는 [`infra/cloudflared/config.yml`](../infra/cloudflared/config.yml)에 있습니다.
+도메인이 없으면 **sslip.io** 를 쓰면 됩니다. EC2 공인 IP의 점을 하이픈으로
+바꾼 주소가 그대로 DNS 이름이 되고, Let's Encrypt 인증서도 발급됩니다.
 
-### Vercel 연결
+```bash
+# 공인 IP가 3.15.27.99 라면
+bash infra/ec2/setup.sh 3-15-27-99.sslip.io
+```
 
-Vercel 프로젝트 설정 → Environment Variables 에 추가한 뒤 재배포합니다.
+### 2) 파이에서 터널 켜기
 
-| 이름 | 값 |
+```bash
+cd ~/ThermoShift-hanium
+bash infra/tunnel/setup.sh <EC2 공인 IP>
+```
+
+스크립트가 전용 SSH 키를 만들고 공개키를 출력합니다. 그 키를 EC2의
+`~/.ssh/authorized_keys` 에 추가한 뒤 Enter 를 누르면 서비스가 등록됩니다.
+연결이 끊기면 `autossh` 가 자동으로 다시 붙습니다.
+
+### 3) 확인
+
+```bash
+# EC2에서
+curl http://127.0.0.1:18100/api/health   # 터널 확인
+curl https://<도메인>/api/health          # 전체 경로 확인
+```
+
+브라우저에서 `https://<도메인>` 을 열면 대시보드가 뜹니다.
+
+### Vercel 앱도 함께 쓰려면
+
+Caddy 가 `/api/*` 를 공개하므로 Vercel 앱도 같은 주소를 쓸 수 있습니다.
+
+| 위치 | 설정 |
 |---|---|
-| `THERMOSHIFT_API_BASE` | `https://api.<도메인>` |
+| Vercel 환경변수 | `THERMOSHIFT_API_BASE=https://<도메인>` |
+| 파이 API | `THERMOSHIFT_ALLOWED_ORIGINS=https://<프로젝트>.vercel.app` |
 
-그리고 파이에서 CORS 허용 출처를 좁힙니다.
-
-```bash
-sudo systemctl edit thermoshift-api
-# [Service]
-# Environment="THERMOSHIFT_ALLOWED_ORIGINS=https://<프로젝트>.vercel.app"
-sudo systemctl restart thermoshift-api
-```
-
-여기까지 하면 **휴대폰에서 실제 제어 + 실시간 수치**가 됩니다.
+대시보드는 EC2에서 서버 렌더링되므로 CORS와 무관합니다. CORS가 필요한 쪽은
+브라우저에서 도는 Vercel 앱뿐입니다.
 
 ---
 
-## 방법 B — AWS (CFD·AI를 본격적으로 붙일 때)
+## 방법 B — Cloudflare Tunnel (EC2 없이, 0원)
 
-### 무엇을 사야 하나
+EC2를 쓰지 않거나 잠시 멈춰 둘 때의 대안입니다. 원리는 같습니다 — 파이가
+바깥으로 나가는 연결만 씁니다.
 
-**Lightsail 2GB 플랜 ($12/월, 서울 리전 ap-northeast-2)** 을 권합니다.
-
-| | Lightsail 2GB | EC2 t4g.small |
-|---|---|---|
-| 월 비용 | $12 정액 | $12.3 + EBS + 전송량 |
-| 고정 IP | 포함 | Elastic IP 별도 |
-| 데이터 전송 | 3TB 포함 | 종량 과금 |
-| 예산 사고 위험 | 낮음 | 전송량 과금이 튈 수 있음 |
-
-학생 프로젝트에서는 **정액제가 예산 사고를 막아 줍니다.** EC2는 데이터 전송
-요금이 예상 밖으로 커지는 사례가 흔합니다.
-
-CFD 사전계산처럼 무거운 배치는 상시 인스턴스가 아니라 **필요할 때만 EC2 스팟**
-(예: `c7g.4xlarge` 스팟, 시간당 약 $0.2)을 몇 시간 띄우는 편이 훨씬 쌉니다.
-
-### 구조
-
-파이는 로컬 제어를 계속하고, 텔레메트리만 클라우드로 올립니다.
-**인터넷이 끊겨도 냉방 제어는 멈추지 않습니다.**
-
-```text
-ESP32 → 파이(mosquitto + gateway) ──MQTT bridge(TLS, 아웃바운드)──> AWS
-             ↓ 로컬 SQLite                                          ↓
-        IR 제어 (오프라인에도 동작)                    mosquitto + api + web
-                                                              ↑
-                                                        Vercel / 브라우저
+```bash
+curl -L -o /tmp/cloudflared.deb \
+  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb
+sudo dpkg -i /tmp/cloudflared.deb
+cloudflared tunnel login
+cloudflared tunnel create thermoshift
+cloudflared tunnel route dns thermoshift api.<도메인>
+sudo cp infra/cloudflared/config.yml /etc/cloudflared/config.yml   # 터널ID·도메인 수정
+sudo cloudflared service install && sudo systemctl enable --now cloudflared
 ```
 
-MQTT 브리지도 **파이에서 바깥으로 나가는 연결**이라 포트포워딩이 필요 없습니다.
-설정 예시는 [`infra/mqtt/bridge.conf`](../infra/mqtt/bridge.conf)에 있습니다.
+이 경우 대시보드는 Vercel(stlite)에 남으므로, AI 키를 프론트에 둘 수 없다는
+제약이 그대로입니다. AI 기능은 파이의 API가 대신 호출합니다.
 
-### 남는 일
+---
 
-클라우드에 API를 올리면 데이터가 파이의 SQLite에 있다는 문제가 생깁니다.
-브리지된 MQTT를 구독해 클라우드 DB에 적재하는 수집기가 필요하고, 제어 명령은
-반대 방향으로 흘려보내야 합니다. **방법 A보다 확실히 손이 많이 갑니다.**
-CFD나 AI 부하가 실제로 커지기 전에는 굳이 갈 필요가 없습니다.
+## 나중에 — MQTT 브리지 (파이가 꺼져도 데이터 보관)
+
+파이가 오프라인일 때도 과거 데이터를 조회해야 하거나, 실증 공간이 여러 곳으로
+늘어나면 텔레메트리를 클라우드에 적재합니다.
+
+```text
+ESP32 → 파이(mosquitto + gateway) ──MQTT bridge(TLS, 아웃바운드)──> EC2
+             ↓ 로컬 SQLite                                          ↓
+        IR 제어 (오프라인에도 동작)                     mosquitto → 수집기 → DB
+```
+
+설정 예시는 [`infra/mqtt/bridge.conf`](../infra/mqtt/bridge.conf) 에 있습니다.
+클라우드 브로커는 반드시 TLS(8883) + 인증을 켜야 합니다. 평문 1883 을 공인
+IP에 열면 누구나 제어 토픽을 발행할 수 있습니다.
+
+EC2에 적재하려면 브리지된 MQTT를 구독해 EC2의 DB에 쓰는 수집기가 필요하고,
+제어 명령은 반대 방향으로 흘려보내야 합니다. **방법 A보다 확실히 손이 많이
+갑니다.** 데이터 보관이 실제로 필요해지기 전에는 미루는 편이 낫습니다.
 
 ---
 
 ## 예산 배분 제안 (38만원 기준)
 
+EC2 t4g.small 은 이미 구매한 상태를 전제로 합니다.
+
 | 항목 | 금액 | 비고 |
 |---|---|---|
 | **스마트 플러그 2개** | **5만원** | **KPI '에너지 절감' 증명에 필수** |
-| Lightsail 2GB × 3개월 | 5만원 | 방법 B로 갈 때만 |
-| CFD 사전계산 (EC2 스팟 20시간) | 3만원 | 시나리오 배치 |
+| EC2 t4g.small (구매 완료) | 월 약 1.7만원 | 3개월 약 5만원. 온디맨드 기준 |
+| EBS 20GB gp3 | 월 약 2천원 | |
+| CFD 사전계산 (EC2 스팟 20시간) | 3만원 | 상시 인스턴스 말고 스팟으로 |
 | Claude API 크레딧 | 5만원 | 실제 예상 월 1~2만원 |
-| 도메인 (.com 1년) | 2만원 | 선택 |
-| 예비 | 18만원 | 센서 추가·교체 |
+| 도메인 (.com 1년) | 2만원 | 선택 — sslip.io 로 대체 가능 |
+| 예비 | 17만원 | 센서 추가·교체 |
+
+**비용을 줄이는 법 두 가지**
+
+- 발표·시연 기간 외에는 EC2를 **중지(stop)** 해 두면 인스턴스 요금이 멈춥니다
+  (EBS 요금만 남습니다). 탄력적 IP는 인스턴스가 멈춰 있으면 과금되므로,
+  자주 멈출 계획이면 sslip.io + 재시작 시 IP 갱신이 오히려 편합니다.
+- 1년 이상 쓸 계획이면 Savings Plan 으로 30~40% 절감됩니다. 한이음 기간만
+  쓸 거라면 온디맨드가 맞습니다.
 
 **예산을 클라우드에 다 쓰면 안 됩니다.** 지금 프로젝트의 병목은 연산이 아니라
 측정입니다.
@@ -175,9 +214,24 @@ CFD나 AI 부하가 실제로 커지기 전에는 굳이 갈 필요가 없습니
 ## 확인
 
 ```bash
-curl https://api.<도메인>/api/health
-curl -X POST https://api.<도메인>/api/auth/login \
+# 1) 파이에서 API가 살아 있는가
+curl http://localhost:8100/api/health
+
+# 2) EC2에서 터널이 살아 있는가
+curl http://127.0.0.1:18100/api/health
+
+# 3) 외부에서 전체 경로가 열렸는가
+curl https://<도메인>/api/health
+curl -X POST https://<도메인>/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"...","password":"..."}'
 # → token 이 나오면 정상
 ```
+
+어디서 끊겼는지 위에서부터 확인하면 원인이 좁혀집니다.
+
+| 증상 | 원인 |
+|---|---|
+| 1번 실패 | 파이의 `thermoshift-api` 서비스가 죽었다 |
+| 1번 성공, 2번 실패 | 터널이 끊겼다 (`systemctl status thermoshift-tunnel`) |
+| 2번 성공, 3번 실패 | Caddy 설정이나 보안그룹(443) 문제 |
