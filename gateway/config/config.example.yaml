@@ -1,0 +1,53 @@
+mqtt:
+  host: "localhost"
+  port: 1883
+  client_id: "thermoshift_gateway_1"
+  topics:
+    - "thermoshift/#"
+    - "esp32/device/#"
+
+app:
+  # PostgreSQL 접속 정보는 여기가 아니라 환경변수로 준다. api 와 같은
+  # 데이터베이스를 본다.
+  #   DB_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME
+  # 기본값은 api/db.py 와 동일하다 (localhost:5432 / thermoshift).
+  #
+  # 담당 공간 ID. null 이면 devices 테이블에 배정된 공간을 자동으로 따른다.
+  room_id: null
+  control_mode: "shadow"  # shadow, active, manual_lockout, failsafe
+  log_level: "INFO"
+
+control:
+  decision_interval_sec: 30
+  target_temperature_c: 25.0
+  cooling_on_temperature_c: 26.5
+  cooling_on_duration_sec: 180
+  cooling_off_temperature_c: 24.0
+  cooling_off_duration_sec: 300
+  minimum_on_time_sec: 600
+  minimum_off_time_sec: 300
+  empty_confirmation_sec: 900
+  manual_lockout_sec: 1800
+  command_rate_limit_sec: 120
+  co2_ventilation_warning_ppm: 1200
+  co2_ventilation_warning_duration_sec: 300
+  co2_critical_ppm: 1500
+  env_data_stale_sec: 120
+  occ_data_stale_sec: 180
+
+hmm:
+  transition_matrix_30s:
+    - [0.985, 0.014, 0.001]
+    - [0.100, 0.600, 0.300]
+    - [0.003, 0.027, 0.970]
+
+ir:
+  # 실제 노드가 구독하는 토픽. 실증 장비를 바꾸면 여기만 고친다.
+  # 펠티어(냉각 릴레이)는 평문 "ON"/"OFF" 를, 에어컨은 JSON 을 받는다.
+  cooling_topic: "thermoshift/ir_01/cooling/cmd"
+  aircon_topic: "esp32/device/ir_01/control"
+  codes:
+    POWER_OFF: "POWER_OFF_RAW_HASH_PLACEHOLDER"
+    COOL_24_AUTO: "COOL_24_AUTO_RAW_HASH_PLACEHOLDER"
+    COOL_25_AUTO: "COOL_25_AUTO_RAW_HASH_PLACEHOLDER"
+    COOL_26_AUTO: "COOL_26_AUTO_RAW_HASH_PLACEHOLDER"
