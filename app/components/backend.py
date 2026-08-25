@@ -32,6 +32,35 @@ TIMEOUT_SEC = float(os.environ.get("THERMOSHIFT_API_TIMEOUT", "3"))
 _FAILURE_LIMIT = 3
 _failures = 0
 
+# 로그인 후 발급받은 세션 토큰. auth_store 가 채운다.
+# 프로세스 전역이 아니라 Streamlit 세션에 두는 편이 맞지만, stlite 는
+# 브라우저 탭 하나가 곧 한 세션이라 이 방식으로 충분하다.
+_token: Optional[str] = None
+
+
+def set_token(token: Optional[str]) -> None:
+    global _token
+    _token = token
+
+
+def get_token() -> Optional[str]:
+    return _token
+
+
+# 서버가 401을 돌려준 적이 있는지. 토큰 만료를 감지하는 신호로 쓴다.
+# 이게 없으면 만료된 세션이 조용히 목데이터로 폴백해, 사용자가 가짜 수치를
+# 실제 값으로 오해하게 된다.
+_unauthorized = False
+
+
+def unauthorized_seen() -> bool:
+    return _unauthorized
+
+
+def clear_unauthorized() -> None:
+    global _unauthorized
+    _unauthorized = False
+
 
 # --------------------------------------------------------------------------
 # 전송 계층 선택
@@ -107,6 +136,10 @@ def _build_url(path: str, params: Optional[dict]) -> str:
     return url
 
 
+def _auth_headers() -> dict:
+    return {"Authorization": f"Bearer {_token}"} if _token else {}
+
+
 def _send(method: str, path: str, params: Optional[dict] = None,
           body: Optional[dict] = None) -> Optional[tuple[int, str]]:
     """(상태코드, 본문) 을 돌려준다. 연결 자체가 실패하면 None."""
@@ -115,7 +148,7 @@ def _send(method: str, path: str, params: Optional[dict] = None,
     if _requests is not None:
         try:
             response = _requests.request(
-                method, url, json=body, timeout=TIMEOUT_SEC
+                method, url, json=body, headers=_auth_headers(), timeout=TIMEOUT_SEC
             )
         except _requests.RequestException as exc:
             logger.warning("API 연결 실패 (%s %s): %s", method, path, exc)
@@ -126,6 +159,8 @@ def _send(method: str, path: str, params: Optional[dict] = None,
         try:
             xhr = _XHR.new()
             xhr.open(method, url, False)  # 세 번째 인자 False = 동기 요청
+            for name, value in _auth_headers().items():
+                xhr.setRequestHeader(name, value)
             payload = None
             if body is not None:
                 xhr.setRequestHeader("Content-Type", "application/json")
@@ -152,6 +187,10 @@ def _request(method: str, path: str, params: Optional[dict] = None,
 
     _failures = 0
     status, text = result
+    if status == 401:
+        global _unauthorized
+        _unauthorized = True
+        return None
     if status == 204:
         return {}
     if not 200 <= status < 300:
@@ -182,6 +221,25 @@ def put(path: str, json: Optional[dict] = None) -> Optional[Any]:
 
 def delete(path: str) -> Optional[Any]:
     return _request("DELETE", path)
+
+
+def send(method: str, path: str, json: Optional[dict] = None,
+         params: Optional[dict] = None) -> Optional[tuple[int, Any]]:
+    """(상태코드, 파싱된 본문) 을 돌려준다. 연결 실패면 None.
+
+    로그인처럼 성공/실패를 구분하면서 본문도 필요한 경우에 쓴다.
+    """
+    if not api_enabled():
+        return None
+    result = _send(method, path, params, json)
+    if result is None:
+        return None
+    status, text = result
+    try:
+        data = jsonlib.loads(text) if text else None
+    except ValueError:
+        data = None
+    return status, data
 
 
 def status_code(method: str, path: str, json: Optional[dict] = None,
