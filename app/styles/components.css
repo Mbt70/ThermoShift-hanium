@@ -38,6 +38,7 @@ body:has([data-testid="stDialog"]) {
 }
 
 [data-testid="stDialog"] > div > section {
+  position: relative !important;
   width: min(90vw, 360px) !important;
   max-height: min(80vh, 600px) !important;
   overflow-y: auto;
