@@ -39,3 +39,4 @@ pwa/
 *.joblib
 artifacts/
 outputs/
+gateway/config/config.yaml
