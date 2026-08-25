@@ -37,8 +37,13 @@ class EdgeNode:
         
         self.mqtt_adapter.register_callback(self._route_data)
 
-    def publish_mqtt(self, topic: str, payload: dict):
-        self.client.publish(topic, json.dumps(payload))
+    def publish_mqtt(self, topic: str, payload):
+        """dict 는 JSON 으로, str 은 그대로 발행한다.
+
+        냉각 릴레이 토픽은 평문 "ON"/"OFF" 를 받으므로 JSON 으로 감싸면 안 된다.
+        """
+        body = payload if isinstance(payload, str) else json.dumps(payload)
+        self.client.publish(topic, body)
 
     def on_connect(self, client, userdata, flags, reason_code, properties):
         logger.info(f"Connected to MQTT broker with result code {reason_code}")

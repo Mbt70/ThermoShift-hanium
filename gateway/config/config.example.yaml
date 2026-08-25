@@ -39,6 +39,10 @@ hmm:
     - [0.003, 0.027, 0.970]
 
 ir:
+  # 실제 노드가 구독하는 토픽. 실증 장비를 바꾸면 여기만 고친다.
+  # 펠티어(냉각 릴레이)는 평문 "ON"/"OFF" 를, 에어컨은 JSON 을 받는다.
+  cooling_topic: "thermoshift/ir_01/cooling/cmd"
+  aircon_topic: "esp32/device/ir_01/control"
   codes:
     POWER_OFF: "POWER_OFF_RAW_HASH_PLACEHOLDER"
     COOL_24_AUTO: "COOL_24_AUTO_RAW_HASH_PLACEHOLDER"

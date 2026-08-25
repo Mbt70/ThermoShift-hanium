@@ -40,6 +40,10 @@ class HMMConfig(BaseModel):
 
 class IRConfig(BaseModel):
     codes: Dict[str, str]
+    # 펠티어(냉각 릴레이) 명령 토픽. 평문 "ON"/"OFF" 를 받는다.
+    cooling_topic: str = "thermoshift/ir_01/cooling/cmd"
+    # 에어컨 IR 명령 토픽. JSON 을 받는다. IR 프로파일 학습 후 동작한다.
+    aircon_topic: str = "esp32/device/ir_01/control"
 
 class Config(BaseModel):
     mqtt: MQTTConfig
