@@ -39,8 +39,32 @@ python3 db/migrate.py
 |---|---|---|
 | `THERMOSHIFT_DB` | `/home/thermo/thermoshift-data/thermoshift.db` | 통합 SQLite 경로 |
 | `THERMOSHIFT_TZ` | `Asia/Seoul` | 응답에 쓰는 로컬 시간대 |
-| `THERMOSHIFT_ALLOWED_ORIGINS` | `*` | CORS 허용 출처 (실증 환경에서는 좁힐 것) |
+| `THERMOSHIFT_ALLOWED_ORIGINS` | `*` | CORS 허용 출처. 공인 노출 시 반드시 좁힐 것 |
 | `THERMOSHIFT_LOG_LEVEL` | `INFO` | 로그 레벨 |
+| `THERMOSHIFT_SECRET_KEY` | 자동 생성 | 토큰 서명 키. 없으면 DB 옆 `secret.key`(0600)에 생성·보존 |
+| `THERMOSHIFT_TOKEN_TTL_SEC` | `604800` | 세션 토큰 유효기간 (기본 7일) |
+| `ANTHROPIC_API_KEY` | 없음 | 있으면 AI 기능이 켜진다. **서버에만 둘 것** |
+| `THERMOSHIFT_AI_MODEL` | `claude-opus-5` | AI 모델. 비용을 줄이려면 더 작은 모델로 |
+
+## 인증
+
+`/api/health`, `/api/auth/register`, `/api/auth/login`, `/api/ai/status` 를
+제외한 모든 엔드포인트는 인증이 필요합니다.
+
+```bash
+TOKEN=$(curl -s -X POST localhost:8100/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"...","password":"..."}' | jq -r .token)
+
+curl -H "Authorization: Bearer $TOKEN" localhost:8100/api/rooms
+```
+
+토큰은 HMAC-SHA256 서명값이라 서버 저장소가 필요 없고 위조할 수 없습니다.
+브라우저(stlite)에 있어도 되는 이유는 **그 사용자 본인의 토큰**이기 때문입니다.
+API 키와는 다릅니다 — API 키는 절대 프론트에 넣으면 안 됩니다.
+
+공간은 소유자만 접근할 수 있습니다. 남의 공간은 존재 여부를 흘리지 않도록
+403이 아니라 **404** 로 응답합니다.
 
 ## 엔드포인트
 
@@ -107,6 +131,18 @@ MQTT에서 처음 보는 `device_id` 는 `room_id = NULL` 인 미배정 상태�
 | GET | `/api/schedules?room_id=&today_only=` | 목록 |
 | POST | `/api/schedules?room_id=` | 등록 |
 | GET/PUT/DELETE | `/api/schedules/{id}` | 단건 조회·수정·삭제 |
+
+### AI 분석
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/ai/status` | AI 사용 가능 여부와 모델 |
+| POST | `/api/ai/explain-decision?log_id=` | 제어 판단 근거를 사람 말로 |
+| POST | `/api/ai/diagnose-alert?alert_id=` | 알림 원인 추정과 체크리스트 |
+| GET | `/api/ai/stats?room_id=&start=&end=` | 기간 KPI 집계 (AI 없이 숫자만) |
+| POST | `/api/ai/report?room_id=&start=&end=` | KPI 집계 + AI 요약 |
+
+키가 없으면 explain/diagnose 는 503, report 는 숫자만 주고 요약을 비웁니다.
+AI는 부가 기능이라 실패해도 본 기능이 멈추지 않습니다.
 
 ### 상태
 | 메서드 | 경로 | 설명 |

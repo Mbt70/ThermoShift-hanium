@@ -8,6 +8,12 @@ User=thermo
 WorkingDirectory=/home/thermo/ThermoShift-hanium
 Environment="THERMOSHIFT_DB=/home/thermo/thermoshift-data/thermoshift.db"
 Environment="THERMOSHIFT_TZ=Asia/Seoul"
+# 공인 주소로 노출할 때는 반드시 프론트 도메인으로 좁힐 것
+# Environment="THERMOSHIFT_ALLOWED_ORIGINS=https://<프로젝트>.vercel.app"
+# 토큰 서명 키. 지정하지 않으면 DB 옆에 자동 생성된다
+# Environment="THERMOSHIFT_SECRET_KEY=<openssl rand -hex 32>"
+# AI 기능을 켜려면 (키는 서버에만 둘 것)
+# Environment="ANTHROPIC_API_KEY=sk-ant-..."
 ExecStart=/home/thermo/ThermoShift-hanium/.venv/bin/python -m uvicorn api.app.main:app --host 0.0.0.0 --port 8100
 Restart=always
 RestartSec=5

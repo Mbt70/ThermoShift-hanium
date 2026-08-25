@@ -1,0 +1,20 @@
+# Cloudflare Tunnel 설정.
+#
+# 파이의 API(:8100)를 공인 주소로 노출한다. 파이는 바깥으로 나가는 연결만
+# 쓰므로 공인 IP·포트포워딩·방화벽 설정이 필요 없다.
+#
+# <터널ID> 와 <도메인> 을 실제 값으로 바꾼 뒤
+#   sudo cp infra/cloudflared/config.yml /etc/cloudflared/config.yml
+#
+# 터널 ID 확인: cloudflared tunnel list
+
+tunnel: <터널ID>
+credentials-file: /root/.cloudflared/<터널ID>.json
+
+ingress:
+  # API 만 노출한다. Streamlit(8501)은 프론트가 Vercel에 있으므로 열지 않는다.
+  # 필요하면 별도 hostname 으로 추가할 것.
+  - hostname: api.<도메인>
+    service: http://localhost:8100
+  # 위에 걸리지 않는 요청은 모두 거절한다.
+  - service: http_status:404
