@@ -127,10 +127,10 @@ def _trend_svg(temps: list[float], co2s: list[float], target: float) -> str:
 def _show_environment_dialog(room: dict) -> None:
     snapshot = environment_snapshot(room)
     tiles = [
-        (_THERMO_ICON, "온도", f"{snapshot['temperature']:.1f}", "°C", "var(--text)"),
-        (_DROPLET_ICON, "습도", f"{snapshot['humidity']:.0f}", "%", "var(--chart-purple)"),
-        (_CLOUD_ICON, "CO₂", f"{snapshot['co2']:.0f}", "ppm", "var(--chart-blue)"),
-        (_BOLT_ICON, "전력", f"{snapshot['power']:.2f}", "kW", "var(--chart-orange)"),
+        (_THERMO_ICON, "온도", f"{snapshot['temperature']:.1f}" if snapshot["temperature"] is not None else "--", "°C", "var(--text)"),
+        (_DROPLET_ICON, "습도", f"{snapshot['humidity']:.0f}" if snapshot["humidity"] is not None else "--", "%", "var(--chart-purple)"),
+        (_CLOUD_ICON, "CO₂", f"{snapshot['co2']:.0f}" if snapshot["co2"] is not None else "--", "ppm", "var(--chart-blue)"),
+        (_BOLT_ICON, "전력", f"{snapshot['power']:.2f}" if snapshot["power"] is not None else "--", "kW", "var(--chart-orange)"),
     ]
     tiles_html = "".join(
         f'<div class="ts-env-tile">'

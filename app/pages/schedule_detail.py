@@ -66,6 +66,7 @@ page_header("예약 상세", back_page="pages/schedule_list.py")
 status = schedule_status(schedule)
 precool = precool_info(schedule)
 current_temp = room["temperature"]
+current_temp_display = f"{current_temp:.1f}°C" if current_temp is not None else "--°C"
 target_temp = schedule["target_temperature"]
 
 if precool and precool["active"]:
@@ -75,7 +76,7 @@ if precool and precool["active"]:
         <div class="ts-schedule-status-card">
           <p class="ts-schedule-status-title">{_BOLT_ICON}선냉방 진행 중</p>
           <div class="ts-schedule-status-temps">
-            <span class="ts-schedule-status-temp">{current_temp:.1f}°C</span>
+            <span class="ts-schedule-status-temp">{current_temp_display}</span>
             <span class="ts-schedule-status-arrow">→</span>
             <span class="ts-schedule-status-temp">{target_temp}°C</span>
           </div>
@@ -101,7 +102,7 @@ elif status == "진행 중":
         <div class="ts-schedule-status-card">
           <p class="ts-schedule-status-title">{_BOLT_ICON}냉방 진행 중</p>
           <div class="ts-schedule-status-temps">
-            <span class="ts-schedule-status-temp">{current_temp:.1f}°C</span>
+            <span class="ts-schedule-status-temp">{current_temp_display}</span>
             <span class="ts-schedule-status-arrow">→</span>
             <span class="ts-schedule-status-temp">{target_temp}°C</span>
           </div>
