@@ -1,7 +1,6 @@
-import requests
 import streamlit as st
 
-from shared.api_client import api_delete, api_get, api_patch, api_post
+from shared.api_client import ApiError, api_delete, api_get, api_patch, api_post
 
 _CURRENT_USER_KEY = "_ts_current_user"  # {"user_id": int, "name": str, "email": str}
 _PENDING_LOGIN_KEY = "_ts_pending_login_result"
@@ -19,7 +18,7 @@ def is_registered(email: str) -> bool:
 def check_credentials(email: str, password: str) -> bool:
     try:
         user = api_post("/auth/login", json={"email": email, "password": password})
-    except requests.HTTPError:
+    except ApiError:
         return False
     # Stashed for set_current_user (called right after, in the same login
     # flow) so it doesn't need a second /auth/login round trip just to learn
