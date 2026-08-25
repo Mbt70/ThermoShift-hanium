@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.db import get_conn
-from api.routers import auth, control, devices, events, inquiries, rooms, schedules
+from api.routers import ai, auth, control, devices, events, inquiries, rooms, schedules
 
 app = FastAPI(title="ThermoShift API")
 
@@ -21,6 +21,7 @@ app.include_router(schedules.router)
 app.include_router(control.router)
 app.include_router(events.router)
 app.include_router(inquiries.router)
+app.include_router(ai.router)
 
 
 @app.get("/health")

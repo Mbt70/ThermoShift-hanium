@@ -1,6 +1,9 @@
 from datetime import date
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
+from psycopg.types.json import Json
 
 from api.db import get_conn
 
@@ -66,3 +69,58 @@ def get_command(command_id: int):
     if row is None:
         raise HTTPException(status_code=404, detail="command not found")
     return row
+
+
+class IssueCommandRequest(BaseModel):
+    """수동 제어 명령. 게이트웨이가 큐에서 집어가 실제로 실행한다."""
+
+    command_type: str = Field(pattern="^(power_on|power_off|set_temp|set_mode|set_fan)$")
+    target_temp: float | None = Field(default=None, ge=16, le=30)
+    control_mode: str = Field(default="manual", pattern="^(monitoring|manual|rule|mpc)$")
+    issued_by: int | None = None
+    payload: dict | None = None
+
+
+@router.post("/rooms/{room_id}/commands", status_code=201)
+def issue_command(room_id: int, body: IssueCommandRequest):
+    """POST /rooms/{room_id}/commands
+
+    명령을 'pending' 으로 큐에 넣기만 한다. API 는 액추에이터를 직접
+    건드리지 않는다 — 게이트웨이가 이 큐를 폴링해 MQTT 로 내보내고
+    command_status 를 갱신한다. 제어 주체를 하나로 묶어 두지 않으면
+    API 와 게이트웨이가 동시에 상반된 명령을 낼 수 있다.
+
+    Response: {"command_id": int, "command_status": "pending", "issued_at": str}
+    """
+    with get_conn() as conn, conn.cursor() as cur:
+        # 이 공간의 IR 송신기를 찾는다. 냉방 명령이 나갈 통로다.
+        cur.execute(
+            "SELECT device_id FROM devices"
+            " WHERE room_id = %s AND device_type = 'ir' AND is_enabled"
+            " ORDER BY device_id LIMIT 1",
+            (room_id,),
+        )
+        device = cur.fetchone()
+        if device is None:
+            raise HTTPException(
+                status_code=409,
+                detail="이 공간에 사용 가능한 IR 송신기가 없습니다",
+            )
+
+        # set_temp 인데 목표 온도가 없으면 게이트웨이가 무엇을 쏴야 할지
+        # 알 수 없다. 큐에 넣기 전에 막는다.
+        if body.command_type == "set_temp" and body.target_temp is None:
+            raise HTTPException(
+                status_code=422, detail="set_temp 에는 target_temp 가 필요합니다"
+            )
+
+        cur.execute(
+            "INSERT INTO hvac_commands"
+            " (room_id, device_id, issued_by, command_type, control_mode,"
+            "  target_temp, command_status, payload)"
+            " VALUES (%s, %s, %s, %s, %s, %s, 'pending', %s)"
+            " RETURNING command_id, command_status, issued_at",
+            (room_id, device["device_id"], body.issued_by, body.command_type,
+             body.control_mode, body.target_temp, Json(body.payload or {})),
+        )
+        return cur.fetchone()
