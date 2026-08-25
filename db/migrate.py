@@ -116,6 +116,59 @@ def register_seen_devices(conn: sqlite3.Connection) -> int:
     return added
 
 
+def merge_from(conn: sqlite3.Connection, source_path: str, room_id: str | None) -> dict[str, int]:
+    """구 edge DB에 있는데 통합 DB에 없는 행을 가져온다.
+
+    구 스택을 멈추기 전에 그동안 쌓인 데이터를 잃지 않기 위한 일회성 작업이다.
+    각 테이블의 최신 timestamp 보다 나중 행만 넣으므로 반복 실행해도 안전하다.
+    """
+    if not Path(source_path).exists():
+        raise FileNotFoundError(f"병합할 DB가 없습니다: {source_path}")
+
+    merged: dict[str, int] = {}
+    conn.execute("ATTACH DATABASE ? AS src", (source_path,))
+    try:
+        src_tables = {
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM src.sqlite_master WHERE type='table'"
+            )
+        }
+        for table in ("sensor_readings", "occupancy_estimates", "control_decisions",
+                      "ir_events", "system_events"):
+            if table not in src_tables or not table_exists(conn, table):
+                continue
+
+            # 두 DB 모두에 있는 컬럼만 옮긴다. 구 DB에는 room_id 가 없다.
+            dst_cols = column_names(conn, table)
+            src_cols = {r[1] for r in conn.execute(f"PRAGMA src.table_info({table})")}
+            shared = [c for c in dst_cols if c in src_cols]
+            if "timestamp" not in shared:
+                continue
+
+            cutoff = conn.execute(f"SELECT MAX(timestamp) FROM {table}").fetchone()[0] or ""
+            col_list = ", ".join(shared)
+            select_list = ", ".join(shared)
+            if room_id and "room_id" in dst_cols and "room_id" not in src_cols:
+                col_list += ", room_id"
+                select_list += ", ?"
+                params = (room_id, cutoff)
+            else:
+                params = (cutoff,)
+
+            cur = conn.execute(
+                f"INSERT INTO {table} ({col_list}) "
+                f"SELECT {select_list} FROM src.{table} WHERE timestamp > ?",
+                params,
+            )
+            merged[table] = cur.rowcount
+    finally:
+        # DETACH 는 트랜잭션 안에서 실행할 수 없다. 먼저 커밋한다.
+        conn.commit()
+        conn.execute("DETACH DATABASE src")
+    return merged
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ThermoShift DB 마이그레이션")
     parser.add_argument("--db", default=DEFAULT_DB_PATH, help="대상 DB 경로")
@@ -127,6 +180,14 @@ def main() -> int:
     parser.add_argument(
         "--backfill-room",
         help="room_id 가 비어 있는 과거 행을 이 공간 ID로 귀속",
+    )
+    parser.add_argument(
+        "--merge-from",
+        help="구 edge DB에서 아직 없는 행만 가져온다 (구 스택 종료 전 1회)",
+    )
+    parser.add_argument(
+        "--merge-room",
+        help="--merge-from 으로 가져온 행에 붙일 공간 ID",
     )
     args = parser.parse_args()
 
@@ -155,6 +216,9 @@ def main() -> int:
         backfilled = {}
         if args.backfill_room:
             backfilled = backfill_room_id(conn, args.backfill_room)
+        merged = {}
+        if args.merge_from:
+            merged = merge_from(conn, args.merge_from, args.merge_room)
 
     print(f"DB              : {db_path}")
     print(f"추가된 컬럼     : {', '.join(added_cols) if added_cols else '없음'}")
@@ -162,6 +226,10 @@ def main() -> int:
     if backfilled:
         for table, count in backfilled.items():
             print(f"  backfill {table}: {count}행")
+    if merged:
+        print(f"병합 원본       : {args.merge_from}")
+        for table, count in merged.items():
+            print(f"  merge {table}: {count}행")
 
     print("\n테이블별 행 수")
     for (name,) in conn.execute(
