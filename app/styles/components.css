@@ -37,10 +37,14 @@ body:has([data-testid="stDialog"]) {
   overflow: visible !important;
 }
 
-[data-testid="stDialog"] > div > div {
+[data-testid="stDialog"] > div > section {
   width: min(90vw, 360px) !important;
   max-height: min(80vh, 600px) !important;
   overflow-y: auto;
+  background: var(--card) !important;
+  border-radius: 18px !important;
+  padding: 20px !important;
+  box-shadow: 0 12px 34px rgba(15, 20, 30, 0.22);
 }
 
 /* Popups shouldn't give any visual feedback on hover. */
