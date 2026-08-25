@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import DB_PATH, get_conn, init_db
-from .routers import alerts, auth, control, devices, rooms, schedules
+from .routers import ai, alerts, auth, control, devices, rooms, schedules
 
 logging.basicConfig(
     level=os.environ.get("THERMOSHIFT_LOG_LEVEL", "INFO"),
@@ -55,6 +55,7 @@ app.include_router(devices.router)
 app.include_router(control.router)
 app.include_router(alerts.router)
 app.include_router(schedules.router)
+app.include_router(ai.router)
 
 
 @app.get("/api/health")
