@@ -379,8 +379,8 @@ with main_col:
         temp_val, co2_val, humidity_val, power_val = (
             snapshot["temperature"], snapshot["co2"], snapshot["humidity"], snapshot["power"],
         )
-        co2_ok = co2_val is not None and co2_val < 700
-        target_ok = temp_val is not None and abs(temp_val - room["target_temperature"]) <= 1.5
+        co2_ok = co2_val is not None and co2_val < room["co2_limit"]
+        target_ok = temp_val is not None and abs(temp_val - room["target_temperature"]) <= room["temp_tolerance"]
         temp_display = f"{temp_val:.1f}" if temp_val is not None else "--"
         co2_display = f"{co2_val:.0f}" if co2_val is not None else "--"
         humidity_display = f"{humidity_val:.0f}" if humidity_val is not None else "--"
