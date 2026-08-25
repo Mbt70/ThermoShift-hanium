@@ -14,8 +14,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ..auth import current_user, require_room_access
 from ..db import get_conn
 from ..schemas import CommandRequest, CommandStatusUpdate
 from ..services.timeutil import LOCAL_TZ, local_day_range, to_local_iso
@@ -43,7 +44,9 @@ def list_logs(
     room_id: str = Query(...),
     date: Optional[str] = Query(default=None, description="YYYY-MM-DD (로컬 기준)"),
     method: Optional[str] = Query(default=None, pattern="^(rule|manual|predict)$"),
+    actor: str = Depends(current_user),
 ):
+    require_room_access(room_id, actor)
     if date:
         try:
             day = datetime.strptime(date, "%Y-%m-%d").date()
@@ -139,7 +142,11 @@ def list_logs(
 
 
 @router.get("/logs/{log_id}")
-def get_log(log_id: str, room_id: Optional[str] = Query(default=None)):
+def get_log(
+    log_id: str,
+    room_id: Optional[str] = Query(default=None),
+    actor: str = Depends(current_user),
+):
     """단건 조회. 목록과 같은 형태를 돌려준다.
 
     프론트의 상세 화면은 로그 ID만 들고 이동하므로 room_id 없이도 찾을 수 있어야 한다.
@@ -161,6 +168,7 @@ def get_log(log_id: str, room_id: Optional[str] = Query(default=None)):
                 ).fetchone()
             if row is None:
                 raise HTTPException(status_code=404, detail="로그를 찾을 수 없습니다.")
+            require_room_access(row["room_id"], actor)
             executed = bool(row["executed"])
             shadow = row["control_mode"] == "shadow"
             return {
@@ -191,6 +199,7 @@ def get_log(log_id: str, room_id: Optional[str] = Query(default=None)):
             ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="로그를 찾을 수 없습니다.")
+        require_room_access(row["room_id"], actor)
         failed = row["status"] == "failed"
         return {
             "id": log_id,
@@ -210,8 +219,13 @@ def get_log(log_id: str, room_id: Optional[str] = Query(default=None)):
 
 
 @router.post("/commands", status_code=201)
-def create_command(room_id: str = Query(...), req: CommandRequest = ...):
+def create_command(
+    room_id: str = Query(...),
+    req: CommandRequest = ...,
+    actor: str = Depends(current_user),
+):
     """사용자 제어 명령을 큐에 넣는다. gateway가 pending을 집어가 실행한다."""
+    require_room_access(room_id, actor)
     command_id = uuid.uuid4().hex
     now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
@@ -224,7 +238,8 @@ def create_command(room_id: str = Query(...), req: CommandRequest = ...):
                 (id, room_id, created_at, issued_by, method, action, payload_json, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
             """,
-            (command_id, room_id, now, req.issued_by, req.method, req.action,
+            # 발신자는 요청 본문이 아니라 토큰의 사용자로 기록한다.
+            (command_id, room_id, now, actor, req.method, req.action,
              json.dumps(req.payload or {}, ensure_ascii=False)),
         )
     return {"id": command_id, "room_id": room_id, "status": "pending", "created_at": now}
@@ -235,28 +250,55 @@ def list_commands(
     room_id: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None, pattern="^(pending|sent|failed)$"),
     limit: int = Query(default=50, ge=1, le=500),
+    actor: str = Depends(current_user),
 ):
-    clauses, params = [], []
     if room_id:
-        clauses.append("room_id = ?")
+        require_room_access(room_id, actor)
+
+    # 소유한 공간의 명령만 보인다.
+    clauses = ["r.owner_email = ?"]
+    params: list = [actor]
+    if room_id:
+        clauses.append("c.room_id = ?")
         params.append(room_id)
     if status:
-        clauses.append("status = ?")
+        clauses.append("c.status = ?")
         params.append(status)
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     params.append(limit)
 
     with get_conn() as conn:
         rows = conn.execute(
-            f"SELECT * FROM control_commands {where} ORDER BY created_at DESC LIMIT ?", params
+            f"""
+            SELECT c.* FROM control_commands c
+            JOIN rooms r ON r.id = c.room_id
+            WHERE {' AND '.join(clauses)}
+            ORDER BY c.created_at DESC LIMIT ?
+            """,
+            params,
         ).fetchall()
         return [dict(row) for row in rows]
 
 
 @router.patch("/commands/{command_id}")
-def update_command(command_id: str, req: CommandStatusUpdate):
-    """gateway가 실행 결과를 되돌려 기록한다."""
+def update_command(
+    command_id: str,
+    req: CommandStatusUpdate,
+    actor: str = Depends(current_user),
+):
+    """실행 결과를 기록한다.
+
+    같은 파이에서 도는 gateway 는 SQLite 를 직접 쓴다. 이 엔드포인트는
+    원격 게이트웨이나 디버깅용이다.
+    """
     resolved_at = datetime.now(timezone.utc).isoformat() if req.status != "pending" else None
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT room_id FROM control_commands WHERE id = ?", (command_id,)
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="명령을 찾을 수 없습니다.")
+    require_room_access(row["room_id"], actor)
+
     with get_conn() as conn:
         cur = conn.execute(
             "UPDATE control_commands SET status = ?, error_code = ?, resolved_at = ? WHERE id = ?",

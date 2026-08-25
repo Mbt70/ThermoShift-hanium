@@ -8,8 +8,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ..auth import current_user, require_room_access
 from ..db import get_conn
 from ..schemas import RoomCreateRequest, RoomUpdateRequest
 from ..services import snapshot
@@ -29,20 +30,22 @@ def _fetch_room(conn, room_id: str):
 
 
 @router.get("")
-def list_rooms(owner_email: Optional[str] = Query(default=None)):
+def list_rooms(
+    owner_email: Optional[str] = Query(default=None),
+    actor: str = Depends(current_user),
+):
+    # owner_email 파라미터는 하위 호환으로 받되, 실제로는 항상 본인 소유만 돌려준다.
+    # 남의 공간 목록을 조회할 수 있으면 안 된다.
+    del owner_email
     with get_conn() as conn:
-        if owner_email:
-            rows = conn.execute(
-                "SELECT * FROM rooms WHERE owner_email = ? ORDER BY created_at",
-                (owner_email.strip().lower(),),
-            ).fetchall()
-        else:
-            rows = conn.execute("SELECT * FROM rooms ORDER BY created_at").fetchall()
+        rows = conn.execute(
+            "SELECT * FROM rooms WHERE owner_email = ? ORDER BY created_at", (actor,)
+        ).fetchall()
         return [snapshot.build_room_payload(conn, row) for row in rows]
 
 
 @router.post("", status_code=201)
-def create_room(req: RoomCreateRequest):
+def create_room(req: RoomCreateRequest, actor: str = Depends(current_user)):
     room_id = uuid.uuid4().hex
     now = _now()
     with get_conn() as conn:
@@ -53,20 +56,22 @@ def create_room(req: RoomCreateRequest):
                                created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, 24.0, 'rule', 1, ?, ?)
             """,
-            (room_id, req.name, req.location, req.floor_plan_name,
-             req.owner_email.strip().lower(), now, now),
+            # 요청 본문의 owner_email 은 무시하고 토큰의 사용자를 소유자로 박는다.
+            (room_id, req.name, req.location, req.floor_plan_name, actor, now, now),
         )
         return snapshot.build_room_payload(conn, _fetch_room(conn, room_id))
 
 
 @router.get("/{room_id}")
-def get_room(room_id: str):
+def get_room(room_id: str, actor: str = Depends(current_user)):
+    require_room_access(room_id, actor)
     with get_conn() as conn:
         return snapshot.build_room_payload(conn, _fetch_room(conn, room_id))
 
 
 @router.patch("/{room_id}")
-def update_room(room_id: str, req: RoomUpdateRequest):
+def update_room(room_id: str, req: RoomUpdateRequest, actor: str = Depends(current_user)):
+    require_room_access(room_id, actor)
     fields = {
         "name": req.name,
         "location": req.location,
@@ -88,7 +93,8 @@ def update_room(room_id: str, req: RoomUpdateRequest):
 
 
 @router.delete("/{room_id}", status_code=204)
-def delete_room(room_id: str):
+def delete_room(room_id: str, actor: str = Depends(current_user)):
+    require_room_access(room_id, actor)
     with get_conn() as conn:
         conn.execute("DELETE FROM rooms WHERE id = ?", (room_id,))
     return None
@@ -100,7 +106,9 @@ def get_trend(
     metric: str = Query(default="temperature"),
     hours: int = Query(default=3, ge=1, le=8760),
     points: int = Query(default=30, ge=2, le=500),
+    actor: str = Depends(current_user),
 ):
+    require_room_access(room_id, actor)
     allowed = {"temperature", "humidity", "co2", "pir", "door", "power"}
     if metric not in allowed:
         raise HTTPException(status_code=400, detail=f"지원하지 않는 metric: {metric}")
@@ -115,7 +123,8 @@ def get_trend(
 
 
 @router.get("/{room_id}/devices")
-def list_room_devices(room_id: str):
+def list_room_devices(room_id: str, actor: str = Depends(current_user)):
+    require_room_access(room_id, actor)
     with get_conn() as conn:
         _fetch_room(conn, room_id)
         rows = conn.execute(

@@ -5,8 +5,9 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ..auth import current_user, require_room_access
 from ..db import get_conn
 from ..schemas import ScheduleRequest
 
@@ -27,7 +28,9 @@ def _payload(row) -> dict:
 def list_schedules(
     room_id: str = Query(...),
     today_only: bool = Query(default=False, description="오늘 적용되는 예약만"),
+    actor: str = Depends(current_user),
 ):
+    require_room_access(room_id, actor)
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM schedules WHERE room_id = ? ORDER BY start_time", (room_id,)
@@ -47,7 +50,12 @@ def list_schedules(
 
 
 @router.post("", status_code=201)
-def create_schedule(req: ScheduleRequest, room_id: str = Query(...)):
+def create_schedule(
+    req: ScheduleRequest,
+    room_id: str = Query(...),
+    actor: str = Depends(current_user),
+):
+    require_room_access(room_id, actor)
     invalid = [d for d in req.repeat_days if d not in WEEKDAY_CODES]
     if invalid:
         raise HTTPException(status_code=400, detail=f"잘못된 요일 코드: {invalid}")
@@ -74,21 +82,24 @@ def create_schedule(req: ScheduleRequest, room_id: str = Query(...)):
         return _payload(row)
 
 
-@router.get("/{schedule_id}")
-def get_schedule(schedule_id: str):
+def _owned_schedule(schedule_id: str, actor: str):
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM schedules WHERE id = ?", (schedule_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="예약을 찾을 수 없습니다.")
-    return _payload(row)
+    require_room_access(row["room_id"], actor)
+    return row
+
+
+@router.get("/{schedule_id}")
+def get_schedule(schedule_id: str, actor: str = Depends(current_user)):
+    return _payload(_owned_schedule(schedule_id, actor))
 
 
 @router.put("/{schedule_id}")
-def update_schedule(schedule_id: str, req: ScheduleRequest):
+def update_schedule(schedule_id: str, req: ScheduleRequest, actor: str = Depends(current_user)):
+    _owned_schedule(schedule_id, actor)
     with get_conn() as conn:
-        exists = conn.execute("SELECT 1 FROM schedules WHERE id = ?", (schedule_id,)).fetchone()
-        if exists is None:
-            raise HTTPException(status_code=404, detail="예약을 찾을 수 없습니다.")
         conn.execute(
             """
             UPDATE schedules SET title=?, date=?, start_time=?, end_time=?,
@@ -105,7 +116,8 @@ def update_schedule(schedule_id: str, req: ScheduleRequest):
 
 
 @router.delete("/{schedule_id}", status_code=204)
-def delete_schedule(schedule_id: str):
+def delete_schedule(schedule_id: str, actor: str = Depends(current_user)):
+    _owned_schedule(schedule_id, actor)
     with get_conn() as conn:
         conn.execute("DELETE FROM schedules WHERE id = ?", (schedule_id,))
     return None

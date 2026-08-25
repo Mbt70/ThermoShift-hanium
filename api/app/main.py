@@ -38,13 +38,22 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Streamlit 프론트는 다른 포트(8501)에서 뜨므로 CORS를 열어 둔다.
-# 실증 환경에서는 ALLOWED_ORIGINS 환경변수로 좁힌다.
-allowed_origins = os.environ.get("THERMOSHIFT_ALLOWED_ORIGINS", "*").split(",")
+# 프론트는 다른 출처(로컬 8501, Vercel 도메인)에서 뜨므로 CORS를 연다.
+# 인증은 Authorization 헤더의 토큰으로 하고 쿠키를 쓰지 않으므로
+# allow_credentials 는 꺼 둔다. 켜 두면 브라우저가 와일드카드를 거부하고,
+# 무엇보다 CSRF 표면이 생긴다.
+allowed_origins = [
+    o.strip() for o in os.environ.get("THERMOSHIFT_ALLOWED_ORIGINS", "*").split(",") if o.strip()
+]
+if allowed_origins == ["*"]:
+    logger.warning(
+        "CORS가 모든 출처에 열려 있습니다. 공인 주소로 배포할 때는 "
+        "THERMOSHIFT_ALLOWED_ORIGINS 에 프론트 도메인을 지정하세요."
+    )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in allowed_origins],
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

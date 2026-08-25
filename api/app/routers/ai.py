@@ -8,8 +8,9 @@ import json
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ..auth import current_user, require_room_access
 from ..db import get_conn
 from ..services import ai, snapshot, stats
 from ..services.timeutil import to_local_iso
@@ -26,7 +27,10 @@ def status():
 
 
 @router.post("/explain-decision")
-def explain_decision(log_id: str = Query(..., description="decision:<rowid> 또는 command:<id>")):
+def explain_decision(
+    log_id: str = Query(..., description="decision:<rowid> 또는 command:<id>"),
+    actor: str = Depends(current_user),
+):
     if not ai.is_available():
         raise HTTPException(status_code=503, detail=_UNAVAILABLE)
 
@@ -40,6 +44,7 @@ def explain_decision(log_id: str = Query(..., description="decision:<rowid> 또�
         ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="제어 판단을 찾을 수 없습니다.")
+        require_room_access(row["room_id"], actor)
         room = conn.execute("SELECT * FROM rooms WHERE id = ?", (row["room_id"],)).fetchone()
         if room is None:
             raise HTTPException(status_code=404, detail="공간을 찾을 수 없습니다.")
@@ -64,7 +69,7 @@ def explain_decision(log_id: str = Query(..., description="decision:<rowid> 또�
 
 
 @router.post("/diagnose-alert")
-def diagnose_alert(alert_id: str = Query(...)):
+def diagnose_alert(alert_id: str = Query(...), actor: str = Depends(current_user)):
     if not ai.is_available():
         raise HTTPException(status_code=503, detail=_UNAVAILABLE)
 
@@ -72,6 +77,7 @@ def diagnose_alert(alert_id: str = Query(...)):
         row = conn.execute("SELECT * FROM alerts WHERE id = ?", (alert_id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="알림을 찾을 수 없습니다.")
+        require_room_access(row["room_id"], actor)
         alert = dict(row)
         alert["created_at"] = to_local_iso(alert["created_at"])
 
@@ -103,8 +109,10 @@ def get_stats(
     room_id: str = Query(...),
     start: Optional[str] = Query(default=None, description="YYYY-MM-DD"),
     end: Optional[str] = Query(default=None, description="YYYY-MM-DD"),
+    actor: str = Depends(current_user),
 ):
     """AI 없이 숫자만 필요할 때. 성과 리포트 화면이 쓴다."""
+    require_room_access(room_id, actor)
     start_date, end_date = _parse_period(start, end)
     with get_conn() as conn:
         try:
@@ -118,8 +126,10 @@ def generate_report(
     room_id: str = Query(...),
     start: Optional[str] = Query(default=None),
     end: Optional[str] = Query(default=None),
+    actor: str = Depends(current_user),
 ):
     """기간 KPI를 집계하고 AI 요약을 붙여 돌려준다."""
+    require_room_access(room_id, actor)
     start_date, end_date = _parse_period(start, end)
     with get_conn() as conn:
         try:
