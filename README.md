@@ -136,6 +136,23 @@ bash infra/systemd/install.sh
 .venv/bin/python -m streamlit run web/main.py
 ```
 
+## 배포 (Vercel)
+
+`npm run build` 가 `pwa/` 에 stlite 정적 번들 두 개를 만듭니다.
+
+| 경로 | 진입점 | 화면 |
+|---|---|---|
+| `/` | `app/main.py` | 모바일 |
+| `/dashboard/` | `web/main.py` | 데스크톱 대시보드 |
+
+Vercel 프로젝트 환경변수에 `THERMOSHIFT_API_BASE` 를 넣으면 빌드 시점에
+번들로 구워집니다. 비어 있으면 목데이터 모드로 뜹니다.
+
+브라우저에서 도는 stlite 는 `requests` 를 쓸 수 없어
+`app/components/backend.py` 가 동기 XMLHttpRequest 로 자동 전환합니다.
+따라서 API 서버는 **공인 주소로 접근 가능해야 하고**, CORS 허용 출처에
+Vercel 도메인이 포함돼야 합니다 (`THERMOSHIFT_ALLOWED_ORIGINS`).
+
 ## 협업 흐름
 
 GitHub를 많이 써보지 않은 팀원도 따라올 수 있도록, 처음에는 단순하게 운영합니다.

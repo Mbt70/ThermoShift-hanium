@@ -1,113 +1,109 @@
-// Builds pwa/ (the stlite static deployment output) from app/.
+// Builds pwa/ (the stlite static deployment output) from app/ and web/.
 //
-// This script is the ONLY place that needs to know how app/ is structured.
-// It walks app/ itself and copies whatever it finds into pwa/app/, then
-// auto-generates the stlite `files` map from that same walk. Nobody has to
-// hand-edit a file list in index.html when a new page/asset is added to
-// app/ - re-running this script (which Vercel does on every build) picks
-// it up automatically.
+// 두 개의 프론트를 배포한다.
+//   /            → app/main.py   (모바일 화면)
+//   /dashboard/  → web/main.py   (데스크톱 대시보드)
+//
+// 대시보드는 app/components/*_store.py 를 데이터 계층으로 재사용하므로
+// 두 트리를 모두 번들에 넣는다. 파일은 한 번만 복사하고, 각 index.html 이
+// 루트 절대 URL(/app/..., /web/...)로 참조해 중복 복사를 피한다.
+//
+// 이 스크립트가 app/ 과 web/ 구조를 아는 유일한 곳이다. 페이지나 자산을
+// 추가해도 파일 목록을 손으로 고칠 필요가 없다 - 다시 실행하면 걸어서 찾는다.
 //
 // Usage: node scripts/build-pwa.mjs
+//   THERMOSHIFT_API_BASE   백엔드 주소 (Vercel 환경변수)
+//   THERMOSHIFT_PWA_TARGET app | web | both (기본 both)
 
-import { existsSync, mkdirSync, readdirSync, statSync, copyFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, copyFileSync, writeFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
-const APP_SRC = path.join(REPO_ROOT, "app");
 const PWA_OUT = path.join(REPO_ROOT, "pwa");
-const PWA_APP_OUT = path.join(PWA_OUT, "app");
 
 // stlite's Pyodide file system only needs to see files the app actually
-// reads at runtime (Python source, stylesheets, icons). Anything else in
-// app/ (e.g. __pycache__) is noise we should not ship to the browser.
+// reads at runtime (Python source, stylesheets, icons). Anything else
+// (e.g. __pycache__) is noise we should not ship to the browser.
 const ALLOWED_EXTENSIONS = new Set([
-  ".py",
-  ".css",
-  ".svg",
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".webp",
-  ".gif",
-  ".ico",
-  ".json",
+  ".py", ".css", ".svg", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico", ".json",
 ]);
 const SKIP_DIR_NAMES = new Set(["__pycache__", "node_modules"]);
 
 // Confirmed against the official stlite README (github.com/whitphx/stlite,
 // section "Use Stlite on your web page"): the `mount()` browser API is at
-// this CDN path/version, and requirements only needs packages that are
-// actually installed via micropip - `streamlit` itself is bundled by
-// stlite and any `streamlit` entry in `requirements` is ignored, per the
-// stlite CHANGELOG ("`streamlit` requirement is allowed but ignored").
+// this CDN path/version, and requirements only needs packages installed via
+// micropip - `streamlit` itself is bundled by stlite and any `streamlit`
+// entry in `requirements` is ignored, per the stlite CHANGELOG.
 const STLITE_VERSION = "1.8.1";
+
+// 배포 대상. sources 는 번들에 넣을 최상위 디렉터리.
+const TARGETS = {
+  app: {
+    outFile: path.join(PWA_OUT, "index.html"),
+    sources: ["app"],
+    entrypoint: "app/main.py",
+    // 루트에서 서비스되므로 base path 가 없다.
+    baseUrlPath: null,
+  },
+  web: {
+    outFile: path.join(PWA_OUT, "dashboard", "index.html"),
+    // 대시보드 페이지들이 app.components 를 import 한다.
+    sources: ["app", "web"],
+    entrypoint: "web/main.py",
+    // /dashboard/ 아래에서 서비스되므로 Streamlit 라우팅에 base path 를 알려준다.
+    baseUrlPath: "dashboard",
+  },
+};
 
 function walk(dir, relBase, out) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith(".")) continue; // dotfiles/.gitkeep, nothing app/ reads at runtime
+    if (entry.name.startsWith(".")) continue; // dotfiles/.gitkeep - nothing read at runtime
     const abs = path.join(dir, entry.name);
     const rel = path.posix.join(relBase, entry.name);
     if (entry.isDirectory()) {
       if (SKIP_DIR_NAMES.has(entry.name)) continue;
       walk(abs, rel, out);
     } else if (entry.isFile()) {
-      if (ALLOWED_EXTENSIONS.has(path.extname(entry.name))) {
-        out.push(rel);
-      }
+      if (ALLOWED_EXTENSIONS.has(path.extname(entry.name))) out.push(rel);
     }
   }
 }
 
-function main() {
-  if (!existsSync(APP_SRC)) {
-    throw new Error(`app/ not found at ${APP_SRC}`);
-  }
+function copyTree(name) {
+  const src = path.join(REPO_ROOT, name);
+  if (!existsSync(src)) throw new Error(`${name}/ not found at ${src}`);
+  const dest = path.join(PWA_OUT, name);
 
-  // Rebuild pwa/app/ from scratch each time so removed source files don't
-  // linger as stale copies in the deployed bundle.
-  rmSync(PWA_APP_OUT, { recursive: true, force: true });
-  mkdirSync(PWA_APP_OUT, { recursive: true });
+  // 지워진 소스 파일이 배포 번들에 남지 않도록 매번 새로 만든다.
+  rmSync(dest, { recursive: true, force: true });
+  mkdirSync(dest, { recursive: true });
 
   const relFiles = [];
-  walk(APP_SRC, "", relFiles);
+  walk(src, "", relFiles);
   relFiles.sort();
-
-  const filesManifest = {};
   for (const rel of relFiles) {
-    const srcPath = path.join(APP_SRC, rel);
-    const destPath = path.join(PWA_APP_OUT, rel);
+    const destPath = path.join(dest, rel);
     mkdirSync(path.dirname(destPath), { recursive: true });
-    copyFileSync(srcPath, destPath);
-    // Relative URL loading (files: {"...": {url: "./..."}}) is the
-    // officially documented way to avoid inlining source as JS strings.
-    filesManifest[`app/${rel}`] = { url: `./app/${rel}` };
+    copyFileSync(path.join(src, rel), destPath);
   }
-
-  // 브라우저에서는 환경변수를 읽을 수 없으므로, 백엔드 주소를 빌드 시점에
-  // 설정 파일로 구워 넣는다. Vercel 프로젝트 설정의 THERMOSHIFT_API_BASE
-  // 환경변수를 그대로 쓴다. 비어 있으면 app/components/backend.py 가
-  // API를 끄고 로컬 목데이터로 동작한다.
-  const apiBase = (process.env.THERMOSHIFT_API_BASE || "").replace(/\/$/, "");
-  const apiConfigPath = path.join(PWA_APP_OUT, "api_config.json");
-  writeFileSync(apiConfigPath, JSON.stringify({ api_base: apiBase }, null, 2), "utf8");
-  filesManifest["app/api_config.json"] = { url: "./app/api_config.json" };
-  console.log(
-    apiBase
-      ? `[build-pwa] api_base = ${apiBase}`
-      : "[build-pwa] api_base 미설정 - 목데이터 모드로 동작합니다",
-  );
-
-  const indexHtml = renderIndexHtml(filesManifest);
-  writeFileSync(path.join(PWA_OUT, "index.html"), indexHtml, "utf8");
-
-  console.log(`[build-pwa] copied ${relFiles.length} files from app/ into pwa/app/`);
-  console.log(`[build-pwa] wrote pwa/index.html (stlite @${STLITE_VERSION})`);
+  return relFiles;
 }
 
-function renderIndexHtml(filesManifest) {
+function writeApiConfig(apiBase) {
+  // 브라우저에서는 환경변수를 읽을 수 없으므로 백엔드 주소를 빌드 시점에
+  // 파일로 구워 넣는다. app/components/backend.py 가 이 파일을 읽는다.
+  const target = path.join(PWA_OUT, "app", "api_config.json");
+  writeFileSync(target, JSON.stringify({ api_base: apiBase }, null, 2), "utf8");
+  return "app/api_config.json";
+}
+
+function renderIndexHtml(target, filesManifest) {
   const filesJson = JSON.stringify(filesManifest, null, 2);
+  const config = { "client.toolbarMode": "minimal" };
+  if (target.baseUrlPath) config["server.baseUrlPath"] = target.baseUrlPath;
+
   return `<!doctype html>
 <html>
   <head>
@@ -132,7 +128,7 @@ function renderIndexHtml(filesManifest) {
     <script type="module">
       import { mount } from "https://cdn.jsdelivr.net/npm/@stlite/browser@${STLITE_VERSION}/build/stlite.js";
 
-      // Auto-generated by scripts/build-pwa.mjs from app/ - do not edit by hand.
+      // Auto-generated by scripts/build-pwa.mjs - do not edit by hand.
       const files = ${filesJson};
 
       mount(
@@ -141,17 +137,13 @@ function renderIndexHtml(filesManifest) {
           // app/components/backend.py 가 이를 감지해 동기 XMLHttpRequest
           // 전송으로 자동 전환하므로, 여기에 추가하지 않는다.
           requirements: [],
-          entrypoint: "app/main.py",
+          entrypoint: "${target.entrypoint}",
           files,
-          streamlitConfig: {
-            "client.toolbarMode": "minimal",
-          },
+          streamlitConfig: ${JSON.stringify(config, null, 2)},
           // Persists app/components/*_store.py's .data/*.json across page
-          // reloads (default Pyodide FS is in-memory and would otherwise
-          // reset all mock data - registered users/rooms/logs - on every
-          // reload). stlite mounts app files under the pyodide home
-          // directory (confirmed via console log: "Write a file
-          // /home/pyodide/app/..."), and Path(__file__).resolve().parents[2]
+          // reloads (default Pyodide FS is in-memory and would otherwise reset
+          // all local data on every reload). stlite mounts files under the
+          // pyodide home directory, and Path(__file__).resolve().parents[2]
           // from app/components/*.py resolves to that same home dir, so
           // ".data" ends up at /home/pyodide/.data - not /.data.
           idbfsMountpoints: ["/home/pyodide/.data"],
@@ -162,6 +154,55 @@ function renderIndexHtml(filesManifest) {
   </body>
 </html>
 `;
+}
+
+function main() {
+  const requested = (process.env.THERMOSHIFT_PWA_TARGET || "both").toLowerCase();
+  const names = requested === "both" ? Object.keys(TARGETS) : [requested];
+  for (const name of names) {
+    if (!TARGETS[name]) {
+      throw new Error(`Unknown THERMOSHIFT_PWA_TARGET "${name}" (expected app, web, or both)`);
+    }
+  }
+
+  // 대상들이 필요로 하는 소스 트리를 합집합으로 한 번만 복사한다.
+  const neededSources = new Set(names.flatMap((n) => TARGETS[n].sources));
+  const filesBySource = {};
+  for (const source of neededSources) {
+    filesBySource[source] = copyTree(source);
+    console.log(`[build-pwa] copied ${filesBySource[source].length} files from ${source}/`);
+  }
+
+  const apiBase = (process.env.THERMOSHIFT_API_BASE || "").replace(/\/$/, "");
+  const apiConfigRel = writeApiConfig(apiBase);
+  console.log(
+    apiBase
+      ? `[build-pwa] api_base = ${apiBase}`
+      : "[build-pwa] api_base 미설정 - 목데이터 모드로 동작합니다",
+  );
+
+  for (const name of names) {
+    const target = TARGETS[name];
+    const manifest = {};
+    for (const source of target.sources) {
+      for (const rel of filesBySource[source]) {
+        const key = `${source}/${rel}`;
+        // 루트 절대 URL을 쓴다. /dashboard/ 처럼 하위 경로에서 열려도
+        // 같은 파일을 가리키므로 트리를 중복 복사하지 않아도 된다.
+        manifest[key] = { url: `/${key}` };
+      }
+    }
+    if (target.sources.includes("app")) {
+      manifest[apiConfigRel] = { url: `/${apiConfigRel}` };
+    }
+
+    mkdirSync(path.dirname(target.outFile), { recursive: true });
+    writeFileSync(target.outFile, renderIndexHtml(target, manifest), "utf8");
+    console.log(
+      `[build-pwa] wrote ${path.relative(REPO_ROOT, target.outFile)} ` +
+        `(entrypoint ${target.entrypoint}, ${Object.keys(manifest).length} files, stlite @${STLITE_VERSION})`,
+    );
+  }
 }
 
 main();
