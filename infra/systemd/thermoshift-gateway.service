@@ -1,0 +1,22 @@
+[Unit]
+Description=ThermoShift Gateway (제어 두뇌: MQTT 수집 · 재실 추정 · HVAC 제어)
+After=network.target mosquitto.service postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=thermo
+WorkingDirectory=/home/thermo/ThermoShift-hanium/gateway
+Environment="DB_HOST=localhost"
+Environment="DB_PORT=5432"
+Environment="DB_USER=thermoshift"
+Environment="DB_NAME=thermoshift"
+EnvironmentFile=-/etc/thermoshift.env
+ExecStart=/home/thermo/ThermoShift-hanium/.venv/bin/python -m app.main
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

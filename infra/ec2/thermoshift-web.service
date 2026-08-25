@@ -1,0 +1,22 @@
+[Unit]
+Description=ThermoShift 대시보드 (EC2 서버 렌더링 Streamlit)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/ThermoShift-hanium
+# API 는 리버스 SSH 터널로 들어온 파이의 것을 본다.
+Environment="THERMOSHIFT_API_URL=http://127.0.0.1:18100"
+ExecStart=/home/ubuntu/ThermoShift-hanium/.venv/bin/python -m streamlit run web/main.py \
+  --server.port 8501 \
+  --server.address 127.0.0.1 \
+  --server.headless true \
+  --browser.gatherUsageStats false
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=ThermoShift Web (Streamlit 대시보드)
+After=network.target thermoshift-api.service
+
+[Service]
+Type=simple
+User=thermo
+WorkingDirectory=/home/thermo/ThermoShift-hanium
+Environment="THERMOSHIFT_API_URL=http://127.0.0.1:8000"
+ExecStart=/home/thermo/ThermoShift-hanium/.venv/bin/python -m streamlit run web/main.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

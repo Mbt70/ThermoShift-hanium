@@ -1,0 +1,30 @@
+[Unit]
+Description=ThermoShift 리버스 SSH 터널 (파이 :8000 → EC2 :18100)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=thermo
+Environment="AUTOSSH_GATETIME=0"
+Environment="AUTOSSH_POLL=30"
+# -N 셸 없음 / -T 터미널 없음
+# -R 127.0.0.1:18100 : EC2의 루프백에만 바인딩한다. 0.0.0.0 으로 열면
+#    API가 인터넷에 그대로 노출된다. Caddy 가 같은 호스트에서 프록시하므로
+#    루프백이면 충분하다.
+# ServerAlive* : 끊긴 연결을 빨리 감지해 autossh 가 재접속하게 한다
+ExecStart=/usr/bin/autossh -M 0 -N -T \
+  -o "ServerAliveInterval 30" \
+  -o "ServerAliveCountMax 3" \
+  -o "ExitOnForwardFailure yes" \
+  -o "StrictHostKeyChecking accept-new" \
+  -i /home/thermo/.ssh/thermoshift_ec2 \
+  -R 127.0.0.1:18100:127.0.0.1:8000 \
+  ubuntu@<EC2-주소>
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
