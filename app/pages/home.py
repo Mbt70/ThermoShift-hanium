@@ -147,182 +147,186 @@ apply_mobile_styles("home")
 if not is_logged_in():
     st.switch_page("pages/login.py")
 
-room_id = st.session_state.get("_ts_selected_room")
-room = get_room(room_id) if room_id else None
+@st.fragment(run_every="5s")
+def _render_home() -> None:
+    room_id = st.session_state.get("_ts_selected_room")
+    room = get_room(room_id) if room_id else None
 
-if room is None:
-    st.switch_page("pages/room_list.py")
+    if room is None:
+        st.switch_page("pages/room_list.py")
 
-header_col, chip_col = st.columns([3, 4], gap="small", vertical_alignment="center")
-with header_col:
-    page_header(room["name"], back_page="pages/room_list.py")
-with chip_col:
-    auto_class = "is-active" if room.get("auto_control") else ""
-    st.markdown(
-        f"""
-        <div class="ts-home-chips">
-          <span class="ts-home-chip">업데이트 {relative_updated(room)}</span>
-          <span class="ts-home-chip ts-home-chip-auto {auto_class}">{_AUTO_ICON}자동 제어</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    header_col, chip_col = st.columns([3, 4], gap="small", vertical_alignment="center")
+    with header_col:
+        page_header(room["name"], back_page="pages/room_list.py")
+    with chip_col:
+        auto_class = "is-active" if room.get("auto_control") else ""
+        st.markdown(
+            f"""
+            <div class="ts-home-chips">
+              <span class="ts-home-chip">업데이트 {relative_updated(room)}</span>
+              <span class="ts-home-chip ts-home-chip-auto {auto_class}">{_AUTO_ICON}자동 제어</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-score = comfort_index(room)
-label = comfort_label(score)
-label_color = {
-    "좋음": "var(--success)",
-    "보통": "var(--warning)",
-    "나쁨": "var(--danger)",
-}[label]
-circumference = 326.73
-dash = circumference * score / 100
+    score = comfort_index(room)
+    label = comfort_label(score)
+    label_color = {
+        "좋음": "var(--success)",
+        "보통": "var(--warning)",
+        "나쁨": "var(--danger)",
+    }[label]
+    circumference = 326.73
+    dash = circumference * score / 100
 
-with st.container(key="ts_comfort_link"):
-    st.markdown(
-        f"""
-        <div class="ts-comfort">
-          <p class="ts-comfort-title">쾌적도 지수</p>
-          <div class="ts-gauge-wrap">
-            <svg viewBox="0 0 120 120" class="ts-gauge-ring">
-              <circle cx="60" cy="60" r="52" stroke="var(--border)" stroke-width="14" fill="none" />
-              <circle cx="60" cy="60" r="52" stroke="{label_color}" stroke-width="14" fill="none"
-                      stroke-linecap="round" stroke-dasharray="{dash:.2f} {circumference:.2f}"
-                      transform="rotate(-90 60 60)" />
-            </svg>
-            <div class="ts-gauge-center"><span class="ts-gauge-score">{score}</span></div>
-          </div>
-          <p class="ts-gauge-label">{label}</p>
-          <p class="ts-comfort-hint">환경 데이터 보기 ›</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    comfort_clicked = st.button(
-        "쾌적도 지수 상세 보기", key="ts_comfort_open", use_container_width=True
-    )
+    with st.container(key="ts_comfort_link"):
+        st.markdown(
+            f"""
+            <div class="ts-comfort">
+              <p class="ts-comfort-title">쾌적도 지수</p>
+              <div class="ts-gauge-wrap">
+                <svg viewBox="0 0 120 120" class="ts-gauge-ring">
+                  <circle cx="60" cy="60" r="52" stroke="var(--border)" stroke-width="14" fill="none" />
+                  <circle cx="60" cy="60" r="52" stroke="{label_color}" stroke-width="14" fill="none"
+                          stroke-linecap="round" stroke-dasharray="{dash:.2f} {circumference:.2f}"
+                          transform="rotate(-90 60 60)" />
+                </svg>
+                <div class="ts-gauge-center"><span class="ts-gauge-score">{score}</span></div>
+              </div>
+              <p class="ts-gauge-label">{label}</p>
+              <p class="ts-comfort-hint">환경 데이터 보기 ›</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        comfort_clicked = st.button(
+            "쾌적도 지수 상세 보기", key="ts_comfort_open", use_container_width=True
+        )
 
-if comfort_clicked:
-    _show_environment_dialog(room)
+    if comfort_clicked:
+        _show_environment_dialog(room)
 
-headline, subline = system_judgment(room)
-with st.container(key="ts_judgment_card", border=True):
-    st.markdown(
-        f"""
-        <p class="ts-judgment-title">{_CHIP_ICON}시스템 판단 <span class="ts-judgment-badge">LLM</span></p>
-        <p class="ts-judgment-headline">{headline}</p>
-        """,
-        unsafe_allow_html=True,
-    )
-    sub_col, link_col = st.columns([3, 1], vertical_alignment="center")
-    with sub_col:
-        st.markdown(f'<p class="ts-judgment-sub">{subline}</p>', unsafe_allow_html=True)
-    with link_col:
-        st.page_link("pages/log_detail.py", label="자세히 ›")
+    headline, subline = system_judgment(room)
+    with st.container(key="ts_judgment_card", border=True):
+        st.markdown(
+            f"""
+            <p class="ts-judgment-title">{_CHIP_ICON}시스템 판단 <span class="ts-judgment-badge">LLM</span></p>
+            <p class="ts-judgment-headline">{headline}</p>
+            """,
+            unsafe_allow_html=True,
+        )
+        sub_col, link_col = st.columns([3, 1], vertical_alignment="center")
+        with sub_col:
+            st.markdown(f'<p class="ts-judgment-sub">{subline}</p>', unsafe_allow_html=True)
+        with link_col:
+            st.page_link("pages/log_detail.py", label="자세히 ›")
 
-with st.container(key="ts_control_mode_card", border=True):
-    st.markdown('<p class="ts-mode-title">제어 모드</p>', unsafe_allow_html=True)
-    current_mode = room.get("control_mode", "rule")
-    clicked_mode = None
-    mode_cols = st.columns(4, gap="small")
-    for col, (mode_id, mode_label, icon_file) in zip(mode_cols, _CONTROL_MODES):
-        with col:
-            with st.container(key=f"ts_mode_{mode_id}"):
-                is_active = mode_id == current_mode
-                icon_color = _MODE_ICON_ACTIVE if is_active else _MODE_ICON_INACTIVE
-                icon_uri = _recolored_icon_data_uri(icon_file, icon_color)
-                active_class = "is-active" if is_active else ""
+    with st.container(key="ts_control_mode_card", border=True):
+        st.markdown('<p class="ts-mode-title">제어 모드</p>', unsafe_allow_html=True)
+        current_mode = room.get("control_mode", "rule")
+        clicked_mode = None
+        mode_cols = st.columns(4, gap="small")
+        for col, (mode_id, mode_label, icon_file) in zip(mode_cols, _CONTROL_MODES):
+            with col:
+                with st.container(key=f"ts_mode_{mode_id}"):
+                    is_active = mode_id == current_mode
+                    icon_color = _MODE_ICON_ACTIVE if is_active else _MODE_ICON_INACTIVE
+                    icon_uri = _recolored_icon_data_uri(icon_file, icon_color)
+                    active_class = "is-active" if is_active else ""
+                    st.markdown(
+                        f"""
+                        <div class="ts-mode-item {active_class}">
+                          <div class="ts-mode-icon-wrap"><img src="{icon_uri}" alt="" class="ts-mode-icon" /></div>
+                          <p class="ts-mode-label">{mode_label}</p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    if st.button(mode_label, key=f"mode_btn_{mode_id}", use_container_width=True):
+                        clicked_mode = mode_id
+        if clicked_mode and clicked_mode != current_mode:
+            set_control_mode(room["id"], clicked_mode)
+            st.rerun()
+
+    with st.container(key="ts_target_card", border=True):
+        thermo_uri = _icon_data_uri("thermostat.svg")
+        st.markdown(
+            f'<p class="ts-target-title"><img src="{thermo_uri}" alt="" class="ts-target-title-icon" />목표 온도</p>',
+            unsafe_allow_html=True,
+        )
+        minus_col, value_col, plus_col = st.columns([1, 2, 1], vertical_alignment="center")
+        with minus_col:
+            if st.button("−", key="target_temp_minus", use_container_width=True):
+                set_target_temperature(room["id"], max(16, room["target_temperature"] - 1))
+                st.rerun()
+        with value_col:
+            st.markdown(
+                f'<p class="ts-target-value">{room["target_temperature"]}°</p>',
+                unsafe_allow_html=True,
+            )
+        with plus_col:
+            if st.button("+", key="target_temp_plus", use_container_width=True):
+                set_target_temperature(room["id"], min(30, room["target_temperature"] + 1))
+                st.rerun()
+        st.markdown('<p class="ts-target-sub">예약 시간 동안 유지</p>', unsafe_allow_html=True)
+        st.markdown(
+            '<p class="ts-target-note">수동 조정 시 자동 제어보다 우선 실행됩니다</p>',
+            unsafe_allow_html=True,
+        )
+
+    with st.container(key="ts_reservation_card", border=True):
+        header_col, badge_col = st.columns([3, 1], vertical_alignment="center")
+        with header_col:
+            st.markdown(
+                f'<p class="ts-reservation-title">{_CALENDAR_ICON}예약 냉방</p>',
+                unsafe_allow_html=True,
+            )
+        with badge_col:
+            reservation_count = len(list_today_schedules(room["id"]))
+            if reservation_count > 0:
                 st.markdown(
                     f"""
-                    <div class="ts-mode-item {active_class}">
-                      <div class="ts-mode-icon-wrap"><img src="{icon_uri}" alt="" class="ts-mode-icon" /></div>
-                      <p class="ts-mode-label">{mode_label}</p>
+                    <div class="ts-reservation-badge-wrap">
+                      <span class="ts-reservation-badge">예약 {reservation_count}건</span>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-                if st.button(mode_label, key=f"mode_btn_{mode_id}", use_container_width=True):
-                    clicked_mode = mode_id
-    if clicked_mode and clicked_mode != current_mode:
-        set_control_mode(room["id"], clicked_mode)
-        st.rerun()
-
-with st.container(key="ts_target_card", border=True):
-    thermo_uri = _icon_data_uri("thermostat.svg")
-    st.markdown(
-        f'<p class="ts-target-title"><img src="{thermo_uri}" alt="" class="ts-target-title-icon" />목표 온도</p>',
-        unsafe_allow_html=True,
-    )
-    minus_col, value_col, plus_col = st.columns([1, 2, 1], vertical_alignment="center")
-    with minus_col:
-        if st.button("−", key="target_temp_minus", use_container_width=True):
-            set_target_temperature(room["id"], max(16, room["target_temperature"] - 1))
-            st.rerun()
-    with value_col:
         st.markdown(
-            f'<p class="ts-target-value">{room["target_temperature"]}°</p>',
+            '<p class="ts-reservation-desc">예약한 시간에 맞춰 자동으로 냉방을 켜고, '
+            "설정한 온도를 유지하세요.</p>",
             unsafe_allow_html=True,
         )
-    with plus_col:
-        if st.button("+", key="target_temp_plus", use_container_width=True):
-            set_target_temperature(room["id"], min(30, room["target_temperature"] + 1))
-            st.rerun()
-    st.markdown('<p class="ts-target-sub">예약 시간 동안 유지</p>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="ts-target-note">수동 조정 시 자동 제어보다 우선 실행됩니다</p>',
-        unsafe_allow_html=True,
-    )
+        add_col, all_col = st.columns(2, gap="small")
+        with add_col:
+            if st.button("냉방 예약하기", key="reservation_add", use_container_width=True):
+                st.switch_page("pages/schedule_create.py")
+        with all_col:
+            if st.button("예약 전체 보기", key="reservation_all", use_container_width=True):
+                st.switch_page("pages/schedule_list.py")
 
-with st.container(key="ts_reservation_card", border=True):
-    header_col, badge_col = st.columns([3, 1], vertical_alignment="center")
-    with header_col:
+    temps, co2s = trend_series(room)
+    with st.container(key="ts_trend_card", border=True):
+        trend_body = (
+            _trend_svg(temps, co2s, room["target_temperature"])
+            if temps and co2s
+            else '<p class="ts-trend-empty">최근 30분간 수신된 센서 데이터가 없어요</p>'
+        )
         st.markdown(
-            f'<p class="ts-reservation-title">{_CALENDAR_ICON}예약 냉방</p>',
+            f"""
+            <div class="ts-trend-header">
+              <p class="ts-trend-title">30분 추이</p>
+              <div class="ts-trend-legend">
+                <span class="ts-legend-item ts-legend-temp">온도</span>
+                <span class="ts-legend-item ts-legend-co2">CO₂</span>
+              </div>
+            </div>
+            {trend_body}
+            """,
             unsafe_allow_html=True,
         )
-    with badge_col:
-        reservation_count = len(list_today_schedules(room["id"]))
-        if reservation_count > 0:
-            st.markdown(
-                f"""
-                <div class="ts-reservation-badge-wrap">
-                  <span class="ts-reservation-badge">예약 {reservation_count}건</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-    st.markdown(
-        '<p class="ts-reservation-desc">예약한 시간에 맞춰 자동으로 냉방을 켜고, '
-        "설정한 온도를 유지하세요.</p>",
-        unsafe_allow_html=True,
-    )
-    add_col, all_col = st.columns(2, gap="small")
-    with add_col:
-        if st.button("냉방 예약하기", key="reservation_add", use_container_width=True):
-            st.switch_page("pages/schedule_create.py")
-    with all_col:
-        if st.button("예약 전체 보기", key="reservation_all", use_container_width=True):
-            st.switch_page("pages/schedule_list.py")
 
-temps, co2s = trend_series(room)
-with st.container(key="ts_trend_card", border=True):
-    trend_body = (
-        _trend_svg(temps, co2s, room["target_temperature"])
-        if temps and co2s
-        else '<p class="ts-trend-empty">최근 30분간 수신된 센서 데이터가 없어요</p>'
-    )
-    st.markdown(
-        f"""
-        <div class="ts-trend-header">
-          <p class="ts-trend-title">30분 추이</p>
-          <div class="ts-trend-legend">
-            <span class="ts-legend-item ts-legend-temp">온도</span>
-            <span class="ts-legend-item ts-legend-co2">CO₂</span>
-          </div>
-        </div>
-        {trend_body}
-        """,
-        unsafe_allow_html=True,
-    )
+_render_home()
 
 bottom_tab_bar(active="home")
