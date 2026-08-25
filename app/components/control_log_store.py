@@ -44,6 +44,13 @@ def _checklist(action_guide: str | None) -> list[str]:
     return [action_guide]
 
 
+# event_severity ('critical'/'warning', already collapsed from the DB's
+# info/warning/critical via alert_store's _SEVERITY_MAP) -> this page's
+# status tier. Kept separate from "fail" (an actual failed control command)
+# so 위험/주의 events and 실패 commands can be filtered independently.
+_EVENT_SEVERITY_STATUS = {"critical": "danger", "warning": "warning"}
+
+
 def _from_api(row: dict) -> dict:
     success = row["command_status"] == "acked"
     return {
@@ -53,6 +60,7 @@ def _from_api(row: dict) -> dict:
         "method": _METHOD_DB_TO_UI.get(row["control_mode"], row["control_mode"]),
         "content": _content_label(row),
         "success": success,
+        "status": "success" if success else "fail",
         "failure_title": None if success else row.get("result_message"),
         "error_code": None,
         "failure_reason": None if success else row.get("result_message"),
@@ -61,9 +69,31 @@ def _from_api(row: dict) -> dict:
     }
 
 
+def _event_as_log(alert: dict) -> dict:
+    # Shapes an event_logs row (already alert_store-mapped) as a log-row
+    # dict, so 제어목록 can show 기준 초과 등 이벤트 alongside 제어 명령 이력.
+    return {
+        "id": f"alert_{alert['id']}",
+        "room_id": alert.get("room_id"),
+        "timestamp": alert.get("timestamp"),
+        "method": None,
+        "content": alert["title"],
+        "success": False,
+        "status": _EVENT_SEVERITY_STATUS.get(alert["severity"], "warning"),
+        "failure_title": alert["title"],
+        "error_code": alert.get("type"),
+        "failure_reason": alert["title"],
+        "cause_guess": alert.get("cause_guess"),
+        "checklist": alert.get("checklist", []),
+    }
+
+
 def list_logs(room_id: int, day: date, method: str | None = None) -> list[dict]:
+    from app.components.alert_store import list_room_alerts
+
     rows = api_get(f"/rooms/{room_id}/commands", params={"day": day.isoformat()}) or []
     logs = [_from_api(row) for row in rows]
+    logs += [_event_as_log(alert) for alert in list_room_alerts(room_id, day)]
     if method is not None:
         logs = [log for log in logs if log["method"] == method]
     return sorted(logs, key=lambda log: log["timestamp"])
@@ -72,26 +102,11 @@ def list_logs(room_id: int, day: date, method: str | None = None) -> list[dict]:
 def _alert_as_log(alert_id: str) -> dict | None:
     # Bridge for 알림 → 제어로그 상세 unification: sensor/env/network alerts
     # aren't control commands, so they're built as a log-shaped dict on the
-    # fly from the event instead. Kept for the legacy mobile alert detail
-    # flow - the web control_log page never passes an "alert_"-prefixed id.
+    # fly from the event instead.
     from app.components.alert_store import get_alert
 
     alert = get_alert(alert_id)
-    if alert is None:
-        return None
-    return {
-        "id": f"alert_{alert_id}",
-        "room_id": alert.get("room_id"),
-        "timestamp": alert.get("timestamp"),
-        "method": None,
-        "content": alert["title"],
-        "success": False,
-        "failure_title": alert["title"],
-        "error_code": alert.get("type"),
-        "failure_reason": alert["title"],
-        "cause_guess": alert.get("cause_guess"),
-        "checklist": alert.get("checklist", []),
-    }
+    return _event_as_log(alert) if alert else None
 
 
 def get_log(log_id) -> dict | None:

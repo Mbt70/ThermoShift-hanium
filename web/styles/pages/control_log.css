@@ -182,6 +182,10 @@
   color: var(--danger);
 }
 
+.ts-log-content.is-warn svg {
+  color: var(--warning);
+}
+
 .ts-log-method-icon {
   width: 22px;
   height: 22px;

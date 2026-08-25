@@ -16,7 +16,14 @@ from components.mobile_ui import apply_mobile_styles, recolored_icon_data_uri
 
 _METHOD_ICON_FILES = {"rule": "rule-based.svg", "manual": "back_hand.svg", "predict": "predictive.svg"}
 _METHOD_ICON_COLOR = "#397f80"
-_STATUS_OPTIONS = ["전체", "성공", "실패", "주의"]
+_STATUS_OPTIONS = ["전체", "성공", "실패", "주의", "위험"]
+_STATUS_ICON_CLASS = {
+    "success": "is-ok",
+    "fail": "is-fail",
+    "warning": "is-warn",
+    "danger": "is-fail",
+}
+_STATUS_FILTER_KEY = {"성공": "success", "실패": "fail", "주의": "warning", "위험": "danger"}
 
 _CHECK_ICON = (
     '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" '
@@ -39,6 +46,12 @@ _QUESTION_ICON = (
     '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 1.7-2.4 3.4"/>'
     '<circle cx="12" cy="16.5" r="0.5" fill="currentColor"/></svg>'
 )
+_STATUS_ICON = {
+    "success": _CHECK_ICON,
+    "fail": _FAIL_ICON,
+    "warning": _ATTENTION_ICON,
+    "danger": _FAIL_ICON,
+}
 apply_mobile_styles("control_log", shared=("dash_shell",))
 
 if not is_logged_in():
@@ -90,26 +103,24 @@ with main_col:
               <span class="ts-log-legend-item is-ok">{_CHECK_ICON}성공</span>
               <span class="ts-log-legend-item is-fail">{_FAIL_ICON}실패</span>
               <span class="ts-log-legend-item is-warn">{_ATTENTION_ICON}주의</span>
+              <span class="ts-log-legend-item is-fail">{_FAIL_ICON}위험</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
+        # 제어 명령(hvac_commands) + 기준 초과 등 이벤트(event_logs)를 시간순으로
+        # 합쳐서 보여준다 - list_logs()가 이미 둘을 합쳐서 반환함.
         all_logs = list_logs(room["id"], date.today())
-        if status_label == "성공":
-            logs = [log for log in all_logs if log["success"]]
-        elif status_label in ("실패", "주의"):
-            # No separate "주의(warning)" tier exists in the log data yet -
-            # every non-success entry is a 실패 today, so 주의 has nothing
-            # to show until that distinction exists upstream.
-            logs = [log for log in all_logs if not log["success"]] if status_label == "실패" else []
-        else:
+        if status_label == "전체":
             logs = all_logs
+        else:
+            logs = [log for log in all_logs if log["status"] == _STATUS_FILTER_KEY[status_label]]
         logs = list(reversed(logs))
 
         selected_log_id = st.session_state.get("_web_selected_log")
         selected_log = get_log(selected_log_id) if selected_log_id else None
-        if selected_log is not None and (selected_log["room_id"] != room["id"] or selected_log["success"]):
+        if selected_log is not None and (selected_log["room_id"] != room["id"] or selected_log["status"] == "success"):
             selected_log = None
             st.session_state.pop("_web_selected_log", None)
 
@@ -128,22 +139,29 @@ with main_col:
                     )
                     clicked_log_id = None
                     for log in logs:
-                        status_icon = _CHECK_ICON if log["success"] else _FAIL_ICON
-                        status_class = "is-ok" if log["success"] else "is-fail"
-                        method_uri = recolored_icon_data_uri(_METHOD_ICON_FILES[log["method"]], _METHOD_ICON_COLOR)
+                        status_icon = _STATUS_ICON[log["status"]]
+                        status_class = _STATUS_ICON_CLASS[log["status"]]
+                        # 이벤트(기준 초과 등)는 제어 방식이 없으니 방식 아이콘은 생략.
+                        method_icon_html = (
+                            f'<img class="ts-log-method-icon ts-log-method-icon-{log["method"]}" '
+                            f'src="{recolored_icon_data_uri(_METHOD_ICON_FILES[log["method"]], _METHOD_ICON_COLOR)}" '
+                            f'alt="" title="{method_label(log["method"])}" />'
+                            if log["method"]
+                            else '<span class="ts-log-method-icon"></span>'
+                        )
                         time_label = f'{log["timestamp"].hour}:{log["timestamp"].minute:02d}'
                         with st.container(key=f"ts_dash_log_row_{log['id']}"):
                             st.markdown(
                                 f"""
                                 <div class="ts-log-row">
                                   <span class="ts-log-content {status_class}">{status_icon}{log["content"]}</span>
-                                  <img class="ts-log-method-icon ts-log-method-icon-{log["method"]}" src="{method_uri}" alt="" title="{method_label(log["method"])}" />
+                                  {method_icon_html}
                                   <span class="ts-log-time">{time_label}</span>
                                 </div>
                                 """,
                                 unsafe_allow_html=True,
                             )
-                            if not log["success"]:
+                            if log["status"] != "success":
                                 if st.button(log["content"], key=f"dash_log_open_{log['id']}", width="stretch"):
                                     clicked_log_id = log["id"]
                     if clicked_log_id and clicked_log_id != selected_log_id:
@@ -158,13 +176,14 @@ with main_col:
             with detail_col:
                 if selected_log is not None:
                     checklist_items = "".join(f"<li>{item}</li>" for item in selected_log["checklist"])
+                    cause_desc = selected_log["cause_guess"] or "원인 정보가 아직 없어요"
                     st.markdown(
                         f"""
-                        <div class="ts-log-fail-icon-chip">{_FAIL_ICON}</div>
+                        <div class="ts-log-fail-icon-chip">{_STATUS_ICON[selected_log["status"]]}</div>
                         <p class="ts-log-fail-title">{selected_log["failure_title"]}</p>
                         <div class="ts-log-cause-card">
                           <p class="ts-log-detail-title">{_QUESTION_ICON}원인 추정</p>
-                          <p class="ts-log-cause-desc">{selected_log["cause_guess"]}</p>
+                          <p class="ts-log-cause-desc">{cause_desc}</p>
                         </div>
                         <div class="ts-log-checklist-card">
                           <p class="ts-log-detail-title">확인해주세요</p>

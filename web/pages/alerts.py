@@ -149,12 +149,14 @@ with main_col:
                             """,
                             unsafe_allow_html=True,
                         )
-                        if not alert["read"]:
-                            if st.button(alert["title"], key=f"alert_mark_read_{alert['id']}", width="stretch"):
-                                clicked_alert_id = alert["id"]
+                        if st.button(alert["title"], key=f"alert_open_{alert['id']}", width="stretch"):
+                            clicked_alert_id = alert["id"]
                 if clicked_alert_id:
-                    mark_alert_read(clicked_alert_id)
-                    st.rerun()
+                    if not next(a for a in alerts if a["id"] == clicked_alert_id)["read"]:
+                        mark_alert_read(clicked_alert_id)
+                    st.session_state["_web_selected_room"] = room["id"]
+                    st.session_state["_web_selected_log"] = f"alert_{clicked_alert_id}"
+                    st.switch_page("pages/control_log.py")
             else:
                 st.markdown(
                     '<p class="ts-dash-list-empty">해당 날짜의 알림이 없습니다</p>',
