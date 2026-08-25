@@ -70,7 +70,7 @@ class FeatureEngine:
         return slope
 
     def _get_co2_baseline(self) -> float:
-        # In a full implementation, this would query sqlite for recent 24h empty periods
+        # 본 구현에서는 최근 24시간 공실 구간을 sensor_env 에서 조회한다
         # For now we use a default of 500.0 as requested if data is insufficient.
         return 500.0
 

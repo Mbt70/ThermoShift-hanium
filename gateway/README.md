@@ -50,14 +50,26 @@ MQTT로 센서를 받아 재실을 추정하고 냉방 제어를 판단합니다
 - 외부에서 리모컨으로 조작된 신호가 IR 수신기에 감지되면 설정된 시간(기본 30분) 동안 자동 제어가 차단됩니다.
 
 ## DB 구조
-통합 SQLite `/home/thermo/thermoshift-data/thermoshift.db` (WAL 모드).
-스키마 정의는 저장소의 `db/schema/schema.sql` 한 곳에만 있습니다.
-- `sensor_readings`
-- `occupancy_estimates`
-- `control_decisions`
-- `ir_events`
-- `system_events`
-- `control_commands` (프론트에서 들어온 수동 명령 큐. 여기서 소비합니다)
+PostgreSQL. api 와 같은 데이터베이스를 봅니다. 접속 정보는 환경변수로
+줍니다 (`DB_HOST` `DB_PORT` `DB_USER` `DB_PASSWORD` `DB_NAME`).
+
+스키마 정의는 `db/001_types.sql` ~ `db/003_indexs.sql` 이 원본이고,
+게이트웨이만 쓰는 것은 `db/004_gateway.sql` 에 따로 있습니다.
+
+게이트웨이가 쓰는 표
+- `sensor_env` / `sensor_pir` / `sensor_door` — 센서 측정 원본
+- `occupancy_estimates` — HMM 재실 추정
+- `control_decisions` — 제어 판단 (`estimate_id` 로 위 추정을 가리킵니다)
+- `hvac_commands` — 프론트에서 들어온 수동 명령 큐. 여기서 소비합니다
+- `event_logs` — 시스템 이벤트
+- `ir_events` — IR 송수신 기록 (004)
+
+온·습도·CO2 는 `sensor_env` 한 행에 함께 담깁니다. 게이트웨이는 metric
+별로 따로 넣으므로 `(device_id, measured_at)` UPSERT 로 합칩니다.
+
+디바이스는 `device_uid` 로 식별합니다. CHECK 제약이 대문자·숫자만
+허용해서 `env_01` 은 `ENV01` 로 정규화되고, 원래 이름은 `device_code` 에
+남습니다.
 
 ## CLI 도구
 ```bash
