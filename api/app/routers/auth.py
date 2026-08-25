@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..auth import current_user, issue_token
 from ..db import get_conn
@@ -50,6 +50,21 @@ def _assert_self(email: str, actor: str) -> str:
     if normalized != actor:
         raise HTTPException(status_code=403, detail="본인 계정만 조회·수정할 수 있습니다.")
     return normalized
+
+
+@router.get("/exists")
+def user_exists(email: str = Query(...)):
+    """가입 여부만 확인한다. 로그인·가입 화면이 토큰 없이 부르므로 공개다.
+
+    이메일 존재 여부가 드러나지만, 가입 API 가 중복을 409 로 알려주는 이상
+    같은 정보는 이미 노출된다. 프론트의 '가입되지 않은 이메일입니다' /
+    '이미 가입된 이메일입니다' 안내를 유지하기 위한 최소 공개 엔드포인트다.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM users WHERE email = ?", (_normalize(email),)
+        ).fetchone()
+    return {"email": _normalize(email), "exists": row is not None}
 
 
 @router.get("/users/{email}")

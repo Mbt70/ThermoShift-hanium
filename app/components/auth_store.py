@@ -39,9 +39,14 @@ def register_user(name: str, email: str, password: str) -> None:
 
 
 def is_registered(email: str) -> bool:
-    code = backend.status_code("GET", f"/api/auth/users/{email.strip().lower()}")
-    if code is not None:
-        return code == 200
+    """가입 여부. 로그인 화면이 토큰을 갖기 전에 부르므로 공개 엔드포인트를 쓴다.
+
+    /api/auth/users/{email} 는 인증이 필요해 여기서 쓸 수 없다.
+    (썼더니 로그인 전에는 항상 401 → '가입되지 않은 이메일' 로 보였다)
+    """
+    result = backend.get("/api/auth/exists", {"email": email.strip().lower()})
+    if result is not None:
+        return bool(result.get("exists"))
     return email.strip().lower() in _load_users()
 
 
