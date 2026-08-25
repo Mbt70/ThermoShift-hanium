@@ -1,17 +1,23 @@
 import json
 import logging
+import time
 from datetime import datetime, timezone
-from typing import Callable, Any, List
+from typing import Callable, Any, Dict, List
 from app.models import EnvData, OccData, IrData
 from app.storage import get_storage
 
 logger = logging.getLogger(__name__)
 
 class MQTTAdapter:
+    # 같은 토픽의 파싱 실패를 이 간격으로만 로그에 남긴다.
+    # 펌웨어가 깨진 JSON 을 주기적으로 보내면 로그가 그것만으로 가득 찬다.
+    DECODE_WARNING_INTERVAL_SEC = 300
+
     def __init__(self):
         self.callbacks: List[Callable[[Any], None]] = []
         self.storage = get_storage()
         self.last_door_state = None
+        self._last_decode_warning: Dict[str, float] = {}
 
     def register_callback(self, cb: Callable[[Any], None]):
         self.callbacks.append(cb)
@@ -19,8 +25,17 @@ class MQTTAdapter:
     def process_message(self, topic: str, payload_str: str):
         try:
             payload = json.loads(payload_str)
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to decode JSON from {topic}")
+        except json.JSONDecodeError as exc:
+            now = time.monotonic()
+            last = self._last_decode_warning.get(topic, 0.0)
+            if now - last >= self.DECODE_WARNING_INTERVAL_SEC:
+                self._last_decode_warning[topic] = now
+                # 페이로드 앞부분을 함께 남겨야 펌웨어의 어느 필드가
+                # 깨졌는지 바로 알 수 있다.
+                logger.warning(
+                    "JSON 파싱 실패 %s: %s | payload=%.120s",
+                    topic, exc, payload_str,
+                )
             return
 
         now = datetime.now(timezone.utc)
@@ -63,15 +78,39 @@ class MQTTAdapter:
             # So we let data_quality handle quality and storage.
 
         # OccData
+        #
+        # 노드는 연결되지 않은 센서를 -1 로 보낸다. 예전 코드는
+        #   payload.get("motion", 0) or payload.get("pir_door", 0) or payload.get("pir_seat", 0)
+        # 처럼 or 로 이어 붙였는데, pir_door 가 0(움직임 없음)이면 -1 이
+        # 선택되고 bool(-1) == True 라 항상 '재실' 로 읽혔다. 실제로
+        # 저장된 PIR 값 110건이 전부 1.0 이었다.
+        # 이제 음수는 '센서 없음' 으로 보고 판단에서 제외한다.
         pir = None
         door = None
-        if "pir_door" in payload or "pir_seat" in payload or "motion" in payload:
-            pir_val = payload.get("motion", 0) or payload.get("pir_door", 0) or payload.get("pir_seat", 0)
-            pir = bool(pir_val)
-        
-        if "door_main" in payload or "door_sub" in payload or "door_open" in payload:
-            door_val = payload.get("door_open", 0) or payload.get("door_main", 0)
-            door = "open" if door_val else "closed"
+
+        def _sensor_flags(*keys) -> list[float]:
+            flags = []
+            for key in keys:
+                value = payload.get(key)
+                if isinstance(value, bool):
+                    flags.append(int(value))
+                elif isinstance(value, (int, float)) and value >= 0:
+                    flags.append(float(value))
+            return flags
+
+        PIR_KEYS = ("motion", "pir_door", "pir_seat")
+        if any(key in payload for key in PIR_KEYS):
+            flags = _sensor_flags(*PIR_KEYS)
+            # 쓸 수 있는 PIR 이 하나도 없으면 판단하지 않는다(None).
+            # 억지로 False 를 넣으면 '사람 없음' 으로 읽혀 공실 판정이 앞당겨진다.
+            pir = any(flag > 0 for flag in flags) if flags else None
+
+        # door_sub 는 아직 어떤 문(門)에 붙어 있는지 확인되지 않아 판단에
+        # 넣지 않는다. 하드웨어 배치가 확정되면 여기에 더한다.
+        DOOR_KEYS = ("door_open", "door_main")
+        if any(key in payload for key in ("door_open", "door_main", "door_sub")):
+            flags = _sensor_flags(*DOOR_KEYS)
+            door = ("open" if any(flag > 0 for flag in flags) else "closed") if flags else None
 
         if pir is not None or door is not None:
             has_occ = True
