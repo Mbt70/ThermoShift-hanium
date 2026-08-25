@@ -47,12 +47,18 @@ class IRAdapter:
         # 1) 펠티어 릴레이 — 실증 프로토타입에서 실제로 동작하는 액추에이터
         self.publish_func(self.config.ir.cooling_topic, "ON" if cooling_on else "OFF")
 
-        # 2) 에어컨 IR — IR 프로파일이 학습돼야 노드가 실제로 쏜다
+        # 2) 에어컨 IR — IR 프로파일이 학습돼야 노드가 실제로 쏜다.
+        #
+        # vent_fan 은 냉각과 함께 켜도록 맞춰 두지만, 현재 펌웨어
+        # (firmware/ir_01/ir_01.ino handleAirconControl)는 이 값을 status 로
+        # 되돌려주기만 하고 GPIO 를 건드리지 않는다. 팬 전용 출력은 없다.
+        # 실제 팬은 펠티어와 같은 12V 회선에 물려 릴레이(GPIO26)로 함께
+        # 켜지므로, 팬을 돌리는 유일한 수단은 위 1) cooling_topic 이다.
         aircon_payload = {
             "aircon_power": "ON" if cooling_on else "OFF",
             "aircon_temp": _target_temperature(action, self.config.control.target_temperature_c),
             "aircon_mode": "cool",
-            "vent_fan": "OFF",
+            "vent_fan": "ON" if cooling_on else "OFF",
         }
         self.publish_func(self.config.ir.aircon_topic, aircon_payload)
 
