@@ -344,3 +344,84 @@
   font-size: var(--font-size-2xs);
   font-weight: var(--font-weight-medium);
 }
+
+/* ---- 실측 데이터가 없을 때의 표시 ---- */
+/* 값을 지어내지 않고 '없음'을 명시하기 위한 상태들 */
+.ts-report-nodata {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-muted, #8a8f98);
+}
+
+.ts-report-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1.5rem 0.5rem;
+  text-align: center;
+}
+
+.ts-report-empty p {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted, #8a8f98);
+}
+
+.ts-report-empty-sub {
+  font-size: 0.8rem !important;
+  font-weight: 400 !important;
+  line-height: 1.5;
+}
+
+.ts-report-status.is-muted,
+.ts-dash-kpi-sub.is-muted {
+  color: var(--text-muted, #8a8f98);
+}
+
+.ts-report-status.is-muted .ts-report-status-dot {
+  background: var(--text-muted, #8a8f98);
+}
+
+/* ---- AI 분석 카드 ---- */
+.ts-report-ai-badge {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border, #e3e5e8);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted, #8a8f98);
+  vertical-align: middle;
+}
+
+.ts-report-ai {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.ts-report-ai-heading {
+  margin: 0 0 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.ts-report-ai-section.is-positive .ts-report-ai-heading { color: var(--success, #16a34a); }
+.ts-report-ai-section.is-negative .ts-report-ai-heading { color: var(--danger, #dc2626); }
+.ts-report-ai-section.is-neutral .ts-report-ai-heading { color: var(--text, #1f2328); }
+
+.ts-report-ai ul {
+  margin: 0;
+  padding-left: 1.05rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.ts-report-ai li {
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-secondary, #4b5058);
+}

@@ -1,6 +1,6 @@
 import random
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import altair as alt
@@ -11,6 +11,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
+from app.components import ai_store
 from app.components.room_store import comfort_index, list_rooms
 from components.auth_store import current_user_email, is_logged_in
 from components.dash_shell import render_sidebar
@@ -40,12 +41,18 @@ _CHART_ICON = (
     '<path d="M3 17.5 9 11l4 4 8-9"/></svg>'
 )
 
+# baseline(자동제어 미적용 구간) 데이터가 쌓이기 전에는 '감소율' 을 계산할 수
+# 없다. 실측만으로 말할 수 있는 지표를 쓰고, baseline 이 확보되면 감소율로
+# 바꾼다. (docs/architecture.md '아직 남은 것' 참고)
 _KPI_ROWS = (
-    ("temp", "온도 범위 이탈 시간 감소", "temperture.svg", 20),
-    ("co2", "CO₂ 초과 시간 감소", "co2.svg", 20),
-    ("ir", "IR 명령 성공률", None, 95),
+    ("temp", "온도 범위 이탈 시간", "temperture.svg", 20),
+    ("co2", "CO₂ 1000ppm 초과 시간", "co2.svg", 10),
+    ("ir", "제어 명령 성공률", None, 95),
     ("power", "전력 절감", "web_bolt.svg", 5),
 )
+
+# 값이 낮을수록 좋은 지표
+_LOWER_IS_BETTER = {"temp", "co2"}
 
 
 def _trend_chart(days: list[str], scores: list[float], target: float) -> alt.LayerChart:
@@ -119,43 +126,96 @@ with main_col:
                 st.session_state["_web_selected_room"] = picked_room["id"]
                 st.rerun()
 
-        # No historical performance store exists yet - synthesize plausible,
-        # internally-consistent weekly figures seeded on room+ISO-week so
-        # they stay stable all week instead of reshuffling on every rerun.
-        week_seed = f"report-{room['id']}-{date.today().isocalendar()[1]}"
-        power_saving = round(random.Random(f"{week_seed}-power").uniform(12, 22), 1)
-        temp_dev_reduction = round(random.Random(f"{week_seed}-temp").uniform(22, 32))
-        co2_reduction = round(random.Random(f"{week_seed}-co2").uniform(8, 18))
-        ir_success = round(random.Random(f"{week_seed}-ir").uniform(90, 99))
+        end_date = date.today()
+        start_date = end_date - timedelta(days=6)
+        week_seed = f"report-{room['id']}-{end_date.isocalendar()[1]}"
 
-        comfort_score = comfort_index(room)
+        # 백엔드가 있으면 실측 집계와 AI 요약을 가져온다.
+        # 없으면(팀원 로컬 개발) 아래에서 기존 목데이터로 화면을 채운다.
+        report = ai_store.report(room["id"], start_date, end_date)
+        real = report.get("stats") if report else None
+        ai_summary = report.get("ai") if report else None
 
-        st.markdown(
-            f"""
-            <div class="ts-report-insight">
-              <span class="ts-report-insight-icon">{_CHECK_ICON}</span>
-              <p>이번주 predictive 제어로 baseline대비 전력 {power_saving:g}%절감, 온도 이탈 시간
-              {temp_dev_reduction}%감소, IR 명령 성공률 {ir_success}%로 목표에 도달했습니다</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        if real:
+            kpi_values = {
+                "temp": real.get("temp_out_of_range_pct"),
+                "co2": real.get("co2_high_pct"),
+                "ir": real.get("command_success_pct"),
+                # 스마트 플러그가 없어 전력은 측정 자체가 되지 않는다. 지어내지 않는다.
+                "power": None,
+            }
+            comfort_score = comfort_index(room)
+        else:
+            kpi_values = {
+                "temp": round(random.Random(f"{week_seed}-temp").uniform(8, 28)),
+                "co2": round(random.Random(f"{week_seed}-co2").uniform(2, 14)),
+                "ir": round(random.Random(f"{week_seed}-ir").uniform(90, 99)),
+                "power": round(random.Random(f"{week_seed}-power").uniform(12, 22), 1),
+            }
+            comfort_score = comfort_index(room)
 
-        kpi_values = {"temp": temp_dev_reduction, "co2": co2_reduction, "ir": ir_success, "power": power_saving}
-        kpi_ok = {
-            "temp": temp_dev_reduction >= 20,
-            "co2": co2_reduction >= 20,
-            "ir": ir_success >= 84,
-            "power": power_saving >= 5,
+        def _kpi_ok(slug: str, value, goal: float):
+            """달성 여부. 측정값이 없으면 None(판정 불가)."""
+            if value is None:
+                return None
+            return value <= goal if slug in _LOWER_IS_BETTER else value >= goal
+
+        kpi_ok = {slug: _kpi_ok(slug, kpi_values[slug], goal) for slug, _, _, goal in _KPI_ROWS}
+        kpi_goal_text = {
+            "temp": "목표 20% 이하",
+            "co2": "목표 10% 이하",
+            "ir": "목표 95% 이상",
+            "power": "목표 5% 이상",
         }
-        kpi_sub = {
-            "temp": f"목표 20% 이상 {'달성' if kpi_ok['temp'] else '미달'}",
-            "co2": f"목표 20% 이상 {'달성' if kpi_ok['co2'] else '미달'}",
-            "ir": f"목표 84% {'달성' if kpi_ok['ir'] else '미달'}",
-            "power": f"목표 대비 {power_saving - 11:.1f}% 초과달성"
-            if kpi_ok["power"]
-            else "목표 미달",
-        }
+        kpi_sub = {}
+        for slug, _, _, _goal in _KPI_ROWS:
+            if kpi_ok[slug] is None:
+                kpi_sub[slug] = "전력 실측 장비 미설치"
+            else:
+                kpi_sub[slug] = f"{kpi_goal_text[slug]} {'달성' if kpi_ok[slug] else '미달'}"
+
+        def _kpi_display(slug: str) -> str:
+            value = kpi_values[slug]
+            if value is None:
+                return '<span class="ts-report-nodata">측정 없음</span>'
+            return f'{value:g}<span class="ts-dash-kpi-unit">%</span>'
+
+        # --- 요약 배너 ---
+        if ai_summary:
+            st.markdown(
+                f"""
+                <div class="ts-report-insight">
+                  <span class="ts-report-insight-icon">{_CHECK_ICON}</span>
+                  <p>{ai_summary["summary"]}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        elif real:
+            measured = (
+                f"{start_date:%m/%d}~{end_date:%m/%d} 측정 {real.get('reading_count', 0)}건 · "
+                f"평균 {real.get('temp_avg')}°C · CO₂ 평균 {real.get('co2_avg')}ppm · "
+                f"제어 판단 {real.get('decision_count', 0)}회 중 실제 전송 {real.get('executed_count', 0)}회"
+            )
+            st.markdown(
+                f"""
+                <div class="ts-report-insight">
+                  <span class="ts-report-insight-icon">{_CHART_ICON}</span>
+                  <p>{measured}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"""
+                <div class="ts-report-insight">
+                  <span class="ts-report-insight-icon">{_WARN_ICON}</span>
+                  <p>백엔드에 연결되지 않아 예시 데이터를 표시하고 있습니다.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         kpi_cols = st.columns(4, gap="small")
         for col, (slug, label, icon_file, _goal) in zip(kpi_cols, _KPI_ROWS):
             with col:
@@ -168,13 +228,15 @@ with main_col:
                     ok = kpi_ok[slug]
                     sub_icon = _CHECK_ICON if ok else _WARN_ICON
                     sub_class = "is-positive" if ok else "is-negative"
+                    if ok is None:
+                        sub_icon, sub_class = _WARN_ICON, "is-muted"
                     st.markdown(
                         f"""
                         <div class="ts-dash-kpi-head">
                           <span class="ts-dash-kpi-label">{label}</span>
                           {icon_html}
                         </div>
-                        <p class="ts-dash-kpi-value">{kpi_values[slug]}<span class="ts-dash-kpi-unit">%</span></p>
+                        <p class="ts-dash-kpi-value">{_kpi_display(slug)}</p>
                         <p class="ts-dash-kpi-sub {sub_class}">{sub_icon}{kpi_sub[slug]}</p>
                         """,
                         unsafe_allow_html=True,
@@ -185,10 +247,8 @@ with main_col:
         with table_col:
             with st.container(key="ts_dash_report_table_card", border=True):
                 rows = [
-                    ("전력 사용량 개선", "목표 5% 이상", power_saving, kpi_ok["power"]),
-                    ("온도 이탈 시간 감소", "목표 20% 이상", temp_dev_reduction, kpi_ok["temp"]),
-                    ("CO₂ 초과 시간 감소", "목표 20% 이상", co2_reduction, kpi_ok["co2"]),
-                    ("IR 명령 성공률", "목표 95% 이상", ir_success, kpi_ok["ir"]),
+                    (label, kpi_goal_text[slug], kpi_values[slug], kpi_ok[slug])
+                    for slug, label, _icon, _goal in _KPI_ROWS
                 ]
                 rows_html = "".join(
                     f'<div class="ts-report-row">'
@@ -196,10 +256,12 @@ with main_col:
                     f'<span class="ts-report-row-title">{title}</span>'
                     f'<span class="ts-report-row-goal">{goal}</span>'
                     f"</div>"
-                    f'<span class="ts-report-row-value">{value}%</span>'
-                    f'<span class="ts-report-row-target">&gt;{value}%</span>'
-                    f'<span class="ts-report-status {"is-ok" if ok else "is-warn"}">'
-                    f'<span class="ts-report-status-dot"></span>{"달성" if ok else "미달"}'
+                    f'<span class="ts-report-row-value">{"—" if value is None else f"{value:g}%"}</span>'
+                    f'<span class="ts-report-row-target">{goal}</span>'
+                    f'<span class="ts-report-status '
+                    f'{"is-muted" if ok is None else ("is-ok" if ok else "is-warn")}">'
+                    f'<span class="ts-report-status-dot"></span>'
+                    f'{"판정 불가" if ok is None else ("달성" if ok else "미달")}'
                     f"</span>"
                     f"</div>"
                     for title, goal, value, ok in rows
@@ -221,20 +283,33 @@ with main_col:
                     '<span class="ts-report-bar-unit">kWh</span></p>',
                     unsafe_allow_html=True,
                 )
-                baseline_kwh = round(random.Random(f"{week_seed}-baseline").uniform(78, 90))
-                rule_kwh = round(baseline_kwh * random.Random(f"{week_seed}-rule").uniform(0.88, 0.95))
-                predictive_kwh = round(baseline_kwh * (1 - power_saving / 100))
-                bars = [("baseline", baseline_kwh, ""), ("rule", rule_kwh, ""), ("predictive", predictive_kwh, "is-highlight")]
-                max_kwh = max(v for _, v, _ in bars)
-                bars_html = "".join(
-                    f'<div class="ts-report-bar-col">'
-                    f'<span class="ts-report-bar-value">{value}</span>'
-                    f'<div class="ts-report-bar {cls}" style="height:{max(6, round(value / max_kwh * 130))}px"></div>'
-                    f'<span class="ts-report-bar-label">{label}</span>'
-                    f"</div>"
-                    for label, value, cls in bars
-                )
-                st.markdown(f'<div class="ts-report-bars">{bars_html}</div>', unsafe_allow_html=True)
+                if real and not real.get("power_measured"):
+                    # 스마트 플러그가 설치되기 전까지 전력 비교는 만들 수 없다.
+                    # 그럴듯한 막대를 그리는 대신 무엇이 필요한지 알린다.
+                    st.markdown(
+                        '<div class="ts-report-empty">'
+                        '<p>전력 실측 데이터가 없습니다.</p>'
+                        '<p class="ts-report-empty-sub">스마트 플러그(plug 디바이스)를 설치하고 '
+                        'baseline 구간을 수집하면 baseline·rule·predictive 비교가 표시됩니다.</p>'
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    power_saving = kpi_values["power"] or 0
+                    baseline_kwh = round(random.Random(f"{week_seed}-baseline").uniform(78, 90))
+                    rule_kwh = round(baseline_kwh * random.Random(f"{week_seed}-rule").uniform(0.88, 0.95))
+                    predictive_kwh = round(baseline_kwh * (1 - power_saving / 100))
+                    bars = [("baseline", baseline_kwh, ""), ("rule", rule_kwh, ""), ("predictive", predictive_kwh, "is-highlight")]
+                    max_kwh = max(v for _, v, _ in bars)
+                    bars_html = "".join(
+                        f'<div class="ts-report-bar-col">'
+                        f'<span class="ts-report-bar-value">{value}</span>'
+                        f'<div class="ts-report-bar {cls}" style="height:{max(6, round(value / max_kwh * 130))}px"></div>'
+                        f'<span class="ts-report-bar-label">{label}</span>'
+                        f"</div>"
+                        for label, value, cls in bars
+                    )
+                    st.markdown(f'<div class="ts-report-bars">{bars_html}</div>', unsafe_allow_html=True)
 
         gauge_col, trend_col = st.columns([1, 2], gap="small")
 
@@ -280,3 +355,33 @@ with main_col:
                 scores.append(float(comfort_score))
                 days = [f"D{i + 1}" for i in range(n_points)]
                 st.altair_chart(_trend_chart(days, scores, 80), width="stretch")
+
+        # --- AI 분석 ---
+        if ai_summary:
+            with st.container(key="ts_dash_report_ai_card", border=True):
+                st.markdown(
+                    '<p class="ts-dash-card-title">AI 분석'
+                    '<span class="ts-report-ai-badge">Claude</span></p>',
+                    unsafe_allow_html=True,
+                )
+                sections = (
+                    ("잘 된 점", ai_summary.get("highlights") or [], "is-positive"),
+                    ("문제가 된 점", ai_summary.get("concerns") or [], "is-negative"),
+                    ("다음 기간 할 일", ai_summary.get("recommendations") or [], "is-neutral"),
+                )
+                blocks = "".join(
+                    f'<div class="ts-report-ai-section {cls}">'
+                    f'<p class="ts-report-ai-heading">{heading}</p>'
+                    f"<ul>{''.join(f'<li>{item}</li>' for item in items)}</ul>"
+                    f"</div>"
+                    for heading, items, cls in sections
+                    if items
+                )
+                st.markdown(f'<div class="ts-report-ai">{blocks}</div>', unsafe_allow_html=True)
+        elif report and report.get("ai_unavailable_reason"):
+            with st.container(key="ts_dash_report_ai_card", border=True):
+                st.markdown(
+                    '<p class="ts-dash-card-title">AI 분석</p>'
+                    f'<p class="ts-report-empty-sub">{report["ai_unavailable_reason"]}</p>',
+                    unsafe_allow_html=True,
+                )

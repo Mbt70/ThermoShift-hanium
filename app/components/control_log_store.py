@@ -3,7 +3,7 @@ import uuid
 from datetime import date, datetime
 from pathlib import Path
 
-from . import backend
+from . import ai_store, backend
 
 _STORE_PATH = Path(__file__).resolve().parents[2] / ".data" / "control_logs.json"
 
@@ -217,11 +217,11 @@ def _alert_as_log(alert_id: str) -> dict | None:
     alert = get_alert(alert_id)
     if alert is None:
         return None
-    return _with_catalog_fields(
+    entry = _with_catalog_fields(
         {
             "id": f"alert_{alert_id}",
-            "room_id": None,
-            "timestamp": None,
+            "room_id": alert.get("room_id"),
+            "timestamp": alert.get("timestamp"),
             "method": None,
             "content": alert["title"],
             "success": False,
@@ -229,6 +229,18 @@ def _alert_as_log(alert_id: str) -> dict | None:
             "error_code": alert["type"],
         }
     )
+    # AI가 켜져 있으면 카탈로그의 일반론 대신 실제 상황에 맞춘 진단으로 덮어쓴다.
+    diagnosis = ai_store.diagnose_alert(alert_id)
+    if diagnosis:
+        entry.update(
+            {
+                "failure_reason": diagnosis.get("failure_reason") or entry["failure_reason"],
+                "cause_guess": diagnosis.get("cause_guess") or entry["cause_guess"],
+                "checklist": diagnosis.get("checklist") or entry["checklist"],
+                "ai_generated": True,
+            }
+        )
+    return entry
 
 
 def get_log(log_id: str) -> dict | None:
@@ -236,7 +248,13 @@ def get_log(log_id: str) -> dict | None:
         return _alert_as_log(log_id[len("alert_") :])
     if log_id.startswith(("decision:", "command:")):
         remote = backend.get(f"/api/control/logs/{log_id}")
-        return _with_catalog_fields(_from_api(remote)) if remote else None
+        if not remote:
+            return None
+        entry = _with_catalog_fields(_from_api(remote))
+        # 자동 판단은 reason_codes 가 기계용 코드라 그대로는 읽기 어렵다.
+        # AI가 켜져 있으면 사람 말로 풀어 붙인다. 꺼져 있으면 None.
+        entry["explanation"] = ai_store.explain_decision(log_id)
+        return entry
     recorded = next((log for log in _load_recorded() if log["id"] == log_id), None)
     if recorded is not None:
         return _with_catalog_fields(recorded)
