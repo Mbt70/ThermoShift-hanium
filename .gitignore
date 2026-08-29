@@ -40,3 +40,9 @@ pwa/
 artifacts/
 outputs/
 gateway/config/config.yaml
+
+# tailscale cert 가 현재 디렉터리에 떨구는 인증서·개인키.
+# 저장소에 절대 들어가면 안 된다 (Funnel 은 자체적으로 인증서를 관리하므로
+# 이 파일들을 직접 쓸 일도 없다).
+*.ts.net.crt
+*.ts.net.key
