@@ -9,7 +9,7 @@
 //
 // Usage: node scripts/build-pwa.mjs
 
-import { existsSync, mkdirSync, readdirSync, statSync, copyFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync, copyFileSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -60,10 +60,38 @@ function walk(dir, relBase, out) {
   }
 }
 
+// The deployed PWA runs stlite in the visitor's browser, where there are no
+// environment variables - so shared/api_client.py falls back to reading
+// app/api_config.json. Without that file it defaults to 127.0.0.1:8000,
+// which in a browser means the visitor's own machine, not the Pi. So the
+// deployed app could never reach the API. We write the file here, from
+// THERMOSHIFT_API_URL when the deployment sets one (Vercel project env),
+// otherwise keeping whatever is committed.
+function writeApiConfig() {
+  const target = path.join(APP_SRC, "api_config.json");
+  const fromEnv = process.env.THERMOSHIFT_API_URL;
+  if (!fromEnv) {
+    if (!existsSync(target)) {
+      throw new Error(
+        `app/api_config.json is missing and THERMOSHIFT_API_URL is not set - ` +
+        `the built PWA would have no API address to call.`
+      );
+    }
+    const current = JSON.parse(readFileSync(target, "utf8"));
+    console.log(`[build-pwa] api_base (committed) = ${current.api_base}`);
+    return;
+  }
+  const apiBase = fromEnv.replace(/\/+$/, "");
+  writeFileSync(target, JSON.stringify({ api_base: apiBase }, null, 2) + "\n", "utf8");
+  console.log(`[build-pwa] api_base (THERMOSHIFT_API_URL) = ${apiBase}`);
+}
+
 function main() {
   if (!existsSync(APP_SRC)) {
     throw new Error(`app/ not found at ${APP_SRC}`);
   }
+
+  writeApiConfig();
 
   // Rebuild pwa/app/ from scratch each time so removed source files don't
   // linger as stale copies in the deployed bundle.

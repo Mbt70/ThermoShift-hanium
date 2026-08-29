@@ -1,0 +1,4 @@
+{
+  "_comment": "stlite(브라우저) 빌드가 쓰는 API 주소. 브라우저에는 환경변수가 없어 이 파일로 준다. scripts/build-pwa.mjs 가 THERMOSHIFT_API_URL 로 덮어쓴다.",
+  "api_base": "https://thermoshift.tail46fe5e.ts.net/api"
+}
