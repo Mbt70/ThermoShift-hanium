@@ -347,11 +347,6 @@ if selected_id is None and rooms:
 
 room = next((r for r in rooms if r["id"] == selected_id), None) if selected_id else None
 
-# Re-opens the flagged reservation dialog on every rerun (including ones
-# triggered from inside the dialog itself, e.g. clicking "edit" in the
-# list) - Streamlit doesn't allow calling a second @st.dialog while one is
-# already open, so dialog-to-dialog navigation works by setting which one
-# should be showing here rather than calling them directly from nested code.
 if room is not None:
     active_dialog = st.session_state.get("_resv_dialog")
     if active_dialog == "list":
@@ -368,24 +363,6 @@ with main_col:
     if not rooms or room is None:
         st.switch_page("pages/devices.py")
     else:
-        snapshot = environment_snapshot(room)
-        occupied = bool(room.get("occupied"))
-        occupancy_estimate = random.Random(f"occ-head-{room['id']}").randint(1, 6) if occupied else 0
-        occupancy_rate = random.Random(f"occ-rate-{room['id']}-{date.today()}").randint(60, 95) if occupied else 0
-        power_delta_pct = round(random.Random(f"power-yday-{room['id']}-{date.today()}").uniform(-9, 6), 1)
-        # A room with no sensor reading yet has None fields rather than the
-        # mock's always-on random floats - fall back to "--" placeholders
-        # and treat the KPI comparisons as unmet rather than crashing.
-        temp_val, co2_val, humidity_val, power_val = (
-            snapshot["temperature"], snapshot["co2"], snapshot["humidity"], snapshot["power"],
-        )
-        co2_ok = co2_val is not None and co2_val < 700
-        target_ok = temp_val is not None and abs(temp_val - room["target_temperature"]) <= 1.5
-        temp_display = f"{temp_val:.1f}" if temp_val is not None else "--"
-        co2_display = f"{co2_val:.0f}" if co2_val is not None else "--"
-        humidity_display = f"{humidity_val:.0f}" if humidity_val is not None else "--"
-        power_display = f"{power_val:.1f}" if power_val is not None else "--"
-
         title_col, select_col, spacer_col = st.columns([0.6, 0.8, 4.4], vertical_alignment="center")
         with title_col:
             st.markdown('<h1 class="ts-dash-topbar-title">공간</h1>', unsafe_allow_html=True)
@@ -400,172 +377,226 @@ with main_col:
                 st.session_state["_web_selected_room"] = picked_room["id"]
                 st.rerun()
 
-        kpi_items = [
-            (
-                "temp",
-                "온도",
-                temp_display,
-                "°C",
-                "is-positive" if target_ok else "is-negative",
-                f"{_CHECK_ICON}목표 {room['target_temperature']}°C 근접"
-                if target_ok
-                else f"{_WARN_ICON}목표 {room['target_temperature']}°C 미달",
-            ),
-            (
-                "co2",
-                "CO₂",
-                co2_display,
-                "ppm",
-                "is-positive" if co2_ok else "is-negative",
-                f"{_CHECK_ICON}기준 근접" if co2_ok else f"{_WARN_ICON}기준 초과",
-            ),
-            ("occupancy", "재실추정", f"{occupancy_estimate}", "명", "", f"재실률 {occupancy_rate}%"),
-            ("humidity", "습도", humidity_display, "%", "is-positive", f"{_CHECK_ICON}적정"),
-            (
-                "power",
-                "총 HVAC 전력",
-                power_display,
-                "kW",
-                "is-positive" if power_delta_pct < 0 else "is-negative",
-                f"{_ARROW_DOWN_ICON if power_delta_pct < 0 else _ARROW_UP_ICON}어제 대비 {power_delta_pct:+.1f}%",
-            ),
-        ]
-        kpi_cols = st.columns(5, gap="small")
-        for col, (slug, label, value, unit, sub_class, sub) in zip(kpi_cols, kpi_items):
-            with col:
-                with st.container(key=f"ts_dash_kpi_card_{slug}", border=True):
-                    icon_html = (
-                        f'<span class="ts-dash-kpi-icon ts-room-humidity-icon">{_HUMIDITY_ICON}</span>'
-                        if slug == "humidity"
-                        else f'<img class="ts-dash-kpi-icon" src="{icon_data_uri(_KPI_ICON_FILES[slug])}" alt="" />'
-                    )
-                    st.markdown(
-                        f"""
-                        <div class="ts-dash-kpi-head">
-                          <span class="ts-dash-kpi-label">{label}</span>
-                          {icon_html}
-                        </div>
-                        <p class="ts-dash-kpi-value">{value}<span class="ts-dash-kpi-unit">{unit}</span></p>
-                        <p class="ts-dash-kpi-sub {sub_class}">{sub}</p>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+        @st.fragment(run_every=5)
+        def render_live_room_detail(current_room_id: int):
+            # Fetch fresh room & snapshot on every fragment tick
+            fresh_rooms = list_rooms(current_user_id())
+            current_r = next((r for r in fresh_rooms if r["id"] == current_room_id), room)
+            snapshot = environment_snapshot(current_r)
+            occupied = bool(current_r.get("occupied"))
+            occupancy_estimate = random.Random(f"occ-head-{current_r['id']}").randint(1, 6) if occupied else 0
+            occupancy_rate = random.Random(f"occ-rate-{current_r['id']}-{date.today()}").randint(60, 95) if occupied else 0
+            power_delta_pct = round(random.Random(f"power-yday-{current_r['id']}-{date.today()}").uniform(-9, 6), 1)
 
-        left_col, right_col = st.columns([2, 1], gap="small")
-
-        with left_col:
-            with st.container(key="ts_dash_trend_card", border=True):
-                head_col, legend_col = st.columns([1.4, 1.6], vertical_alignment="center")
-                with head_col:
-                    st.markdown('<p class="ts-dash-card-title" style="margin:0;">30분 추이</p>', unsafe_allow_html=True)
-                with legend_col:
-                    st.markdown(
-                        """
-                        <div class="ts-trend-legend">
-                          <span class="ts-trend-legend-item ts-trend-legend-temp">온도</span>
-                          <span class="ts-trend-legend-item ts-trend-legend-co2">CO₂</span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                temps, co2s = trend_series(room)
-                st.altair_chart(
-                    _trend_chart(temps, co2s, room["target_temperature"]),
-                    width="stretch",
-                )
-                schedules = list_today_schedules(room["id"])
-                res_head_col, res_link_col = st.columns([2, 1], vertical_alignment="center")
-                with res_head_col:
-                    st.markdown(
-                        f'<p class="ts-dash-card-title" style="margin:0;">{_CALENDAR_ICON}예약 냉방</p>',
-                        unsafe_allow_html=True,
-                    )
-                with res_link_col:
-                    if st.button("예약 목록보기", key="dash_reservation_all", width="stretch"):
-                        st.session_state["_resv_dialog"] = "list"
-                        st.rerun()
-                if schedules:
-                    rows = "".join(
-                        f'<div class="ts-room-reservation-row">'
-                        f'<span class="ts-room-reservation-time">{s["start_time"]}–{s["end_time"]}</span>'
-                        f'<span class="ts-room-reservation-status is-{"done" if schedule_status(s) == "완료" else "active" if schedule_status(s) == "진행 중" else "pending"}">'
-                        f'{schedule_status(s)}</span>'
-                        f'<span class="ts-room-reservation-chevron">{_CHEVRON_ICON}</span>'
-                        f"</div>"
-                        for s in schedules
-                    )
-                    st.markdown(rows, unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        '<p class="ts-dash-list-empty">오늘 예약된 냉방이 없습니다</p>',
-                        unsafe_allow_html=True,
-                    )
-                if st.button("＋ 새 예약 추가", key="dash_reservation_new", width="stretch"):
-                    st.session_state["_resv_dialog"] = "form"
-                    st.session_state["_resv_editing_id"] = None
-                    st.rerun()
-
-        with right_col:
-            with st.container(key="ts_room_manual_card", border=True):
-                st.markdown(
-                    f'<p class="ts-dash-card-title">'
-                    f'<img class="ts-dash-kpi-icon" src="{icon_data_uri("snow.svg")}" alt="" />에어컨 수동 제어</p>',
-                    unsafe_allow_html=True,
-                )
-                minus_col, value_col, plus_col = st.columns([1, 2, 1], vertical_alignment="center")
-                with minus_col:
-                    if st.button("−", key="dash_target_minus", width="stretch"):
-                        set_target_temperature(room["id"], max(16, room["target_temperature"] - 1))
-                        st.rerun()
-                with value_col:
-                    st.markdown(
-                        f"""
-                        <p class="ts-room-manual-value">{room["target_temperature"]}°</p>
-                        <p class="ts-room-manual-caption">예약 시간 동안 유지</p>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                with plus_col:
-                    if st.button("+", key="dash_target_plus", width="stretch"):
-                        set_target_temperature(room["id"], min(30, room["target_temperature"] + 1))
-                        st.rerun()
-                st.markdown(
-                    '<p class="ts-room-manual-note">수동 제어는 자동 제어보다 항상 우선 실행됩니다</p>',
-                    unsafe_allow_html=True,
-                )
-
-            with st.container(key="ts_room_ai_card", border=True):
-                st.markdown(
-                    f'<p class="ts-dash-card-title">{_CHIP_ICON}AI 운영 설명</p>',
-                    unsafe_allow_html=True,
-                )
-                headline, subline = system_judgment(room)
-                st.markdown(
-                    f"""
-                    <p class="ts-dash-judgment-headline">{headline}</p>
-                    <p class="ts-dash-judgment-sub">{subline}</p>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-        comfort = comfort_index(room)
-        with st.container(key="ts_dash_summary_card", border=True):
-            st.markdown('<p class="ts-dash-card-title">KPI 요약 (오늘)</p>', unsafe_allow_html=True)
-            summary_items = [
-                ("power", "HVAC 전력 사용량", f"{power_val * 24:.0f}kWh" if power_val is not None else "--"),
-                ("temp", "평균 온도", f"{temp_display}°C" if temp_val is not None else "--"),
-                ("co2", "평균 CO₂", f"{co2_display}ppm" if co2_val is not None else "--"),
-                ("occupancy", "공간 사용률", f"{occupancy_rate}%"),
-                (None, "종합 쾌적도 지수", f"{comfort}/100"),
-            ]
-            items_html = "".join(
-                f'<div class="ts-dash-summary-item">'
-                f'<div class="ts-dash-summary-head">'
-                f'<span class="ts-dash-summary-label">{label}</span>'
-                + (f'<img src="{icon_data_uri(_KPI_ICON_FILES[slug])}" alt="" />' if slug else "")
-                + "</div>"
-                f'<span class="ts-dash-summary-value">{value}</span>'
-                f"</div>"
-                for slug, label, value in summary_items
+            temp_val, co2_val, humidity_val, power_val = (
+                snapshot["temperature"], snapshot["co2"], snapshot["humidity"], snapshot["power"],
             )
-            st.markdown(f'<div class="ts-dash-summary-grid">{items_html}</div>', unsafe_allow_html=True)
+            target_ok = temp_val is not None and abs(temp_val - current_r["target_temperature"]) <= 1.5
+            temp_display = f"{temp_val:.1f}" if temp_val is not None else "--"
+            co2_display = f"{co2_val:.0f}" if co2_val is not None else "--"
+            humidity_display = f"{humidity_val:.0f}" if humidity_val is not None else "--"
+            power_display = f"{power_val:.1f}" if power_val is not None else "--"
+            co2_ok = co2_val is not None and co2_val < 700
+            door_val = snapshot.get("door_state")
+            motion_val = snapshot.get("motion")
+            door_display = "열림" if door_val == "open" else ("닫힘" if door_val == "closed" else "--")
+            door_ok = door_val == "closed"
+            motion_display = "감지됨" if motion_val is True else ("미감지" if motion_val is False else "--")
+            motion_active = motion_val is True
+
+            kpi_items = [
+                (
+                    "temp",
+                    "온도",
+                    temp_display,
+                    "°C",
+                    "is-positive" if target_ok else "is-negative",
+                    f"{_CHECK_ICON}목표 {current_r['target_temperature']}°C 근접"
+                    if target_ok
+                    else f"{_WARN_ICON}목표 {current_r['target_temperature']}°C 미달",
+                ),
+                (
+                    "humidity",
+                    "습도",
+                    humidity_display,
+                    "%",
+                    "is-positive",
+                    f"{_CHECK_ICON}적정",
+                ),
+                (
+                    "co2",
+                    "CO₂",
+                    co2_display,
+                    "ppm",
+                    "is-positive" if co2_ok else "is-negative",
+                    f"{_CHECK_ICON}기준 충족" if co2_ok else f"{_WARN_ICON}기준 초과",
+                ),
+                (
+                    "door",
+                    "문열림 센서",
+                    door_display,
+                    "",
+                    "is-positive" if door_ok else "is-negative",
+                    f"{_CHECK_ICON}문 닫힘 상태" if door_ok else f"{_WARN_ICON}문 열림 감지",
+                ),
+                (
+                    "pir",
+                    "인체 감지(PIR)",
+                    motion_display,
+                    "",
+                    "is-positive" if motion_active else "",
+                    f"{_CHECK_ICON}실시간 움직임 감지" if motion_active else "움직임 미감지",
+                ),
+                (
+                    "power",
+                    "HVAC 전력",
+                    power_display,
+                    "kW",
+                    "is-positive" if power_delta_pct < 0 else "is-negative",
+                    f"{_ARROW_DOWN_ICON if power_delta_pct < 0 else _ARROW_UP_ICON}어제 대비 {power_delta_pct:+.1f}%",
+                ),
+            ]
+            kpi_cols = st.columns(6, gap="small")
+            for col, (slug, label, value, unit, sub_class, sub) in zip(kpi_cols, kpi_items):
+                with col:
+                    with st.container(key=f"ts_dash_kpi_card_{slug}", border=True):
+                        if slug == "humidity":
+                            icon_html = f'<span class="ts-dash-kpi-icon ts-room-humidity-icon">{_HUMIDITY_ICON}</span>'
+                        elif slug in ("door", "pir", "occupancy"):
+                            icon_html = f'<img class="ts-dash-kpi-icon" src="{icon_data_uri("web_door.svg")}" alt="" />'
+                        else:
+                            icon_html = f'<img class="ts-dash-kpi-icon" src="{icon_data_uri(_KPI_ICON_FILES.get(slug, "temperture.svg"))}" alt="" />'
+
+                        unit_html = f'<span class="ts-dash-kpi-unit">{unit}</span>' if unit else ""
+                        st.markdown(
+                            f"""
+                            <div class="ts-dash-kpi-head">
+                              <span class="ts-dash-kpi-label">{label}</span>
+                              {icon_html}
+                            </div>
+                            <p class="ts-dash-kpi-value">{value}{unit_html}</p>
+                            <p class="ts-dash-kpi-sub {sub_class}">{sub}</p>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+            left_col, right_col = st.columns([2, 1], gap="small")
+
+            with left_col:
+                with st.container(key="ts_dash_trend_card", border=True):
+                    head_col, legend_col = st.columns([1.4, 1.6], vertical_alignment="center")
+                    with head_col:
+                        st.markdown('<p class="ts-dash-card-title" style="margin:0;">30분 추이</p>', unsafe_allow_html=True)
+                    with legend_col:
+                        st.markdown(
+                            """
+                            <div class="ts-trend-legend">
+                              <span class="ts-trend-legend-item ts-trend-legend-temp">온도</span>
+                              <span class="ts-trend-legend-item ts-trend-legend-co2">CO₂</span>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                    temps, co2s = trend_series(current_r)
+                    st.altair_chart(
+                        _trend_chart(temps, co2s, current_r["target_temperature"]),
+                        width="stretch",
+                    )
+                    schedules = list_today_schedules(current_r["id"])
+                    res_head_col, res_link_col = st.columns([2, 1], vertical_alignment="center")
+                    with res_head_col:
+                        st.markdown(
+                            f'<p class="ts-dash-card-title" style="margin:0;">{_CALENDAR_ICON}예약 냉방</p>',
+                            unsafe_allow_html=True,
+                        )
+                    with res_link_col:
+                        if st.button("예약 목록보기", key="dash_reservation_all", width="stretch"):
+                            st.session_state["_resv_dialog"] = "list"
+                            st.rerun()
+                    if schedules:
+                        rows = "".join(
+                            f'<div class="ts-room-reservation-row">'
+                            f'<span class="ts-room-reservation-time">{s["start_time"]}–{s["end_time"]}</span>'
+                            f'<span class="ts-room-reservation-status is-{"done" if schedule_status(s) == "완료" else "active" if schedule_status(s) == "진행 중" else "pending"}">'
+                            f'{schedule_status(s)}</span>'
+                            f'<span class="ts-room-reservation-chevron">{_CHEVRON_ICON}</span>'
+                            f"</div>"
+                            for s in schedules
+                        )
+                        st.markdown(rows, unsafe_allow_html=True)
+                    else:
+                        st.markdown(
+                            '<p class="ts-dash-list-empty">오늘 예약된 냉방이 없습니다</p>',
+                            unsafe_allow_html=True,
+                        )
+                    if st.button("＋ 새 예약 추가", key="dash_reservation_new", width="stretch"):
+                        st.session_state["_resv_dialog"] = "form"
+                        st.session_state["_resv_editing_id"] = None
+                        st.rerun()
+
+            with right_col:
+                with st.container(key="ts_room_manual_card", border=True):
+                    st.markdown(
+                        f'<p class="ts-dash-card-title">'
+                        f'<img class="ts-dash-kpi-icon" src="{icon_data_uri("snow.svg")}" alt="" />에어컨 수동 제어</p>',
+                        unsafe_allow_html=True,
+                    )
+                    minus_col, value_col, plus_col = st.columns([1, 2, 1], vertical_alignment="center")
+                    with minus_col:
+                        if st.button("−", key="dash_target_minus", width="stretch"):
+                            set_target_temperature(current_r["id"], max(16, current_r["target_temperature"] - 1))
+                            st.rerun()
+                    with value_col:
+                        st.markdown(
+                            f"""
+                            <p class="ts-room-manual-value">{current_r["target_temperature"]}°</p>
+                            <p class="ts-room-manual-caption">예약 시간 동안 유지</p>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                    with plus_col:
+                        if st.button("+", key="dash_target_plus", width="stretch"):
+                            set_target_temperature(current_r["id"], min(30, current_r["target_temperature"] + 1))
+                            st.rerun()
+                    st.markdown(
+                        '<p class="ts-room-manual-note">수동 제어는 자동 제어보다 항상 우선 실행됩니다</p>',
+                        unsafe_allow_html=True,
+                    )
+
+                with st.container(key="ts_room_ai_card", border=True):
+                    st.markdown(
+                        f'<p class="ts-dash-card-title">{_CHIP_ICON}AI 운영 설명</p>',
+                        unsafe_allow_html=True,
+                    )
+                    headline, subline = system_judgment(current_r)
+                    st.markdown(
+                        f"""
+                        <p class="ts-dash-judgment-headline">{headline}</p>
+                        <p class="ts-dash-judgment-sub">{subline}</p>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+            comfort = comfort_index(current_r)
+            with st.container(key="ts_dash_summary_card", border=True):
+                st.markdown('<p class="ts-dash-card-title">KPI 요약 (오늘)</p>', unsafe_allow_html=True)
+                summary_items = [
+                    ("power", "HVAC 전력 사용량", f"{power_val * 24:.0f}kWh" if power_val is not None else "--"),
+                    ("temp", "평균 온도", f"{temp_display}°C" if temp_val is not None else "--"),
+                    ("co2", "평균 CO₂", f"{co2_display}ppm" if co2_val is not None else "--"),
+                    ("occupancy", "공간 사용률", f"{occupancy_rate}%"),
+                    (None, "종합 쾌적도 지수", f"{comfort}/100"),
+                ]
+                items_html = "".join(
+                    f'<div class="ts-dash-summary-item">'
+                    f'<div class="ts-dash-summary-head">'
+                    f'<span class="ts-dash-summary-label">{label}</span>'
+                    + (f'<img src="{icon_data_uri(_KPI_ICON_FILES[slug])}" alt="" />' if slug else "")
+                    + "</div>"
+                    f'<span class="ts-dash-summary-value">{value}</span>'
+                    f"</div>"
+                    for slug, label, value in summary_items
+                )
+                st.markdown(f'<div class="ts-dash-summary-grid">{items_html}</div>', unsafe_allow_html=True)
+
+        render_live_room_detail(room["id"])

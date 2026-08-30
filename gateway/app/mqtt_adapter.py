@@ -22,7 +22,16 @@ class MQTTAdapter:
     def register_callback(self, cb: Callable[[Any], None]):
         self.callbacks.append(cb)
 
+    # JSON 이 아닌 것이 정상인 토픽. 냉방 릴레이 상태는 평문 "ON"/"OFF" 로
+    # 오간다(firmware/ir_01 참고). 게이트웨이는 thermoshift/# 를 통째로
+    # 구독하므로 이 토픽도 받게 되는데, 파싱 실패로 로그를 채울 일이 아니다.
+    PLAINTEXT_TOPICS = ("thermoshift/ir_01/cooling/state",
+                        "thermoshift/ir_01/cooling/cmd")
+
     def process_message(self, topic: str, payload_str: str):
+        if topic in self.PLAINTEXT_TOPICS:
+            return
+
         try:
             payload = json.loads(payload_str)
         except json.JSONDecodeError as exc:

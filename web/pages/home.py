@@ -226,37 +226,40 @@ apply_mobile_styles("home", shared=("dash_shell",))
 if not is_logged_in():
     st.switch_page("pages/login.py")
 
-rooms = list_rooms(current_user_id())
-snapshots = {r["id"]: environment_snapshot(r) for r in rooms}
-room_count = len(rooms)
-
-# A brand-new room (or one whose sensor hasn't reported yet) has no reading
-# at all rather than a mock-random float, so temperature/co2/power can be
-# None here - average/sum only over the rooms that actually have a value.
-temps = [s["temperature"] for s in snapshots.values() if s["temperature"] is not None]
-co2s = [s["co2"] for s in snapshots.values() if s["co2"] is not None]
-powers = [s["power"] for s in snapshots.values() if s["power"] is not None]
-
-avg_temp = sum(temps) / len(temps) if temps else 0.0
-avg_co2 = sum(co2s) / len(co2s) if co2s else 0.0
-total_power = sum(powers)
-active_count = sum(1 for r in rooms if r.get("occupied"))
-occupancy_rate = round(active_count / room_count * 100) if room_count else 0
-severity = alert_severity_counts([r["id"] for r in rooms])
-alert_total = severity["critical"] + severity["warning"]
-power_delta_pct = round(random.Random(f"power-yday-{datetime.now().date()}").uniform(-9, 6), 1)
-
 sidebar_col, main_col = st.columns([1, 4], gap="small")
 
 with sidebar_col:
     render_sidebar("dashboard")
 
 with main_col:
-    render_topbar("대시보드", alert_count=alert_total)
+    @st.fragment(run_every=5)
+    def render_live_dashboard():
+        rooms = list_rooms(current_user_id())
+        snapshots = {r["id"]: environment_snapshot(r) for r in rooms}
+        room_count = len(rooms)
 
-    if not rooms:
-        st.switch_page("pages/devices.py")
-    else:
+        # A brand-new room (or one whose sensor hasn't reported yet) has no reading
+        # at all rather than a mock-random float, so temperature/co2/power can be
+        # None here - average/sum only over the rooms that actually have a value.
+        temps = [s["temperature"] for s in snapshots.values() if s["temperature"] is not None]
+        co2s = [s["co2"] for s in snapshots.values() if s["co2"] is not None]
+        powers = [s["power"] for s in snapshots.values() if s["power"] is not None]
+
+        avg_temp = sum(temps) / len(temps) if temps else 0.0
+        avg_co2 = sum(co2s) / len(co2s) if co2s else 0.0
+        total_power = sum(powers)
+        active_count = sum(1 for r in rooms if r.get("occupied"))
+        occupancy_rate = round(active_count / room_count * 100) if room_count else 0
+        severity = alert_severity_counts([r["id"] for r in rooms])
+        alert_total = severity["critical"] + severity["warning"]
+        power_delta_pct = round(random.Random(f"power-yday-{datetime.now().date()}").uniform(-9, 6), 1)
+
+        render_topbar("대시보드", alert_count=alert_total)
+
+        if not rooms:
+            st.switch_page("pages/devices.py")
+            return
+
         temp_diff = avg_temp - 24
         temp_state = "근접" if abs(temp_diff) <= 1 else ("초과" if temp_diff > 0 else "미달")
         co2_ok = avg_co2 < 1000
@@ -331,19 +334,27 @@ with main_col:
                         status = room_status(r)
                         status_class = _STATUS_CLASS.get(status, "ok")
                         usage_pct = _occupancy_rate(r)
+                        door_label = "문 열림" if snap.get("door_state") == "open" else ("문 닫힘" if snap.get("door_state") == "closed" else "문 --")
+                        door_class = "ts-dash-status-warn" if snap.get("door_state") == "open" else "ts-dash-status-ok"
+                        motion_label = "움직임 감지" if snap.get("motion") is True else "움직임 없음"
+                        motion_class = "ts-dash-status-ok" if snap.get("motion") is True else ""
+
                         with col:
                             with st.container(key=f"ts_dash_room_card_{r['id']}"):
                                 st.markdown(
                                     f"""
                                     <div class="ts-dash-room-thumb" style="{_heat_thumb_style(r["id"], snap["temperature"])}"></div>
                                     <div class="ts-dash-room-card-head">
-                                      <span class="ts-dash-room-card-name">{r["name"]}</span>
-                                      <span class="ts-dash-status-badge ts-dash-status-{status_class}">{status}</span>
+                                       <span class="ts-dash-room-card-name">{r["name"]}</span>
+                                       <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                                         <span class="ts-dash-status-badge {door_class}">{door_label}</span>
+                                         <span class="ts-dash-status-badge ts-dash-status-{status_class}">{status}</span>
+                                       </div>
                                     </div>
                                     <div class="ts-dash-room-card-stats">
                                       <span><img src="{icon_data_uri("temperture.svg")}" alt="" />{f'{snap["temperature"]:.1f}°C' if snap["temperature"] is not None else "--"}</span>
                                       <span><img src="{icon_data_uri("co2.svg")}" alt="" />CO₂ {f'{snap["co2"]:.0f}ppm' if snap["co2"] is not None else "--"}</span>
-                                      <span><img src="{icon_data_uri("web_door.svg")}" alt="" />사용율 {usage_pct}%</span>
+                                      <span><img src="{icon_data_uri("web_door.svg")}" alt="" />{motion_label}</span>
                                       <span><img src="{icon_data_uri("web_bolt.svg")}" alt="" />전력 {f'{snap["power"]:.2f}kW' if snap["power"] is not None else "--"}</span>
                                     </div>
                                     """,
@@ -451,9 +462,6 @@ with main_col:
                     unsafe_allow_html=True,
                 )
 
-        # power can be None (no plug device reporting yet) independent of
-        # sensor_connected (which only reflects the env sensor) - treat
-        # either case as "offline" for ranking/display rather than crashing.
         ranked = sorted(rooms, key=lambda r: snapshots[r["id"]]["power"] or 0, reverse=True)
         online_powers = [
             snapshots[r["id"]]["power"] for r in ranked if snapshots[r["id"]]["power"] is not None
@@ -521,3 +529,5 @@ with main_col:
                 for slug, label, value in summary_items
             )
             st.markdown(f'<div class="ts-dash-summary-grid">{items_html}</div>', unsafe_allow_html=True)
+
+    render_live_dashboard()

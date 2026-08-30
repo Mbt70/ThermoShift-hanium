@@ -160,33 +160,7 @@ def delete_room(room_id: int):
 def get_room_latest(room_id: int):
     """GET /rooms/{room_id}/latest
 
-    Response:
-    {
-      "room_id": int,
-      "target_temp": float,
-      "temp_tolerance": float,
-      "co2_limit": int,
-      "env": {
-        "temperature": float | null,
-        "humidity": float | null,
-        "co2": int | null,
-        "measured_at": str | null  # ISO 8601 UTC
-      },
-      "power": {
-        "power_w": float | null,
-        "measured_at": str | null
-      },
-      "occupancy": {
-        "occupancy_state": "empty" | "transition" | "occupied" | "unknown" | null,
-        "estimated_count": int | null,
-        "probability": float | null
-      }
-    }
-
-    404 if room_id doesn't exist. If the room exists but has no readings yet,
-    env/power/occupancy fields come back null instead of erroring - devices
-    are looked up per room+type (env/plug) via LATERAL joins, which return no
-    rows (not an error) when a room has no such device or no readings yet.
+    Response includes env, power, occupancy, door, pir latest telemetry.
     """
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
@@ -204,7 +178,11 @@ def get_room_latest(room_id: int):
                 pw.measured_at AS power_measured_at,
                 occ.occupancy_state,
                 occ.estimated_count,
-                occ.probability
+                occ.probability,
+                door.door_state,
+                door.measured_at AS door_measured_at,
+                pir.motion,
+                pir.measured_at AS pir_measured_at
             FROM rooms r
             LEFT JOIN LATERAL (
                 SELECT se.temperature, se.humidity, se.co2, se.measured_at
@@ -229,6 +207,22 @@ def get_room_latest(room_id: int):
                 ORDER BY oe.estimated_at DESC
                 LIMIT 1
             ) occ ON true
+            LEFT JOIN LATERAL (
+                SELECT sd.door_state, sd.measured_at
+                FROM sensor_door sd
+                JOIN devices d ON d.device_id = sd.device_id
+                WHERE d.room_id = r.room_id AND d.device_type IN ('pir', 'door')
+                ORDER BY sd.measured_at DESC
+                LIMIT 1
+            ) door ON true
+            LEFT JOIN LATERAL (
+                SELECT sp.motion, sp.measured_at
+                FROM sensor_pir sp
+                JOIN devices d ON d.device_id = sp.device_id
+                WHERE d.room_id = r.room_id AND d.device_type IN ('pir', 'door')
+                ORDER BY sp.measured_at DESC
+                LIMIT 1
+            ) pir ON true
             WHERE r.room_id = %s
             """,
             (room_id,),
@@ -257,6 +251,14 @@ def get_room_latest(room_id: int):
             "occupancy_state": row["occupancy_state"],
             "estimated_count": row["estimated_count"],
             "probability": row["probability"],
+        },
+        "door": {
+            "door_state": row["door_state"],
+            "measured_at": row["door_measured_at"],
+        },
+        "pir": {
+            "motion": row["motion"],
+            "measured_at": row["pir_measured_at"],
         },
     }
 
