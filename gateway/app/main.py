@@ -1,7 +1,9 @@
 import logging
+import os
 import signal
 import time
 import threading
+import uuid
 from datetime import datetime, timezone
 from app.config import get_config
 from app.storage import get_storage
@@ -29,7 +31,22 @@ class EdgeNode:
         self.fe = get_feature_engine()
         self.hmm = get_occupancy_hmm()
         
-        self.client = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id=self.config.mqtt.client_id)
+        # client_id 에 프로세스마다 다른 꼬리를 붙인다.
+        #
+        # 고정 ID 를 쓰면 같은 ID 로 붙은 다른 클라이언트와 브로커가 서로를
+        # 밀어낸다. MQTT 규격상 나중에 붙은 쪽이 먼저 붙은 쪽을 끊기 때문에,
+        # 둘이 1초 간격으로 무한히 재접속하며 그 사이 메시지를 잃는다.
+        # 실제로 이 문제로 게이트웨이가 초당 한 번씩 재접속했고, 원인이
+        # (1) 종료되지 않고 남은 이전 인스턴스와 (2) 브로커에 남은 유령
+        # 세션이었다. 로그에는 "Connected" 만 반복돼 원인이 드러나지 않는다.
+        #
+        # 이 게이트웨이는 clean session 으로 붙고 LWT 도 쓰지 않으므로 ID 가
+        # 매번 달라져도 잃는 것이 없다. config 의 값은 접두사로 남겨
+        # 브로커 로그에서 사람이 알아볼 수 있게 한다.
+        client_id = f"{self.config.mqtt.client_id}-{uuid.uuid4().hex[:8]}"
+        logger.info("MQTT client_id: %s", client_id)
+        self.client = mqtt.Client(
+            callback_api_version=CallbackAPIVersion.VERSION2, client_id=client_id)
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         # 끊긴 이유를 남긴다. 이게 없으면 재접속이 반복돼도 원인을 알 수 없다
@@ -156,6 +173,22 @@ class EdgeNode:
             logger.info("Stopping...")
             self.client.loop_stop()
             self.client.disconnect()
+            # 커넥션 풀을 닫지 않으면 psycopg 의 워커 스레드가 살아 있어
+            # 인터프리터가 끝나지 않는다. 실제로 SIGTERM 을 처리하고
+            # "Stopping..." 까지 찍은 뒤에도 프로세스가 남아, 다음 인스턴스와
+            # MQTT client_id 를 놓고 다투는 원인이 됐다.
+            self.storage.close()
+            logger.info("종료 완료")
+
+        # 정리가 끝났는데도 인터프리터가 남는다. paho 와 psycopg 풀이 띄운
+        # 스레드 중 일부가 비데몬이라 파이썬이 그것들을 기다리기 때문이다.
+        # 그대로 두면 프로세스가 유령으로 남아 다음 인스턴스와 MQTT
+        # client_id 를 놓고 다투고, systemd 는 TimeoutStopSec 만큼 기다렸다가
+        # SIGKILL 로 죽인다(그동안 재시작이 지연된다).
+        #
+        # 위에서 연결과 커넥션 풀을 이미 닫았으므로 더 정리할 것이 없다.
+        # os._exit 로 즉시 끝낸다.
+        os._exit(0)
 
 if __name__ == "__main__":
     node = EdgeNode()
