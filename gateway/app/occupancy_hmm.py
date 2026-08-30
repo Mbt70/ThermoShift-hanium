@@ -76,7 +76,7 @@ class OccupancyHMM:
     def _load_params(self) -> Tuple[Dict[str, Any], str]:
         if PARAM_PATH.is_file():
             try:
-                data = json.loads(PARAM_PATH.read_text())
+                data = json.loads(PARAM_PATH.read_text(encoding="utf-8"))
                 meta = data.get("metadata", {})
                 return data, (
                     f"학습값 {PARAM_PATH.name} "
