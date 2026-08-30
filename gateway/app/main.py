@@ -1,8 +1,18 @@
 import logging
 import signal
+import sys
 import time
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
+
+_REPOSITORY_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_REPOSITORY_ROOT) not in sys.path:
+    # ml/ 은 저장소 루트에 있다. 게이트웨이는 gateway/ 를 작업 디렉터리로
+    # 삼아 `python -m app.main` 으로 뜨므로(scripts/services.sh), 다른
+    # 진입점(web/main.py 등)과 같은 방식으로 루트를 sys.path 에 추가한다.
+    sys.path.insert(0, str(_REPOSITORY_ROOT))
+
 from app.config import get_config
 from app.storage import get_storage
 from app.mqtt_adapter import MQTTAdapter
