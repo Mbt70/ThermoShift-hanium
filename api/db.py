@@ -1,15 +1,20 @@
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
-
+from pathlib import Path
+from dotenv import load_dotenv
 import psycopg
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
+# /etc/thermoshift.env or local .env
+load_dotenv("/etc/thermoshift.env")
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_USER = os.getenv("DB_USER", "thermoshift")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "thermoshift1234")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "mxJEssQM8i6HutY5jbkzAYIO")
 DB_NAME = os.getenv("DB_NAME", "thermoshift")
 
 _CONNINFO = psycopg.conninfo.make_conninfo(

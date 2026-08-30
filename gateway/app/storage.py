@@ -13,7 +13,9 @@ import os
 import re
 import threading
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
+from dotenv import load_dotenv
 
 import psycopg
 from psycopg.rows import dict_row
@@ -21,10 +23,14 @@ from psycopg_pool import ConnectionPool
 
 from app.config import get_config
 
+# /etc/thermoshift.env or local .env
+load_dotenv("/etc/thermoshift.env")
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_USER = os.getenv("DB_USER", "thermoshift")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "thermoshift1234")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "mxJEssQM8i6HutY5jbkzAYIO")
 DB_NAME = os.getenv("DB_NAME", "thermoshift")
 
 _CONNINFO = psycopg.conninfo.make_conninfo(
@@ -211,11 +217,12 @@ class Storage:
         with self._pool.connection() as conn, conn.cursor() as cur:
             if metric in _ENV_COLUMNS:
                 column = _ENV_COLUMNS[metric]
+                flag_col = "temp_flag" if column == "temperature" else f"{column}_flag"
                 cur.execute(
-                    f"INSERT INTO sensor_env (device_id, {column}, {column}_flag,"
+                    f"INSERT INTO sensor_env (device_id, {column}, {flag_col},"
                     " measured_at, received_at) VALUES (%s, %s, %s, %s, now())"
                     " ON CONFLICT (device_id, measured_at) DO UPDATE"
-                    f" SET {column} = EXCLUDED.{column}, {column}_flag = EXCLUDED.{column}_flag",
+                    f" SET {column} = EXCLUDED.{column}, {flag_col} = EXCLUDED.{flag_col}",
                     (device_id, value, flag, timestamp),
                 )
             elif metric == "pir":

@@ -65,98 +65,93 @@ with main_col:
                 st.session_state["_web_selected_room"] = picked_room["id"]
                 st.rerun()
 
-        today = date.today()
-        year_options = [f"{y}년" for y in range(today.year - 2, today.year + 1)]
-        month_options = [f"{m}월" for m in range(1, 13)]
+        @st.fragment(run_every=5)
+        def render_live_alerts(current_room_id):
+            today = date.today()
+            year_options = [f"{y}년" for y in range(today.year - 2, today.year + 1)]
+            month_options = [f"{m}월" for m in range(1, 13)]
 
-        # Resolve the current date-toggle selection from session_state *before*
-        # the widgets are created below, so the alert list (and the banner,
-        # which has to render above the card the widgets live in) can be
-        # computed first. The widgets, once created, read/write the exact
-        # same keys, so this always matches what's actually shown.
-        year_pick = st.session_state.get("alert_year_select", f"{today.year}년")
-        month_pick = st.session_state.get("alert_month_select", f"{today.month}월")
-        year = int(year_pick[:-1])
-        month = int(month_pick[:-1])
-        max_day = calendar.monthrange(year, month)[1]
-        default_day = today.day if (year, month) == (today.year, today.month) else 1
-        default_day = min(default_day, max_day)
-        day_key = f"alert_day_select_{year}_{month}"
-        day_pick = st.session_state.get(day_key, f"{default_day}일")
-        day_num = int(day_pick[:-1])
-        day_options = [f"{d}일" for d in range(1, max_day + 1)]
-        selected_date = date(year, month, day_num)
+            year_pick = st.session_state.get("alert_year_select", f"{today.year}년")
+            month_pick = st.session_state.get("alert_month_select", f"{today.month}월")
+            year = int(year_pick[:-1])
+            month = int(month_pick[:-1])
+            max_day = calendar.monthrange(year, month)[1]
+            default_day = today.day if (year, month) == (today.year, today.month) else 1
+            default_day = min(default_day, max_day)
+            day_key = f"alert_day_select_{year}_{month}"
+            day_pick = st.session_state.get(day_key, f"{default_day}일")
+            day_num = int(day_pick[:-1])
+            day_options = [f"{d}일" for d in range(1, max_day + 1)]
+            selected_date = date(year, month, day_num)
 
-        alerts = list_room_alerts(room["id"], selected_date)
+            alerts = list_room_alerts(current_room_id, selected_date)
 
-        if any(alert["severity"] == "critical" and not alert["read"] for alert in alerts):
-            st.markdown(
-                f"""
-                <div class="ts-alert-banner">{_FAIL_ICON}
-                  <p>제어 실패로 확인이 필요한 알림입니다.</p>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        with st.container(key="ts_dash_alert_card", border=True):
-            label_col, year_col, month_col, day_col = st.columns(
-                [2.4, 1, 1, 1], vertical_alignment="center"
-            )
-            with year_col:
-                st.selectbox(
-                    "년도", year_options, index=year_options.index(f"{year}년"),
-                    key="alert_year_select", label_visibility="collapsed",
-                )
-            with month_col:
-                st.selectbox(
-                    "월", month_options, index=month_options.index(f"{month}월"),
-                    key="alert_month_select", label_visibility="collapsed",
-                )
-            with day_col:
-                # Keyed per (year, month) so switching to a shorter month always
-                # remounts a fresh widget with a valid default index, instead of
-                # a stale display value (e.g. "31일") lingering from a widget
-                # whose options no longer include it.
-                st.selectbox(
-                    "일", day_options, index=day_options.index(f"{day_num}일"),
-                    key=day_key, label_visibility="collapsed",
-                )
-            with label_col:
-                date_prefix = "오늘 " if selected_date == today else ""
+            if any(alert["severity"] == "critical" and not alert["read"] for alert in alerts):
                 st.markdown(
-                    f'<p class="ts-alert-date-label">{date_prefix}{month}월 {day_num}일</p>',
+                    f"""
+                    <div class="ts-alert-banner">{_FAIL_ICON}
+                      <p>제어 실패로 확인이 필요한 알림입니다.</p>
+                    </div>
+                    """,
                     unsafe_allow_html=True,
                 )
 
-            if alerts:
-                clicked_alert_id = None
-                for alert in alerts:
-                    read_class = "is-read" if alert["read"] else "is-unread"
-                    severity_class = "is-critical" if alert["severity"] == "critical" else "is-warning"
-                    icon = _FAIL_ICON if alert["severity"] == "critical" else _ATTENTION_ICON
-                    dot = "" if alert["read"] else '<span class="ts-alert-unread-dot"></span>'
-                    time_label = f'{alert["timestamp"].hour}:{alert["timestamp"].minute:02d}'
-                    with st.container(key=f"ts_dash_alert_row_{alert['id']}"):
-                        st.markdown(
-                            f"""
-                            <div class="ts-alert-row">
-                              <span class="ts-alert-content {severity_class} {read_class}">
-                                {icon}<span class="ts-alert-title">{alert["title"]}</span>{dot}
-                              </span>
-                              <span class="ts-alert-time">{time_label}</span>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-                        if not alert["read"]:
-                            if st.button(alert["title"], key=f"alert_mark_read_{alert['id']}", width="stretch"):
-                                clicked_alert_id = alert["id"]
-                if clicked_alert_id:
-                    mark_alert_read(clicked_alert_id)
-                    st.rerun()
-            else:
-                st.markdown(
-                    '<p class="ts-dash-list-empty">해당 날짜의 알림이 없습니다</p>',
-                    unsafe_allow_html=True,
+            with st.container(key="ts_dash_alert_card", border=True):
+                label_col, year_col, month_col, day_col = st.columns(
+                    [2.4, 1, 1, 1], vertical_alignment="center"
                 )
+                with year_col:
+                    st.selectbox(
+                        "년도", year_options, index=year_options.index(f"{year}년"),
+                        key="alert_year_select", label_visibility="collapsed",
+                    )
+                with month_col:
+                    st.selectbox(
+                        "월", month_options, index=month_options.index(f"{month}월"),
+                        key="alert_month_select", label_visibility="collapsed",
+                    )
+                with day_col:
+                    st.selectbox(
+                        "일", day_options, index=day_options.index(f"{day_num}일"),
+                        key=day_key, label_visibility="collapsed",
+                    )
+                with label_col:
+                    date_prefix = "오늘 " if selected_date == today else ""
+                    st.markdown(
+                        f'<p class="ts-alert-date-label">{date_prefix}{month}월 {day_num}일</p>',
+                        unsafe_allow_html=True,
+                    )
+
+                if alerts:
+                    clicked_alert_id = None
+                    for alert in alerts:
+                        read_class = "is-read" if alert["read"] else "is-unread"
+                        severity_class = "is-critical" if alert["severity"] == "critical" else "is-warning"
+                        icon = _FAIL_ICON if alert["severity"] == "critical" else _ATTENTION_ICON
+                        dot = "" if alert["read"] else '<span class="ts-alert-unread-dot"></span>'
+                        time_label = f'{alert["timestamp"].hour}:{alert["timestamp"].minute:02d}'
+                        with st.container(key=f"ts_dash_alert_row_{alert['id']}"):
+                            st.markdown(
+                                f"""
+                                <div class="ts-alert-row">
+                                  <span class="ts-alert-content {severity_class} {read_class}">
+                                    {icon}<span class="ts-alert-title">{alert["title"]}</span>{dot}
+                                  </span>
+                                  <span class="ts-alert-time">{time_label}</span>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+                            if not alert["read"]:
+                                if st.button(alert["title"], key=f"alert_mark_read_{alert['id']}", width="stretch"):
+                                    clicked_alert_id = alert["id"]
+                    if clicked_alert_id:
+                        mark_alert_read(clicked_alert_id)
+                        st.rerun()
+                else:
+                    st.markdown(
+                        '<p class="ts-dash-list-empty">해당 날짜의 알림이 없습니다</p>',
+                        unsafe_allow_html=True,
+                    )
+
+        render_live_alerts(room["id"])
