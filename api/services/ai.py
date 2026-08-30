@@ -1,4 +1,4 @@
-"""Claude API 연동.
+"""Gemini API 연동.
 
 제어 판단 근거를 사람 말로 풀어주고, 알림 원인을 진단하고, 주간 리포트를
 자동 생성한다. gateway가 남긴 reason_codes 같은 기계용 코드를 사용자와
@@ -20,32 +20,36 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 # 기본 모델. 필요하면 THERMOSHIFT_AI_MODEL 로 바꾼다.
-MODEL = os.environ.get("THERMOSHIFT_AI_MODEL", "claude-opus-5")
+MODEL = os.environ.get("THERMOSHIFT_AI_MODEL", "gemini-3.5-flash")
+
+# effort 단계별 thinking 토큰 예산. "low"는 지연시간이 중요한 즉시 설명용,
+# "high"는 주간 리포트처럼 한 번에 길게 종합하는 작업용.
+_THINKING_BUDGET = {"low": 1024, "medium": 4096, "high": 8192}
 
 
 def _load_sdk():
     try:
-        import anthropic  # noqa: PLC0415
-        return anthropic
+        from google import genai  # noqa: PLC0415
+        return genai
     except ImportError:
         return None
 
 
-_anthropic = _load_sdk()
+_genai = _load_sdk()
 _client = None
 
 
 def is_available() -> bool:
     """SDK와 자격증명이 모두 준비됐는지."""
-    if _anthropic is None:
+    if _genai is None:
         return False
-    return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+    return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
 
 
 def _get_client():
     global _client
     if _client is None:
-        _client = _anthropic.Anthropic()
+        _client = _genai.Client(api_key=os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
     return _client
 
 
@@ -130,24 +134,31 @@ def _call(prompt: str, schema, effort: str = "medium", max_tokens: int = 4000):
     if not is_available():
         return None
     try:
-        response = _get_client().messages.parse(
+        from google.genai import types  # noqa: PLC0415
+
+        response = _get_client().models.generate_content(
             model=MODEL,
-            max_tokens=max_tokens,
-            system=_SYSTEM,
-            thinking={"type": "adaptive"},
-            output_config={"effort": effort},
-            messages=[{"role": "user", "content": prompt}],
-            output_format=schema,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=_SYSTEM,
+                max_output_tokens=max_tokens,
+                response_mime_type="application/json",
+                response_schema=schema,
+                thinking_config=types.ThinkingConfig(
+                    thinking_budget=_THINKING_BUDGET.get(effort, 4096)
+                ),
+            ),
         )
     except Exception:
         # AI는 부가 기능이다. 실패해도 본 기능이 멈추면 안 된다.
-        logger.exception("Claude API 호출 실패")
+        logger.exception("Gemini API 호출 실패")
         return None
 
-    if response.stop_reason == "refusal":
-        logger.warning("Claude가 응답을 거부했습니다: %s", response.stop_details)
+    candidates = response.candidates or []
+    if not candidates or candidates[0].finish_reason not in ("STOP", None):
+        logger.warning("Gemini가 응답을 완료하지 못했습니다: %s", response.prompt_feedback)
         return None
-    return response.parsed_output
+    return response.parsed
 
 
 # --------------------------------------------------------------------------

@@ -125,6 +125,31 @@ def system_judgment(room: dict) -> tuple[str, str]:
     return headline, subline
 
 
+def ai_judgment(room: dict) -> tuple[str, str] | None:
+    """AI(Gemini)가 최근 제어 판단을 설명한 문장. 사용 불가하면 None.
+
+    호출부는 None 이면 system_judgment() 로 폴백해야 한다 - AI 는 부가
+    기능이지 전제가 아니다.
+    """
+    try:
+        status = api_get("/ai/status")
+        if not status or not status.get("available"):
+            return None
+        decision = api_get(f"/rooms/{room['id']}/decisions/latest", ignore_404=True)
+        if decision is None:
+            return None
+        explanation = api_post(f"/ai/decisions/{decision['decision_id']}/explain")
+    except Exception:
+        return None
+    if not explanation or not explanation.get("headline") or not explanation.get("detail"):
+        return None
+    headline = explanation["headline"]
+    subline = explanation["detail"]
+    if explanation.get("recommendation"):
+        subline = f"{subline} {explanation['recommendation']}"
+    return headline, subline
+
+
 def trend_series(room: dict, points: int = 30) -> tuple[list[float], list[float]]:
     """Real temperature/CO2 history for the room's env sensor, most recent
     `points` minutes. Returns two empty lists if there's no env device or no

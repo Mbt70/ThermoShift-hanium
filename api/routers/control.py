@@ -16,6 +16,11 @@ _COLUMNS = (
     "estimated_cause, action_guide, verified_at"
 )
 
+_DECISION_COLUMNS = (
+    "decision_id, room_id, estimate_id, schedule_id, control_mode, "
+    "decision_type, target_temp, reason, decided_at"
+)
+
 
 @router.get("/rooms/{room_id}/commands")
 def list_commands(room_id: int, day: date | None = None):
@@ -124,3 +129,25 @@ def issue_command(room_id: int, body: IssueCommandRequest):
              body.control_mode, body.target_temp, Json(body.payload or {})),
         )
         return cur.fetchone()
+
+
+@router.get("/rooms/{room_id}/decisions/latest")
+def get_latest_decision(room_id: int):
+    """GET /rooms/{room_id}/decisions/latest
+
+    이 공간에서 게이트웨이가 가장 최근에 내린 제어 판단 한 건. AI 해설
+    (`/ai/decisions/{id}/explain`)에 넘길 decision_id 를 얻는 데 쓴다.
+
+    Response: same columns as control_decisions, or 404 if this room has
+    no recorded decision yet.
+    """
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"SELECT {_DECISION_COLUMNS} FROM control_decisions"
+            " WHERE room_id = %s ORDER BY decided_at DESC LIMIT 1",
+            (room_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no control decision recorded for this room yet")
+    return row
