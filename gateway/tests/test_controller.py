@@ -1,75 +1,171 @@
+"""컨트롤러 시험 — 오케스트레이션(설정 읽기·송신·기록)을 본다.
+
+판단 자체의 옳고 그름은 test_policy.py 가 표로 만들어 확인한다. 여기서는
+그 판단이 실제로 송신으로 이어지는지, 그리고 사용자가 대시보드에서 바꾼
+설정이 반영되는지를 본다.
+"""
+
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, timezone, timedelta
+
 from app.controller import HVACController
-from app.config import get_config
+
 
 class MockIRAdapter:
     def __init__(self):
         self.locked_out = False
         self.sent_commands = []
-    
+
     def is_locked_out(self):
         return self.locked_out
-        
+
     def send_command(self, cmd):
         self.sent_commands.append(cmd)
 
+
 class MockStorage:
-    def insert_control_decision(self, *args, **kwargs):
+    """대시보드가 정한 공간 설정을 흉내낸다."""
+
+    def __init__(self):
+        self.room = {"room_id": 1, "name": "테스트실", "control_mode": "rule",
+                     "target_temp": 25.0, "temp_tolerance": 1.0, "co2_limit": 1000}
+        self.decisions = []
+
+    def resolve_room_id(self):
+        return 1
+
+    def fetch_room_settings(self, room_id):
+        return self.room
+
+    def fetch_active_schedule(self, room_id, now):
+        return None
+
+    def insert_control_decision(self, *a, **kw):
+        self.decisions.append(kw)
+
+    def insert_system_event(self, *a, **kw):
         pass
-    def insert_system_event(self, *args, **kwargs):
-        pass
+
 
 @pytest.fixture
 def controller(monkeypatch):
-    monkeypatch.setattr("app.controller.get_storage", lambda: MockStorage())
-    
+    storage = MockStorage()
+    monkeypatch.setattr("app.controller.get_storage", lambda: storage)
+    monkeypatch.setattr("app.controller.load_thermal_model", lambda: None)
+
     class MockDataQuality:
         class FakeEnv:
             temperature_c = 27.0
-            co2_ppm = 800
+            co2_ppm = 800.0
         latest_env = {"test": FakeEnv()}
+
     monkeypatch.setattr("app.controller.get_data_quality", lambda: MockDataQuality())
 
     class MockFeatureEngine:
         @property
         def temp_history(self):
             now = datetime.now(timezone.utc)
-            return [
-                (now - timedelta(minutes=4), 27.0),
-                (now - timedelta(minutes=3), 27.0),
-                (now - timedelta(minutes=2), 27.0),
-                (now - timedelta(minutes=1), 27.0),
-                (now, 27.0)
-            ]
+            return [(now - timedelta(minutes=m), 27.0) for m in range(10, -1, -1)]
+
     monkeypatch.setattr("app.controller.get_feature_engine", lambda: MockFeatureEngine())
 
-    ir = MockIRAdapter()
-    c = HVACController(ir)
-    c.config.app.control_mode = "shadow"
+    class MockHMM:
+        last_estimate_id = None
+
+    monkeypatch.setattr("app.controller.get_occupancy_hmm", lambda: MockHMM())
+
+    c = HVACController(MockIRAdapter())
+    c.storage = storage
     return c
 
-def test_shadow_mode_does_not_transmit(controller):
-    features = {"env_fresh": True}
-    p_occ = {"empty": 0.0, "transition": 0.0, "occupied": 1.0}
-    
-    decision = controller.decide(features, "OCCUPIED", p_occ)
-    
-    assert decision["proposed_action"] == "COOL_25_AUTO"
-    assert decision["executed"] is False
-    assert len(controller.ir.sent_commands) == 0
-    assert "SHADOW_MODE_NO_TRANSMIT" in decision["reason_codes"]
 
-def test_failsafe_on_stale_env(controller):
-    features = {"env_fresh": False}
-    decision = controller.decide(features, "OCCUPIED", {"empty":0, "transition":0, "occupied":1})
-    assert "ENV_STALE" in decision["reason_codes"]
-    assert decision["proposed_action"] == "POWER_OFF"
+FRESH = {"env_fresh": True, "occ_fresh": True}
+OCCUPIED = {"empty": 0.0, "transition": 0.0, "occupied": 1.0}
+
+
+# ---------------------------------------------------------------- 안전 상한
+def test_shadow_mode_never_transmits(controller):
+    """config.yaml 이 shadow 면 공간 모드가 rule 이어도 송신하지 않는다."""
+    controller.config.app.control_mode = "shadow"
+    d = controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert d["decision_type"] == "maintain"      # 판단은 그대로 남는다
+    assert d["executed"] is False
+    assert controller.ir.sent_commands == []
+    assert d["blocked_by"] == "MONITORING_MODE"
+
+
+def test_active_mode_transmits(controller):
+    controller.config.app.control_mode = "active"
+    d = controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert d["executed"] is True
+    assert controller.ir.sent_commands == ["COOL_25_AUTO"]
+
+
+# ---------------------------------------------------- 대시보드 설정 반영
+def test_room_target_temp_from_dashboard_is_used(controller):
+    """사용자가 화면에서 목표 온도를 바꾸면 다음 판단부터 반영된다."""
+    controller.config.app.control_mode = "active"
+    controller.storage.room["target_temp"] = 22.0
+    d = controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert d["proposed_action"] == "COOL_22_AUTO"
+
+
+def test_monitoring_mode_records_but_does_not_transmit(controller):
+    """화면에서 '모니터링' 을 고르면 판단만 남고 냉방은 돌지 않는다."""
+    controller.config.app.control_mode = "active"
+    controller.storage.room["control_mode"] = "monitoring"
+    d = controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert d["executed"] is False
+    assert controller.ir.sent_commands == []
+
+
+def test_manual_mode_does_not_run_automatic_control(controller):
+    """'수동' 은 자동 제어를 하지 않는다. 큐에 들어온 명령만 실행한다."""
+    controller.config.app.control_mode = "active"
+    controller.storage.room["control_mode"] = "manual"
+    d = controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert d["executed"] is False
+
+
+def test_mpc_mode_notes_it_is_not_implemented(controller):
+    """화면의 '예측 제어' 는 아직 없다. 규칙 제어로 돌되 기록에 남긴다."""
+    controller.config.app.control_mode = "active"
+    controller.storage.room["control_mode"] = "mpc"
+    d = controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert d["executed"] is True
+    assert any("MPC" in r for r in d["reason_codes"])
+
+
+# ---------------------------------------------------------------- 안전
+def test_stale_env_holds_current_state(controller):
+    controller.config.app.control_mode = "active"
+    d = controller.decide({"env_fresh": False, "occ_fresh": True}, "OCCUPIED", OCCUPIED)
+    assert d["blocked_by"] == "ENV_STALE"
+    assert d["executed"] is False
+
 
 def test_manual_lockout_prevents_action(controller):
+    controller.config.app.control_mode = "active"
     controller.ir.locked_out = True
-    features = {"env_fresh": True}
-    decision = controller.decide(features, "OCCUPIED", {"empty":0, "transition":0, "occupied":1})
-    assert "MANUAL_LOCKOUT" in decision["reason_codes"]
-    # Still proposes, but wouldn't execute even in active mode
-    assert decision["executed"] is False
+    d = controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert d["blocked_by"] == "MANUAL_LOCKOUT"
+    assert d["executed"] is False
+
+
+def test_unresolved_room_does_nothing(controller):
+    """담당 공간을 모르면 아무것도 하지 않는다."""
+    controller.config.app.control_mode = "active"
+    controller.storage.fetch_room_settings = lambda room_id: None
+    d = controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert d["executed"] is False
+    assert controller.ir.sent_commands == []
+
+
+def test_transmission_updates_state_for_interlocks(controller):
+    """송신하면 기기 보호 조건이 볼 상태가 갱신돼야 한다."""
+    controller.config.app.control_mode = "active"
+    controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert controller.cooling_on is True
+    assert controller.last_on_at is not None
+    assert controller.last_command_at is not None

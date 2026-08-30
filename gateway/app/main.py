@@ -100,21 +100,23 @@ class EdgeNode:
             now = datetime.now(timezone.utc).isoformat()
             action = command["action"]
 
-            if self.config.app.control_mode != "active":
-                # shadow 모드에서는 실제로 쏘지 않는다. 사용자가 왜 반영되지
-                # 않았는지 알 수 있도록 실패 사유를 남긴다.
-                self.storage.mark_command(command["id"], "failed", "shadow_mode", now)
-                logger.info("shadow 모드라 수동 명령 %s 를 전송하지 않음", action)
+            # 수동 명령을 실행해도 되는지는 두 가지가 함께 정한다.
+            #   config.yaml  안전 상한 (shadow 면 무조건 금지)
+            #   rooms.control_mode  사용자가 화면에서 고른 모드
+            # monitoring 은 "보기만 한다" 는 뜻이므로 수동 명령도 실행하지 않는다.
+            room = self.storage.fetch_room_settings(room_id)
+            room_mode = room["control_mode"] if room else "monitoring"
+            if not self.controller.manual_allowed(room_mode):
+                reason = ("shadow_mode" if self.config.app.control_mode != "active"
+                          else "monitoring_mode")
+                self.storage.mark_command(command["id"], "failed", reason, now)
+                logger.info("수동 명령 %s 미전송 (%s, 공간 모드=%s)",
+                            action, reason, room_mode)
                 continue
 
             if self.ir.is_locked_out():
                 self.storage.mark_command(command["id"], "failed", "manual_lockout", now)
                 logger.info("수동 조작 lockout 중이라 %s 를 전송하지 않음", action)
-                continue
-
-            if action not in self.config.ir.codes:
-                self.storage.mark_command(command["id"], "failed", "command_failed", now)
-                logger.warning("등록되지 않은 IR 코드: %s", action)
                 continue
 
             try:
@@ -124,7 +126,10 @@ class EdgeNode:
                 logger.exception("수동 명령 %s 전송 실패", action)
                 continue
 
-            self.controller.current_action = action
+            # 컨트롤러 상태를 함께 갱신해야 다음 자동 판단이 "지금 켜져 있다"
+            # 는 것을 안다. 예전에는 current_action 만 바꿔서, 수동으로 켠 뒤
+            # 최소 가동시간 같은 기기 보호 조건이 동작하지 않았다.
+            self.controller._note_transmission(action, datetime.now(timezone.utc))
             self.storage.mark_command(command["id"], "sent", None, now)
             logger.info("수동 명령 %s 전송 완료", action)
 

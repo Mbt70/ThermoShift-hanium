@@ -57,12 +57,26 @@ _DECISION_TYPES = {
 _COMMAND_TYPES = {"POWER_OFF": "power_off"}
 
 # 게이트웨이 control_mode → main 의 control_mode ENUM
+# 게이트웨이 동작 모드 → main 스키마의 control_mode ENUM.
+#
+# 호출부가 이미 ENUM 값(monitoring/manual/rule/mpc)을 넘기는 경우도 있다.
+# 컨트롤러는 "이 판단이 어떤 운전 방식에서 나왔는가" 를 공간 모드로 기록하기
+# 때문이다. 그때는 그대로 통과시켜야 한다 — 예전에는 이 표에 없다는 이유로
+# 전부 monitoring 으로 떨어져, rule 구간이 기록에서 사라졌다.
+_DB_CONTROL_MODES = {"monitoring", "manual", "rule", "mpc"}
+
 _CONTROL_MODES = {
     "shadow": "monitoring",
     "active": "rule",
     "manual_lockout": "manual",
     "failsafe": "monitoring",
 }
+
+
+def _control_mode_of(value: str) -> str:
+    if value in _DB_CONTROL_MODES:
+        return value
+    return _CONTROL_MODES.get(value, "monitoring")
 
 
 def normalize_uid(device_code: str) -> str:
@@ -281,7 +295,8 @@ class Storage:
                                 executed: bool, occupancy_state: str,
                                 temperature_c: Optional[float], co2_ppm: Optional[float],
                                 reason_codes: List[str], room_id: Optional[int] = None,
-                                estimate_id: Optional[int] = None) -> Optional[int]:
+                                estimate_id: Optional[int] = None,
+                                decision_type: Optional[str] = None) -> Optional[int]:
         """제어 판단을 남긴다.
 
         main 스키마에는 executed·temperature_c·co2_ppm 컬럼이 없다. 실행
@@ -302,18 +317,22 @@ class Storage:
         observed.append(f"executed={'yes' if executed else 'no'}")
         reason = f"{','.join(reason_codes)} | {' '.join(observed)}"
 
-        # CO2 근거로 내려진 판단은 환기로 분류한다. 그 외에는 액션 이름을 따른다.
-        if any("CO2" in code or "VENT" in code for code in reason_codes):
-            decision_type = "ventilate"
-        else:
-            decision_type = _DECISION_TYPES.get(proposed_action, "maintain")
+        # 판단 유형은 정책이 정해 준다(precool/maintain/setback/ventilate/off).
+        # 예전에는 액션 이름과 근거 문자열에서 되짚어 추측했는데, 정책이 실제로
+        # 무엇을 하려 했는지와 어긋날 수 있었다. 넘어오지 않은 경우에만
+        # 예전 방식으로 되짚는다.
+        if decision_type is None:
+            if any("CO2" in code or "VENT" in code for code in reason_codes):
+                decision_type = "ventilate"
+            else:
+                decision_type = _DECISION_TYPES.get(proposed_action, "maintain")
 
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO control_decisions"
                 " (room_id, estimate_id, control_mode, decision_type, target_temp, reason, decided_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING decision_id",
-                (room_id, estimate_id, _CONTROL_MODES.get(control_mode, "monitoring"),
+                (room_id, estimate_id, _control_mode_of(control_mode),
                  decision_type, _target_temp_of(proposed_action), reason, timestamp),
             )
             return cur.fetchone()["decision_id"]
@@ -321,6 +340,71 @@ class Storage:
     # ------------------------------------------------------------------
     # 수동 제어 명령 큐
     # ------------------------------------------------------------------
+
+    def fetch_room_settings(self, room_id: Optional[int]) -> Optional[dict]:
+        """공간의 제어 설정을 읽는다. 사용자가 대시보드에서 바꾸는 값들이다.
+
+        게이트웨이는 예전에 config.yaml 의 값만 봤다. 그래서 사용자가 화면에서
+        목표 온도나 제어 모드를 바꿔도 아무 일도 일어나지 않았다. 판단 주기마다
+        여기서 다시 읽어 화면의 설정이 곧바로 제어에 반영되게 한다.
+        """
+        if room_id is None:
+            return None
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT room_id, name, control_mode, target_temp, temp_tolerance,"
+                " co2_limit FROM rooms WHERE room_id = %s",
+                (room_id,),
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+        return {
+            "room_id": row["room_id"],
+            "name": row["name"],
+            "control_mode": row["control_mode"],
+            "target_temp": float(row["target_temp"]),
+            "temp_tolerance": float(row["temp_tolerance"]),
+            "co2_limit": int(row["co2_limit"]),
+        }
+
+    def fetch_active_schedule(self, room_id: Optional[int], now: datetime
+                              ) -> Optional[dict]:
+        """지금 진행 중이거나 곧 시작할 예약 하나를 가져온다.
+
+        예냉은 "언제 시작하는지" 를 알아야 리드타임을 계산할 수 있다.
+        반복 예약은 repeat_days(1=월 … 7=일)에 오늘이 들어 있는지로 판단한다.
+        """
+        if room_id is None:
+            return None
+        weekday = now.isoweekday()
+        today = now.date()
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """SELECT schedule_id, start_time, end_time, target_temp,
+                          precooling_min
+                   FROM schedules
+                   WHERE room_id = %s AND is_active
+                     AND valid_from <= %s
+                     AND (valid_until IS NULL OR valid_until >= %s)
+                     AND (repeat_days = '{}' OR %s = ANY(repeat_days))
+                   ORDER BY start_time""",
+                (room_id, today, today, weekday),
+            )
+            rows = cur.fetchall()
+
+        best = None
+        for r in rows:
+            starts = datetime.combine(today, r["start_time"], tzinfo=now.tzinfo)
+            ends = datetime.combine(today, r["end_time"], tzinfo=now.tzinfo)
+            if ends < now:
+                continue          # 오늘치는 이미 끝났다
+            # 진행 중인 것이 있으면 그것이 우선, 없으면 가장 빨리 시작하는 것
+            if best is None or starts < best["starts_at"]:
+                best = {"schedule_id": r["schedule_id"], "starts_at": starts,
+                        "ends_at": ends, "target_temp": float(r["target_temp"]),
+                        "precooling_min": r["precooling_min"]}
+        return best
 
     def fetch_pending_commands(self, room_id: Optional[int]) -> List[dict]:
         """프론트에서 들어온 수동 제어 명령 큐를 가져온다."""
