@@ -1,6 +1,9 @@
 mqtt:
   host: "localhost"
   port: 1883
+  # 접두사로만 쓰인다. 실행할 때마다 뒤에 다른 꼬리가 붙어 실제 client_id 는
+  # 매번 달라진다 — 고정 ID 를 쓰면 같은 ID 로 붙은 다른 인스턴스와 브로커가
+  # 서로를 밀어내며 초당 한 번씩 재접속한다(app/main.py 참고).
   client_id: "thermoshift_gateway_1"
   topics:
     - "thermoshift/#"
