@@ -77,7 +77,7 @@ def load_config(path: str = "config/config.yaml") -> Config:
         else:
             raise FileNotFoundError(f"Config file not found: {path}")
     
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     return Config(**data)
 

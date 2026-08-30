@@ -296,13 +296,19 @@ class Storage:
                                 temperature_c: Optional[float], co2_ppm: Optional[float],
                                 reason_codes: List[str], room_id: Optional[int] = None,
                                 estimate_id: Optional[int] = None,
-                                decision_type: Optional[str] = None) -> Optional[int]:
+                                decision_type: Optional[str] = None,
+                                target_temp: Optional[float] = None) -> Optional[int]:
         """제어 판단을 남긴다.
 
         main 스키마에는 executed·temperature_c·co2_ppm 컬럼이 없다. 실행
         여부는 hvac_commands.command_status 가 들고, 관측값은 sensor_env 에
         이미 있다. 다만 판단 시점의 근거를 한 줄로 읽을 수 있어야 하므로
         reason 텍스트에 함께 적는다.
+
+        decision_type/target_temp 를 호출부(policy.PolicyDecision)가 이미
+        알고 있으면 그대로 받는다 - precool/setback 처럼 액션 이름만으로는
+        구분 안 되는 판단 유형과, 정수로 반올림되지 않은 정확한 목표 온도를
+        보존하기 위함이다. 안 주면 예전처럼 액션 이름에서 추정한다.
         """
         room_id = room_id if room_id is not None else self.resolve_room_id()
         if room_id is None:
@@ -322,10 +328,14 @@ class Storage:
         # 무엇을 하려 했는지와 어긋날 수 있었다. 넘어오지 않은 경우에만
         # 예전 방식으로 되짚는다.
         if decision_type is None:
+            # CO2 근거로 내려진 판단은 환기로 분류한다. 그 외에는 액션 이름을 따른다.
             if any("CO2" in code or "VENT" in code for code in reason_codes):
                 decision_type = "ventilate"
             else:
                 decision_type = _DECISION_TYPES.get(proposed_action, "maintain")
+
+        if target_temp is None:
+            target_temp = _target_temp_of(proposed_action)
 
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
@@ -333,9 +343,31 @@ class Storage:
                 " (room_id, estimate_id, control_mode, decision_type, target_temp, reason, decided_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING decision_id",
                 (room_id, estimate_id, _control_mode_of(control_mode),
-                 decision_type, _target_temp_of(proposed_action), reason, timestamp),
+                 decision_type, target_temp, reason, timestamp),
             )
             return cur.fetchone()["decision_id"]
+
+    def get_upcoming_schedule(self, room_id: int, now: datetime) -> Optional[dict]:
+        """오늘 아직 안 끝난 예약 중 가장 빠른 것 하나.
+
+        진행 중인 예약(start_time <= 지금)도 포함한다 - precool 판단부는
+        "이미 시작한 예약"과 "곧 시작할 예약"을 starts_at 비교로 알아서
+        구분하므로, 여기서는 "오늘자로 유효하고 아직 안 끝난 것"만 추리면
+        된다.
+        """
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT schedule_id, start_time, end_time, target_temp, precooling_min"
+                "  FROM schedules"
+                " WHERE room_id = %s AND is_active"
+                "   AND valid_from <= %s AND (valid_until IS NULL OR valid_until >= %s)"
+                "   AND (repeat_days = '{}' OR %s = ANY(repeat_days))"
+                "   AND end_time > %s"
+                " ORDER BY start_time"
+                " LIMIT 1",
+                (room_id, now.date(), now.date(), now.isoweekday(), now.time()),
+            )
+            return cur.fetchone()
 
     # ------------------------------------------------------------------
     # 수동 제어 명령 큐

@@ -24,8 +24,19 @@ DB 가 무엇이든 절대 송신하지 않는다. 실증 공간에 사람이 �
 """
 
 import logging
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
+
+_GATEWAY_APP_DIR = Path(__file__).resolve().parent
+_REPOSITORY_ROOT = _GATEWAY_APP_DIR.parent.parent
+if str(_REPOSITORY_ROOT) not in sys.path:
+    # ml/ 은 저장소 루트에 있고, 게이트웨이는 gateway/ 를 작업 디렉터리로
+    # 삼아 `python -m app.main` 으로 뜬다 (scripts/services.sh). 이 상태로는
+    # ml.* 이 안 보이므로, web/main.py 등 다른 진입점과 같은 방식으로
+    # 저장소 루트를 sys.path 에 추가한다.
+    sys.path.insert(0, str(_REPOSITORY_ROOT))
 
 from app.config import get_config
 from app.data_quality import get_data_quality
@@ -33,16 +44,45 @@ from app.feature_engine import get_feature_engine
 from app.ir_adapter import IRAdapter
 from app.heater import HeaterController
 from app.occupancy_hmm import get_occupancy_hmm
-from app.policy import (PolicyConfig, PolicyInput, ScheduleWindow, decide)
+from app.policy import PolicyConfig, PolicyInput, ScheduleWindow, decide as policy_decide
 from app.storage import get_storage
-from app.thermal import load_thermal_model
+from app.heater import HeaterController
 
 logger = logging.getLogger(__name__)
+
+_THERMAL_PARAMS_PATH = _REPOSITORY_ROOT / "ml" / "params" / "thermal.json"
 
 # DB 의 제어 모드 → 자동 제어를 해도 되는가
 _AUTOMATIC_MODES = {"rule", "mpc"}
 # 수동 명령(큐)을 실행해도 되는가
 _MANUAL_ALLOWED = {"manual", "rule", "mpc"}
+
+
+def _load_thermal_model():
+    """열모델을 불러온다. 교정 파일이 없으면 미교정 기본값으로 시작한다.
+
+    ml.thermal_model 을 직접 쓴다. 한때 게이트웨이 안에 같은 물리식을 다시
+    구현해 뒀었는데(app/thermal.py), 물리 모델이 두 곳에 있으면 한쪽만 고쳐도
+    아무도 모른 채 갈라진다. 저장소 뿌리를 sys.path 에 넣는 것은 이 저장소가
+    이미 쓰고 있는 관례다(web/main.py, app/components/*).
+
+    ml 패키지 자체를 못 불러오는 극단적인 경우에도 게이트웨이 전체가 죽으면
+    안 되므로, 그럴 땐 None 을 돌려주고 policy.decide() 가 선냉방 없이
+    판단하게 둔다. 교정 전 기본값으로 도는 경우에는 policy.py 가 판단 근거에
+    '가정값' 이라고 표시한다.
+    """
+    try:
+        from ml.thermal_model import ThermalModel
+    except ImportError:
+        logger.warning("ml 패키지를 불러올 수 없어 선냉방(precool) 없이 동작합니다")
+        return None
+    try:
+        model = ThermalModel.load(_THERMAL_PARAMS_PATH)
+        logger.info("열모델 로드: 교정됨 (r2=%s)", model.r2)
+        return model
+    except (FileNotFoundError, OSError, ValueError):
+        logger.info("열모델 교정 파일이 없어 기본값(미교정 가정치)으로 시작합니다")
+        return ThermalModel()
 
 
 class HVACController:
@@ -56,7 +96,7 @@ class HVACController:
         self.last_on_at: Optional[datetime] = None
         self.last_off_at: Optional[datetime] = None
         self.last_command_at: Optional[datetime] = None
-        self.thermal = load_thermal_model()
+        self.thermal = _load_thermal_model()
 
         # 합성 재실자(히팅패드). 목업이 12L 라 사람을 넣을 수 없어서,
         # 재실 열부하를 히터 duty 로 만든다. app/heater.py 참고.
@@ -85,6 +125,10 @@ class HVACController:
         return PolicyConfig(
             target_temp_c=room["target_temp"],
             temp_tolerance_c=room["temp_tolerance"],
+            # 공실 완화폭을 허용폭과 묶는다(origin/main). DB 에 setback 전용
+            # 항목이 없어서인데, "허용폭만큼 더 풀어 준다" 는 규칙 자체가
+            # 사용자가 화면에서 정한 값과 이어져 있어 설명하기도 쉽다.
+            setback_delta_c=room["temp_tolerance"],
             cooling_on_duration_sec=c.cooling_on_duration_sec,
             cooling_off_duration_sec=c.cooling_off_duration_sec,
             minimum_on_time_sec=c.minimum_on_time_sec,
@@ -155,7 +199,7 @@ class HVACController:
             thermal=self.thermal,
         )
 
-        result = decide(inp, self._policy_config(room))
+        result = policy_decide(inp, self._policy_config(room))
 
         executed = False
         if result.execute:
@@ -166,6 +210,14 @@ class HVACController:
             except Exception:
                 logger.exception("제어 명령 %s 전송 실패", result.action)
                 result.reasons.append("TRANSMIT_FAILED")
+
+        # CO2 가 위험 수준이면 별도 이벤트로 남긴다. 판단 기록은 30초마다
+        # 쌓여 묻히지만, 알림 화면은 system_events 를 본다.
+        if result.blocked_by == "CO2_CRITICAL":
+            self.storage.insert_system_event(
+                now.isoformat(), "CRITICAL", "CO2_ALERT",
+                f"CO2 reached {inp.co2_ppm} ppm",
+            )
 
         if room_mode == "mpc":
             # 아직 MPC 가 없다. 사용자가 화면에서 '예측 제어' 를 골랐는데
@@ -188,6 +240,7 @@ class HVACController:
             room_id=room_id,
             estimate_id=get_occupancy_hmm().last_estimate_id,
             decision_type=result.decision_type,
+            target_temp=result.target_temp_c,
         )
 
         return {

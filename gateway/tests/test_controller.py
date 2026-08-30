@@ -37,6 +37,7 @@ class MockStorage:
         self.room = {"room_id": 1, "name": "테스트실", "control_mode": "rule",
                      "target_temp": 25.0, "temp_tolerance": 1.0, "co2_limit": 1000}
         self.decisions = []
+        self.events = []
 
     def resolve_room_id(self):
         return 1
@@ -51,14 +52,16 @@ class MockStorage:
         self.decisions.append(kw)
 
     def insert_system_event(self, *a, **kw):
-        pass
+        self.events.append((a, kw))
 
 
 @pytest.fixture
 def controller(monkeypatch):
     storage = MockStorage()
     monkeypatch.setattr("app.controller.get_storage", lambda: storage)
-    monkeypatch.setattr("app.controller.load_thermal_model", lambda: None)
+    # 열모델은 일부러 진짜를 쓴다. ml/params/thermal.json 이 없으면
+    # _load_thermal_model() 이 미교정 기본값을 돌려주는데, 선냉방 시험이
+    # 바로 그 기본값의 리드타임(27→24℃ 약 57분)을 기준으로 쓴다.
 
     class MockDataQuality:
         class FakeEnv:
@@ -89,6 +92,7 @@ def controller(monkeypatch):
 
 FRESH = {"env_fresh": True, "occ_fresh": True}
 OCCUPIED = {"empty": 0.0, "transition": 0.0, "occupied": 1.0}
+EMPTY = {"empty": 1.0, "transition": 0.0, "occupied": 0.0}
 
 
 # ---------------------------------------------------------------- 안전 상한
@@ -211,3 +215,52 @@ def test_공간을_못_찾아도_히터는_갱신된다(controller, monkeypatch)
     heater_sends = [p for t, p in controller.ir.published
                     if t == controller.config.heater.topic]
     assert heater_sends == ["0"]
+
+
+# ----------------------------------------------------------------------
+# 선냉방(precool) — origin/main 에서 가져와 공간 설정 구조에 맞춰 옮겼다.
+#
+# 원본은 storage.get_upcoming_schedule 과 config.yaml 목표 온도를 썼는데,
+# 지금 컨트롤러는 fetch_active_schedule 과 DB 공간 설정을 본다. 검증하려는
+# 것("리드타임이 남은 시간을 덮으면 미리 켠다")은 그대로다.
+# ----------------------------------------------------------------------
+
+class MockStorageWithSchedule(MockStorage):
+    """예약이 하나 있는 경우. 선냉방 경로를 태우기 위한 목."""
+
+    def __init__(self, minutes_until_start: float, target_temp: float):
+        super().__init__()
+        now = datetime.now(timezone.utc)
+        starts_at = now + timedelta(minutes=minutes_until_start)
+        self.schedule = {
+            "schedule_id": 1,
+            "starts_at": starts_at,
+            "ends_at": starts_at + timedelta(hours=1),
+            "target_temp": target_temp,
+            "precooling_min": 0,
+        }
+
+    def fetch_active_schedule(self, room_id, now):
+        return self.schedule
+
+
+def test_예약이_리드타임_안으로_들어오면_미리_켠다(controller):
+    """미교정 열모델 기준 27→24℃ 는 약 57분 걸린다. 예약이 40분 뒤면 지금
+    켜야 한다 — 이것이 '예측 제어'의 최소 형태다."""
+    controller.config.app.control_mode = "active"
+    controller.storage = MockStorageWithSchedule(
+        minutes_until_start=40, target_temp=24.0)
+    d = controller.decide(FRESH, "EMPTY", EMPTY)
+    assert d["decision_type"] == "precool"
+    assert d["proposed_action"] == "COOL_24_AUTO"
+    assert d["executed"] is True
+
+
+def test_예약이_아직_멀면_켜지_않는다(controller):
+    """같은 상황이라도 예약이 120분 뒤면 아직 켤 때가 아니다."""
+    controller.config.app.control_mode = "active"
+    controller.storage = MockStorageWithSchedule(
+        minutes_until_start=120, target_temp=24.0)
+    d = controller.decide(FRESH, "EMPTY", EMPTY)
+    assert d["decision_type"] != "precool"
+    assert d["executed"] is False
