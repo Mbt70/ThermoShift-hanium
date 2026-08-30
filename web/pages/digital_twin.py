@@ -107,30 +107,6 @@ with main_col:
     if not rooms or room is None:
         st.switch_page("pages/devices.py")
     else:
-        snapshots = {r["id"]: environment_snapshot(r) for r in rooms}
-        room_count = len(rooms)
-        # A room with no env/power sensor reading yet has None fields rather
-        # than the mock's always-on random floats - average/sum only over
-        # the rooms that actually have a value.
-        temps = [s["temperature"] for s in snapshots.values() if s["temperature"] is not None]
-        co2s = [s["co2"] for s in snapshots.values() if s["co2"] is not None]
-        humidities = [s["humidity"] for s in snapshots.values() if s["humidity"] is not None]
-        powers = [s["power"] for s in snapshots.values() if s["power"] is not None]
-        avg_temp = sum(temps) / len(temps) if temps else 0.0
-        avg_co2 = sum(co2s) / len(co2s) if co2s else 0.0
-        avg_humidity = sum(humidities) / len(humidities) if humidities else 0.0
-        total_power = sum(powers)
-        active_count = sum(1 for r in rooms if r.get("occupied"))
-        occupancy_rate = round(active_count / room_count * 100) if room_count else 0
-        # No real per-room headcount sensor exists - synthesize a plausible
-        # estimate per occupied room, seeded so it stays stable across
-        # reruns (same deterministic-seed approach room_store's own mocks
-        # use elsewhere in this app).
-        occupancy_estimate = sum(
-            random.Random(f"occ-head-{r['id']}").randint(1, 4) for r in rooms if r.get("occupied")
-        )
-        power_delta_pct = round(random.Random(f"power-yday-{date.today()}").uniform(-9, 6), 1)
-
         title_col, select_col, spacer_col = st.columns([0.6, 0.8, 4.4], vertical_alignment="center")
         with title_col:
             st.markdown('<h1 class="ts-dash-topbar-title">공간</h1>', unsafe_allow_html=True)
@@ -145,185 +121,211 @@ with main_col:
                 st.session_state["_web_selected_room"] = picked_room["id"]
                 st.rerun()
 
-        co2_ok = avg_co2 < 700
-        kpi_items = [
-            ("temp", "온도", f"{avg_temp:.1f}", "°C", "is-positive", f"{_CHECK_ICON}목표 24°C 근접"),
-            (
-                "co2",
-                "CO₂",
-                f"{avg_co2:.0f}",
-                "ppm",
-                "is-positive" if co2_ok else "is-negative",
-                f"{_CHECK_ICON}기준 이내" if co2_ok else f"{_WARN_ICON}기준 근접",
-            ),
-            ("occupancy", "재실추정", f"{occupancy_estimate}", "명", "", f"재실률 {occupancy_rate}%"),
-            ("humidity", "습도", f"{avg_humidity:.0f}", "%", "is-positive", f"{_CHECK_ICON}적정"),
-            (
-                "power",
-                "총 HVAC 전력",
-                f"{total_power:.1f}",
-                "kW",
-                "is-positive" if power_delta_pct < 0 else "is-negative",
-                f"{_ARROW_DOWN_ICON if power_delta_pct < 0 else _ARROW_UP_ICON}어제 대비 {power_delta_pct:+.1f}%",
-            ),
-        ]
-        kpi_cols = st.columns(5, gap="small")
-        for col, (slug, label, value, unit, sub_class, sub) in zip(kpi_cols, kpi_items):
-            with col:
-                with st.container(key=f"ts_dash_kpi_card_{slug}", border=True):
-                    icon_html = (
-                        f'<span class="ts-dash-kpi-icon ts-twin-humidity-icon">{_HUMIDITY_ICON}</span>'
-                        if slug == "humidity"
-                        else f'<img class="ts-dash-kpi-icon" src="{icon_data_uri(_KPI_ICON_FILES[slug])}" alt="" />'
-                    )
+        @st.fragment(run_every=5)
+        def render_live_twin(current_room_id):
+            fresh_rooms = list_rooms(current_user_id())
+            current_r = next((r for r in fresh_rooms if r["id"] == current_room_id), room)
+            snapshots = {r["id"]: environment_snapshot(r) for r in fresh_rooms}
+            room_count = len(fresh_rooms)
+
+            temps = [s["temperature"] for s in snapshots.values() if s["temperature"] is not None]
+            co2s = [s["co2"] for s in snapshots.values() if s["co2"] is not None]
+            humidities = [s["humidity"] for s in snapshots.values() if s["humidity"] is not None]
+            powers = [s["power"] for s in snapshots.values() if s["power"] is not None]
+            avg_temp = sum(temps) / len(temps) if temps else 0.0
+            avg_co2 = sum(co2s) / len(co2s) if co2s else 0.0
+            avg_humidity = sum(humidities) / len(humidities) if humidities else 0.0
+            total_power = sum(powers)
+            active_count = sum(1 for r in fresh_rooms if r.get("occupied"))
+            occupancy_rate = round(active_count / room_count * 100) if room_count else 0
+            occupancy_estimate = sum(
+                random.Random(f"occ-head-{r['id']}").randint(1, 4) for r in fresh_rooms if r.get("occupied")
+            )
+            power_delta_pct = round(random.Random(f"power-yday-{date.today()}").uniform(-9, 6), 1)
+
+            co2_ok = avg_co2 < 700
+            kpi_items = [
+                ("temp", "온도", f"{avg_temp:.1f}", "°C", "is-positive", f"{_CHECK_ICON}목표 24°C 근접"),
+                (
+                    "co2",
+                    "CO₂",
+                    f"{avg_co2:.0f}",
+                    "ppm",
+                    "is-positive" if co2_ok else "is-negative",
+                    f"{_CHECK_ICON}기준 이내" if co2_ok else f"{_WARN_ICON}기준 근접",
+                ),
+                ("occupancy", "재실추정", f"{occupancy_estimate}", "명", "", f"재실률 {occupancy_rate}%"),
+                ("humidity", "습도", f"{avg_humidity:.0f}", "%", "is-positive", f"{_CHECK_ICON}적정"),
+                (
+                    "power",
+                    "총 HVAC 전력",
+                    f"{total_power:.1f}",
+                    "kW",
+                    "is-positive" if power_delta_pct < 0 else "is-negative",
+                    f"{_ARROW_DOWN_ICON if power_delta_pct < 0 else _ARROW_UP_ICON}어제 대비 {power_delta_pct:+.1f}%",
+                ),
+            ]
+            kpi_cols = st.columns(5, gap="small")
+            for col, (slug, label, value, unit, sub_class, sub) in zip(kpi_cols, kpi_items):
+                with col:
+                    with st.container(key=f"ts_dash_kpi_card_{slug}", border=True):
+                        icon_html = (
+                            f'<span class="ts-dash-kpi-icon ts-twin-humidity-icon">{_HUMIDITY_ICON}</span>'
+                            if slug == "humidity"
+                            else f'<img class="ts-dash-kpi-icon" src="{icon_data_uri(_KPI_ICON_FILES[slug])}" alt="" />'
+                        )
+                        st.markdown(
+                            f"""
+                            <div class="ts-dash-kpi-head">
+                              <span class="ts-dash-kpi-label">{label}</span>
+                              {icon_html}
+                            </div>
+                            <p class="ts-dash-kpi-value">{value}<span class="ts-dash-kpi-unit">{unit}</span></p>
+                            <p class="ts-dash-kpi-sub {sub_class}">{sub}</p>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+            twin_col, side_col = st.columns([2, 1], gap="small")
+
+            with twin_col:
+                with st.container(key="ts_dash_twin_view_card", border=True):
+                    head_col, tab_col = st.columns([2.6, 1.6], vertical_alignment="center")
+                    with head_col:
+                        st.markdown(
+                            f'<p class="ts-dash-card-title" style="margin:0;">{_CUBE_ICON}3D 디지털 트윈</p>',
+                            unsafe_allow_html=True,
+                        )
+                    with tab_col:
+                        view_tab = st.pills(
+                            "뷰", ["3D 뷰", "CFD"], default="3D 뷰", key="twin_view_tab", label_visibility="collapsed"
+                        ) or "3D 뷰"
+
+                    current_snap = snapshots[current_r["id"]]
+                    temp_display = f"{current_snap['temperature']:.1f}°C" if current_snap["temperature"] is not None else "--"
+                    humidity_display = f"{current_snap['humidity']:.0f}%" if current_snap["humidity"] is not None else "--"
+                    co2_display = f"{current_snap['co2']:.0f}ppm" if current_snap["co2"] is not None else "--"
+                    occupancy_label = "재실" if current_r.get("occupied") else "공실"
+                    door_display = "문 열림" if current_snap.get("door_state") == "open" else ("문 닫힘" if current_snap.get("door_state") == "closed" else "문 --")
+
                     st.markdown(
                         f"""
-                        <div class="ts-dash-kpi-head">
-                          <span class="ts-dash-kpi-label">{label}</span>
-                          {icon_html}
+                        <div class="ts-twin-stage">
+                          <div class="ts-twin-stage-grid"></div>
+                          <div class="ts-twin-cube">
+                            <div class="ts-twin-cube-inner">
+                              <span class="ts-twin-cube-title">{current_r["name"]}</span>
+                              <span class="ts-twin-cube-status">{occupancy_label} · {door_display}</span>
+                            </div>
+                          </div>
+                          <div class="ts-twin-overlay">
+                            <div class="ts-twin-telemetry-chip">
+                              <span class="ts-twin-telemetry-item">온도 <strong>{temp_display}</strong></span>
+                              <span class="ts-twin-telemetry-item">습도 <strong>{humidity_display}</strong></span>
+                              <span class="ts-twin-telemetry-item">CO₂ <strong>{co2_display}</strong></span>
+                            </div>
+                          </div>
                         </div>
-                        <p class="ts-dash-kpi-value">{value}<span class="ts-dash-kpi-unit">{unit}</span></p>
-                        <p class="ts-dash-kpi-sub {sub_class}">{sub}</p>
                         """,
                         unsafe_allow_html=True,
                     )
 
-        twin_col, side_col = st.columns([2, 1], gap="small")
-
-        with twin_col:
-            with st.container(key="ts_dash_twin_view_card", border=True):
-                head_col, tab_col = st.columns([2.6, 1.6], vertical_alignment="center")
-                with head_col:
+            with side_col:
+                with st.container(key="ts_dash_twin_ai_card", border=True):
                     st.markdown(
-                        f'<p class="ts-dash-card-title" style="margin:0;">{_CUBE_ICON}3D 디지털 트윈</p>',
+                        f'<p class="ts-dash-card-title">{_CHIP_ICON}AI 운영 설명 <span class="ts-dash-badge">LLM</span></p>',
                         unsafe_allow_html=True,
                     )
-                with tab_col:
-                    st.segmented_control(
-                        "twin_view_mode",
-                        options=["3D", "sensor", "히트맵"],
-                        default="sensor",
-                        key="twin_view_tab",
-                        label_visibility="collapsed",
-                    )
-                st.markdown(
-                    """
-                    <div class="ts-dash-heat-legend">
-                      <span>18°C</span>
-                      <div class="ts-dash-heat-legend-bar"></div>
-                      <span>30°C</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-        with side_col:
-            with st.container(key="ts_dash_twin_ai_card", border=True):
-                st.markdown(
-                    f'<p class="ts-dash-card-title">{_CHIP_ICON}AI 운영 설명 <span class="ts-dash-badge">LLM</span></p>',
-                    unsafe_allow_html=True,
-                )
-                headline, subline = system_judgment(room)
-                st.markdown(
-                    f"""
-                    <p class="ts-dash-judgment-headline">{headline}</p>
-                    <p class="ts-dash-judgment-sub">{subline}</p>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            state_col, mode_col = st.columns(2, gap="small")
-            with state_col:
-                with st.container(key="ts_dash_twin_state_card", border=True):
+                    headline, subline = system_judgment(current_r)
                     st.markdown(
-                        f'<p class="ts-dash-card-title">{_LIST_ICON}현재 제어 상태</p>', unsafe_allow_html=True
-                    )
-                    logs_today = list_logs(room["id"], date.today())
-                    latest_log = logs_today[-1] if logs_today else None
-                    aircon_state = "AC ON" if room.get("aircon_on") else "AC OFF"
-                    latest_text = (
-                        f'{latest_log["timestamp"].hour}:{latest_log["timestamp"].minute:02d} {latest_log["content"]}'
-                        if latest_log
-                        else "기록 없음"
-                    )
-                    verify_text = "성공" if (latest_log is None or latest_log.get("success", True)) else "실패"
-                    rows = [
-                        ("Ac 상태", aircon_state, f'설정 온도 {room.get("target_temperature", 24)}'),
-                        ("최근 명령", latest_text, ""),
-                        ("검증 결과", verify_text, ""),
-                    ]
-                    rows_html = "".join(
-                        f'<div class="ts-dash-list-row">'
-                        f'<span class="ts-dash-list-secondary">{k}</span>'
-                        f'<span class="ts-dash-list-primary">{v}'
-                        + (f' <span class="ts-dash-list-secondary">{extra}</span>' if extra else "")
-                        + "</span></div>"
-                        for k, v, extra in rows
-                    )
-                    st.markdown(rows_html, unsafe_allow_html=True)
-
-            with mode_col:
-                with st.container(key="ts_dash_twin_mode_card", border=True):
-                    st.markdown('<p class="ts-dash-card-title">제어 모드</p>', unsafe_allow_html=True)
-                    current_mode = room.get("control_mode", "rule")
-                    clicked_mode = None
-                    mode_cols = st.columns(2, gap="small")
-                    for i, (mode_id, mode_label, icon_file) in enumerate(_CONTROL_MODES):
-                        with mode_cols[i % 2]:
-                            with st.container(key=f"ts_dash_mode_{mode_id}"):
-                                is_mode_active = mode_id == current_mode
-                                icon_color = _MODE_ICON_ACTIVE if is_mode_active else _MODE_ICON_INACTIVE
-                                icon_uri = recolored_icon_data_uri(icon_file, icon_color)
-                                active_mode_class = "is-active" if is_mode_active else ""
-                                st.markdown(
-                                    f"""
-                                    <div class="ts-dash-mode-item {active_mode_class}">
-                                      <div class="ts-dash-mode-icon-wrap"><img src="{icon_uri}" alt="" /></div>
-                                      <p class="ts-dash-mode-label">{mode_label}</p>
-                                    </div>
-                                    """,
-                                    unsafe_allow_html=True,
-                                )
-                                if st.button(mode_label, key=f"dash_mode_btn_{mode_id}", width="stretch"):
-                                    clicked_mode = mode_id
-                    if clicked_mode and clicked_mode != current_mode:
-                        set_control_mode(room["id"], clicked_mode)
-                        st.rerun()
-
-            with st.container(key="ts_dash_twin_cfd_card", border=True):
-                title_col2, select_col2 = st.columns([2, 1.2], vertical_alignment="center")
-                with title_col2:
-                    st.markdown(
-                        f'<p class="ts-dash-card-title" style="margin:0;">{_CFD_ICON}CFD</p>',
+                        f"""
+                        <p class="ts-dash-judgment-headline">{headline}</p>
+                        <p class="ts-dash-judgment-sub">{subline}</p>
+                        """,
                         unsafe_allow_html=True,
                     )
-                with select_col2:
-                    st.selectbox(
-                        "CFD 지표", ["온도", "기류"], key="twin_cfd_metric", label_visibility="collapsed"
-                    )
-                st.markdown('<div class="ts-twin-cfd-strip"></div>', unsafe_allow_html=True)
 
-        comfort_avg = round(sum(comfort_index(r) for r in rooms) / room_count) if room_count else 0
-        hours_elapsed = datetime.now().hour + datetime.now().minute / 60
-        kwh_today = total_power * hours_elapsed
+                state_col, mode_col = st.columns(2, gap="small")
+                with state_col:
+                    with st.container(key="ts_dash_twin_state_card", border=True):
+                        st.markdown(
+                            f'<p class="ts-dash-card-title">{_LIST_ICON}현재 제어 상태</p>', unsafe_allow_html=True
+                        )
+                        logs_today = list_logs(current_r["id"], date.today())
+                        latest_log = logs_today[-1] if logs_today else None
+                        aircon_state = "AC ON" if current_r.get("aircon_on") else "AC OFF"
+                        latest_text = (
+                            f'{latest_log["timestamp"].hour}:{latest_log["timestamp"].minute:02d} {latest_log["content"]}'
+                            if latest_log
+                            else "기록 없음"
+                        )
+                        verify_text = "성공" if (latest_log is None or latest_log.get("success", True)) else "실패"
+                        rows = [
+                            ("AC 상태", aircon_state, f'설정 {current_r.get("target_temperature", 24)}°C'),
+                            ("최근 명령", latest_text, ""),
+                            ("검증 결과", verify_text, ""),
+                        ]
+                        rows_html = "".join(
+                            f'<div class="ts-dash-list-row">'
+                            f'<span class="ts-dash-list-secondary">{k}</span>'
+                            f'<span class="ts-dash-list-primary">{v}'
+                            + (f' <span class="ts-dash-list-secondary">{extra}</span>' if extra else "")
+                            + "</span></div>"
+                            for k, v, extra in rows
+                        )
+                        st.markdown(rows_html, unsafe_allow_html=True)
 
-        with st.container(key="ts_dash_summary_card", border=True):
-            st.markdown('<p class="ts-dash-card-title">KPI 요약 (오늘)</p>', unsafe_allow_html=True)
-            summary_items = [
-                ("power", "HVAC 전력 사용량", f"{kwh_today:.0f}kWh"),
-                ("temp", "평균 온도", f"{avg_temp:.1f}°C"),
-                ("co2", "평균 CO₂", f"{avg_co2:.0f}ppm"),
-                ("occupancy", "공간 사용률", f"{occupancy_rate}%"),
-                (None, "종합 쾌적도 지수", f"{comfort_avg}/100"),
-            ]
-            items_html = "".join(
-                f'<div class="ts-dash-summary-item">'
-                f'<div class="ts-dash-summary-head">'
-                f'<span class="ts-dash-summary-label">{label}</span>'
-                + (f'<img src="{icon_data_uri(_KPI_ICON_FILES[slug])}" alt="" />' if slug else "")
-                + "</div>"
-                f'<span class="ts-dash-summary-value">{value}</span>'
-                f"</div>"
-                for slug, label, value in summary_items
-            )
-            st.markdown(f'<div class="ts-dash-summary-grid">{items_html}</div>', unsafe_allow_html=True)
+                with mode_col:
+                    with st.container(key="ts_dash_twin_mode_card", border=True):
+                        st.markdown('<p class="ts-dash-card-title">제어 모드</p>', unsafe_allow_html=True)
+                        current_mode = current_r.get("control_mode", "rule")
+                        clicked_mode = None
+                        mode_cols = st.columns(2, gap="small")
+                        for i, (mode_id, mode_label, icon_file) in enumerate(_CONTROL_MODES):
+                            with mode_cols[i % 2]:
+                                with st.container(key=f"ts_dash_mode_{mode_id}"):
+                                    is_mode_active = mode_id == current_mode
+                                    icon_color = _MODE_ICON_ACTIVE if is_mode_active else _MODE_ICON_INACTIVE
+                                    icon_uri = recolored_icon_data_uri(icon_file, icon_color)
+                                    active_mode_class = "is-active" if is_mode_active else ""
+                                    st.markdown(
+                                        f"""
+                                        <div class="ts-dash-mode-item {active_mode_class}">
+                                          <div class="ts-dash-mode-icon-wrap"><img src="{icon_uri}" alt="" /></div>
+                                          <p class="ts-dash-mode-label">{mode_label}</p>
+                                        </div>
+                                        """,
+                                        unsafe_allow_html=True,
+                                    )
+                                    if st.button(mode_label, key=f"dash_mode_btn_{mode_id}", width="stretch"):
+                                        clicked_mode = mode_id
+                        if clicked_mode and clicked_mode != current_mode:
+                            set_control_mode(current_r["id"], clicked_mode)
+                            st.rerun()
+
+            comfort_avg = round(sum(comfort_index(r) for r in fresh_rooms) / room_count) if room_count else 0
+            hours_elapsed = datetime.now().hour + datetime.now().minute / 60
+            kwh_today = total_power * hours_elapsed
+
+            with st.container(key="ts_dash_summary_card", border=True):
+                st.markdown('<p class="ts-dash-card-title">KPI 요약 (오늘)</p>', unsafe_allow_html=True)
+                summary_items = [
+                    ("power", "HVAC 전력 사용량", f"{kwh_today:.0f}kWh"),
+                    ("temp", "평균 온도", f"{avg_temp:.1f}°C"),
+                    ("co2", "평균 CO₂", f"{avg_co2:.0f}ppm"),
+                    ("occupancy", "공간 사용률", f"{occupancy_rate}%"),
+                    (None, "종합 쾌적도 지수", f"{comfort_avg}/100"),
+                ]
+                items_html = "".join(
+                    f'<div class="ts-dash-summary-item">'
+                    f'<div class="ts-dash-summary-head">'
+                    f'<span class="ts-dash-summary-label">{label}</span>'
+                    + (f'<img src="{icon_data_uri(_KPI_ICON_FILES[slug])}" alt="" />' if slug else "")
+                    + "</div>"
+                    f'<span class="ts-dash-summary-value">{value}</span>'
+                    f"</div>"
+                    for slug, label, value in summary_items
+                )
+                st.markdown(f'<div class="ts-dash-summary-grid">{items_html}</div>', unsafe_allow_html=True)
+
+        render_live_twin(room["id"])

@@ -25,6 +25,8 @@ def _with_latest(room: dict) -> dict:
     env = latest.get("env") or {}
     power = latest.get("power") or {}
     occupancy = latest.get("occupancy") or {}
+    door = latest.get("door") or {}
+    pir = latest.get("pir") or {}
     power_w = power.get("power_w")
     room["temperature"] = env.get("temperature")
     room["humidity"] = env.get("humidity")
@@ -33,6 +35,8 @@ def _with_latest(room: dict) -> dict:
     room["occupied"] = occupancy.get("occupancy_state") == "occupied"
     room["occupancy_count"] = occupancy.get("estimated_count")
     room["aircon_on"] = bool(power_w and power_w >= _AC_ON_POWER_THRESHOLD_W)
+    room["door_state"] = door.get("door_state")
+    room["motion"] = pir.get("motion")
     room["sensor_connected"] = env.get("measured_at") is not None
     room["last_updated"] = env.get("measured_at") or room.get("last_updated")
     return room
@@ -169,6 +173,8 @@ def environment_snapshot(room: dict) -> dict:
         "humidity": room.get("humidity"),
         "co2": room.get("co2"),
         "power": round(room["power"] / 1000, 2) if room.get("power") is not None else None,
+        "door_state": room.get("door_state"),
+        "motion": room.get("motion"),
     }
 
 

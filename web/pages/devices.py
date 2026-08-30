@@ -42,63 +42,74 @@ with main_col:
         ) or "공간"
 
     if tab_choice == "센서 장비":
-        selected_room_id = st.session_state.get("_web_selected_room") or (
-            rooms[0]["id"] if rooms else None
+        room_names = [r["name"] for r in rooms]
+        current_room_id = st.session_state.get("_web_selected_room") or (rooms[0]["id"] if rooms else None)
+        current_index = next((i for i, r in enumerate(rooms) if r["id"] == current_room_id), 0) if rooms else 0
+
+        picked_name = st.selectbox(
+            "공간 선택", room_names, index=current_index, key="devices_room_select", label_visibility="collapsed"
         )
-        sensors = list_sensors(selected_room_id) if selected_room_id else []
+        picked_room = next((r for r in rooms if r["name"] == picked_name), None)
+        selected_room_id = picked_room["id"] if picked_room else current_room_id
 
-        with st.container(key="ts_dash_sensor_card", border=True):
-            sensor_icon_uri = recolored_icon_data_uri("sensors.svg", "#397f80")
-            st.markdown(
-                f'<p class="ts-dash-card-title"><img class="ts-sensor-title-icon" src="{sensor_icon_uri}" alt="" />센서 장비</p>',
-                unsafe_allow_html=True,
-            )
-            if sensors:
-                head_cols = st.columns([1.1, 1.7, 1.5, 1.2, 0.8], vertical_alignment="center")
-                for col, label in zip(head_cols, ["노드", "유형", "설치위치", "통신 상태", "활성"]):
-                    with col:
-                        st.markdown(f'<span class="ts-sensor-head">{label}</span>', unsafe_allow_html=True)
+        @st.fragment(run_every=5)
+        def render_live_sensors(room_id):
+            sensors = list_sensors(room_id) if room_id else []
 
-                for sensor in sensors:
-                    row_cols = st.columns([1.1, 1.7, 1.5, 1.2, 0.8], vertical_alignment="center")
-                    with row_cols[0]:
-                        st.markdown(f'<span class="ts-sensor-node">{sensor["name"]}</span>', unsafe_allow_html=True)
-                    with row_cols[1]:
-                        st.markdown(
-                            f'<span class="ts-sensor-type">{sensor_type_label(sensor["type"])}</span>',
-                            unsafe_allow_html=True,
-                        )
-                    with row_cols[2]:
-                        if sensor.get("location"):
-                            st.markdown(
-                                f'<span class="ts-sensor-location">{sensor["location"]}</span>',
-                                unsafe_allow_html=True,
-                            )
-                    with row_cols[3]:
-                        status = sensor.get("status")
-                        # "unknown" (the DB default for a never-reported device) reads the
-                        # same as "no status yet" did in the old mock - no badge at all.
-                        if status and status != "unknown":
-                            st.markdown(
-                                f'<span class="ts-sensor-status {_STATUS_CLASSES[status]}">'
-                                f'<span class="ts-sensor-status-dot"></span>{_STATUS_LABELS[status]}</span>',
-                                unsafe_allow_html=True,
-                            )
-                    with row_cols[4]:
-                        enabled = st.toggle(
-                            sensor["name"],
-                            value=sensor["enabled"],
-                            key=f"dev_sensor_toggle_{sensor['id']}",
-                            label_visibility="collapsed",
-                        )
-                        if enabled != sensor["enabled"]:
-                            set_sensor_enabled(sensor["id"], enabled)
-                            st.rerun()
-            else:
+            with st.container(key="ts_dash_sensor_card", border=True):
+                sensor_icon_uri = recolored_icon_data_uri("sensors.svg", "#397f80")
                 st.markdown(
-                    '<p class="ts-dash-list-empty">등록된 센서 장비가 없습니다</p>',
+                    f'<p class="ts-dash-card-title"><img class="ts-sensor-title-icon" src="{sensor_icon_uri}" alt="" />센서 장비 목록</p>',
                     unsafe_allow_html=True,
                 )
+                if sensors:
+                    head_cols = st.columns([1.2, 1.6, 1.8, 1.2, 0.8], vertical_alignment="center")
+                    for col, label in zip(head_cols, ["노드 ID", "유형", "설치위치", "통신 상태", "활성"]):
+                        with col:
+                            st.markdown(f'<span class="ts-sensor-head">{label}</span>', unsafe_allow_html=True)
+
+                    for sensor in sensors:
+                        row_cols = st.columns([1.2, 1.6, 1.8, 1.2, 0.8], vertical_alignment="center")
+                        with row_cols[0]:
+                            st.markdown(f'<span class="ts-sensor-node">{sensor["name"]}</span>', unsafe_allow_html=True)
+                        with row_cols[1]:
+                            st.markdown(
+                                f'<span class="ts-sensor-type">{sensor_type_label(sensor["type"])}</span>',
+                                unsafe_allow_html=True,
+                            )
+                        with row_cols[2]:
+                            if sensor.get("location"):
+                                st.markdown(
+                                    f'<span class="ts-sensor-location">{sensor["location"]}</span>',
+                                    unsafe_allow_html=True,
+                                )
+                        with row_cols[3]:
+                            status = sensor.get("status")
+                            if status and status != "unknown":
+                                st.markdown(
+                                    f'<span class="ts-sensor-status {_STATUS_CLASSES.get(status, "is-offline")}">'
+                                    f'<span class="ts-sensor-status-dot"></span>{_STATUS_LABELS.get(status, status)}</span>',
+                                    unsafe_allow_html=True,
+                                )
+                            else:
+                                st.markdown('<span class="ts-sensor-status is-offline">대기</span>', unsafe_allow_html=True)
+                        with row_cols[4]:
+                            enabled = st.toggle(
+                                sensor["name"],
+                                value=sensor["enabled"],
+                                key=f"dev_sensor_toggle_{sensor['id']}",
+                                label_visibility="collapsed",
+                            )
+                            if enabled != sensor["enabled"]:
+                                set_sensor_enabled(sensor["id"], enabled)
+                                st.rerun()
+                else:
+                    st.markdown(
+                        '<p class="ts-dash-list-empty">등록된 센서 장비가 없습니다</p>',
+                        unsafe_allow_html=True,
+                    )
+
+        render_live_sensors(selected_room_id)
     else:
         list_col, form_col = st.columns([3, 2], gap="medium")
 

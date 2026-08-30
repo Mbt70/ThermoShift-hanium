@@ -1,4 +1,5 @@
 import logging
+import signal
 import time
 import threading
 from datetime import datetime, timezone
@@ -31,6 +32,9 @@ class EdgeNode:
         self.client = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id=self.config.mqtt.client_id)
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
+        # 끊긴 이유를 남긴다. 이게 없으면 재접속이 반복돼도 원인을 알 수 없다
+        # (실제로 2초마다 재접속하는 문제를 추적하는 데 며칠 걸릴 뻔했다).
+        self.client.on_disconnect = self.on_disconnect
         
         self.ir = IRAdapter(self.publish_mqtt)
         self.controller = HVACController(self.ir)
@@ -49,6 +53,10 @@ class EdgeNode:
         logger.info(f"Connected to MQTT broker with result code {reason_code}")
         for topic in self.config.mqtt.topics:
             self.client.subscribe(topic)
+
+    def on_disconnect(self, client, userdata, flags, reason_code, properties):
+        logger.warning("MQTT 연결 끊김 — reason_code=%s (%s)",
+                       reason_code, getattr(reason_code, "getName", lambda: "?")())
 
     def on_message(self, client, userdata, msg):
         payload_str = msg.payload.decode('utf-8')
@@ -124,14 +132,27 @@ class EdgeNode:
     def start(self):
         self.client.connect(self.config.mqtt.host, self.config.mqtt.port, 60)
         self.client.loop_start()
-        
+
         loop_thread = threading.Thread(target=self.run_loop, daemon=True)
         loop_thread.start()
-        
+
+        # SIGTERM 을 받아야 한다. 예전에는 KeyboardInterrupt(=SIGINT)만
+        # 처리해서 systemd 의 stop 이나 timeout(1) 이 보내는 SIGTERM 에
+        # 죽지 않았다. 그 결과 게이트웨이가 유령으로 남았고, 새로 띄운
+        # 인스턴스와 **같은 MQTT client_id** 로 붙어 서로를 밀어냈다.
+        # 브로커가 둘을 번갈아 끊어 2초마다 재접속이 반복됐다.
+        self._stop = threading.Event()
+
+        def _shutdown(signum, _frame):
+            logger.info("신호 %s 수신 — 종료합니다", signal.Signals(signum).name)
+            self._stop.set()
+
+        signal.signal(signal.SIGTERM, _shutdown)
+        signal.signal(signal.SIGINT, _shutdown)
+
         try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
+            self._stop.wait()
+        finally:
             logger.info("Stopping...")
             self.client.loop_stop()
             self.client.disconnect()
