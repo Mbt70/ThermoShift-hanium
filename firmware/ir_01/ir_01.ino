@@ -63,7 +63,7 @@ const char* TOPIC_HEARTBEAT = "thermoshift/system/heartbeat";
 const char* LWT_PAYLOAD =
     "{\"node\":\"ir_01\",\"status\":\"offline\","
     "\"detail\":\"broker detected disconnect (MQTT will)\","
-    "\"cooling_relay\":\"UNKNOWN\"}";
+    "\"cooling_relay\":\"UNKNOWN\",\"heater_duty\":-1}";
 
 const char* TOPIC_CONTROL_IR = "thermoshift/ir_01/control";
 const char* TOPIC_CONTROL_ENV = "esp32/device/env_01/control";
@@ -72,6 +72,49 @@ const char* TOPIC_CONTROL_SELF = "esp32/device/ir_01/control";
 const int RELAY_PIN = 26;
 const uint8_t IR_RX_PIN = 34;
 const uint8_t IR_TX_PIN = 25;
+
+// --------------------- 히터(합성 재실자 열원) ---------------------
+//
+// 목업이 20x20x30cm(12L) 라 사람을 넣을 수 없다. 대신 12V 10W 히팅패드를
+// 재실자의 현열부하로 쓴다. 60m3 강의실 정원 30명을 기준으로 잡으면
+// 1인 상당이 약 0.36W 이므로, 이 패드 100% 가 대략 정원 27명에 해당한다.
+// duty 로 인원수를 흉내낸다: duty 40% ~= 11명.
+//
+// 릴레이 채널을 따로 쓴다. GPIO26 은 펠티어 전용이라 같이 쓸 수 없다.
+// 같은 채널에 물리면 냉방과 가열이 항상 동시에 켜진다.
+const int HEATER_PIN = 27;
+const int HEATER_ON = LOW;    // RELAY_ON 과 같은 규칙(저레벨 트리거)
+const int HEATER_OFF = HIGH;
+
+// 느린 PWM 주기. 게이트웨이의 판단 주기(30초)와 맞췄다.
+// 한 판단 주기 = 정확히 한 PWM 주기가 되어야, 식별에 쓰는 duty 입력이
+// 구간별 상수(piecewise constant)가 되고 회귀에서 입력을 정확히 안다.
+//
+// 열 시정수 tau 는 실측 약 70분이라 30초는 tau/140 이다. 충분히 빠르다.
+// 이때 생기는 온도 맥동은 50% duty 에서 대략 (P/C)*15s = 0.05'C 로,
+// 측정 잡음(sigma=0.016'C)의 3배쯤 된다. 결정론적이고 우리가 duty 를
+// 알고 있으므로 회귀가 처리한다.
+//
+// 릴레이 마모: duty 가 0 또는 100 이면 전환이 아예 없다. 중간값에서만
+// 분당 2회 전환한다. DC 12V 는 교류와 달리 영점교차가 없어 접점이 더
+// 빨리 상한다. 장기 운전을 할 거라면 릴레이 대신 로직레벨 MOSFET
+// (IRLZ44N 등) 으로 바꾸는 편이 낫다. 0.83A 짜리 DC 부하에는 그쪽이
+// 원래 맞는 부품이고, 그러면 ledcWrite 로 kHz PWM 을 걸어 맥동도 없앤다.
+const uint32_t HEATER_PWM_PERIOD_MS = 30000;
+
+// 안전 상한. 패드가 뜨거우면 여기부터 낮춘다.
+// 지름 30mm 에 10W 면 전력밀도가 1.4W/cm2 로 낮지 않다. 알루미늄 판에
+// 붙여 열을 퍼뜨리고 벽에서 띄워 쓰는 것을 전제로 한다.
+const int HEATER_MAX_DUTY_PCT = 100;
+
+// 워치독. 게이트웨이가 죽거나 WiFi 가 끊기면 히터가 켜진 채 남는다.
+// 무인으로 밤새 돌리는 실험이라 이건 반드시 막아야 한다.
+// 게이트웨이는 30초마다 duty 를 보내므로 120초는 4회 연속 누락에 해당한다.
+// 폭주하더라도 120초 x 10W / 3000(J/K) = 0.4'C 로 갇힌다.
+const uint32_t HEATER_COMMAND_TIMEOUT_MS = 120000;
+
+const char* HEATER_CMD_TOPIC = "thermoshift/ir_01/heater/cmd";
+const char* HEATER_STATE_TOPIC = "thermoshift/ir_01/heater/state";
 
 const uint32_t HEARTBEAT_INTERVAL_MS = 30000;
 const uint32_t WIFI_CONNECT_TIMEOUT_MS = 20000;
@@ -84,6 +127,10 @@ uint32_t lastHeartbeatMs = 0;
 uint32_t lastMqttReconnectAttemptMs = 0;
 String lastCommand = "none";
 bool relayIsOn = false;
+
+int heaterDutyPct = 0;
+bool heaterIsOn = false;
+uint32_t lastHeaterCommandMs = 0;
 
 int wifiRssiOrZero() {
   return WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
@@ -157,6 +204,7 @@ void publishStatus(const char* status, const char* detail = "", bool irTxOk = tr
   doc["detail"] = detail;
   doc["last_cmd"] = lastCommand;
   doc["cooling_relay"] = relayIsOn ? "ON" : "OFF";
+  doc["heater_duty"] = heaterDutyPct;
   doc["ir_tx_ok"] = irTxOk;
   doc["ir_rx_ok"] = true;
   doc["uptime_ms"] = millis();
@@ -225,6 +273,128 @@ void relayOff() {
 
   Serial.println("[ir_01] cooling relay OFF");
   publishRelayState(true);
+}
+
+// --------------------- Heater Control ---------------------
+
+void forceHeaterOffAtBoot() {
+  // 릴레이와 마찬가지로 WiFi 보다 먼저 부른다. 리셋이 걸렸을 때
+  // 히터가 켜진 채로 남는 순간이 있으면 안 된다.
+  pinMode(HEATER_PIN, OUTPUT);
+  digitalWrite(HEATER_PIN, HEATER_OFF);
+  heaterIsOn = false;
+  heaterDutyPct = 0;
+}
+
+void publishHeaterState(bool retained = true) {
+  char payload[8];
+  snprintf(payload, sizeof(payload), "%d", heaterDutyPct);
+  bool ok = mqttClient.connected() &&
+            mqttClient.publish(HEATER_STATE_TOPIC, payload, retained);
+  Serial.print("[ir_01] heater duty=");
+  Serial.print(payload);
+  Serial.println(ok ? " published" : " publish failed");
+}
+
+void applyHeaterOutput(bool on) {
+  if (on == heaterIsOn) {
+    return;
+  }
+  heaterIsOn = on;
+  digitalWrite(HEATER_PIN, on ? HEATER_ON : HEATER_OFF);
+}
+
+void setHeaterDuty(int duty) {
+  if (duty < 0) {
+    duty = 0;
+  }
+  if (duty > HEATER_MAX_DUTY_PCT) {
+    duty = HEATER_MAX_DUTY_PCT;
+  }
+  // duty 가 그대로여도 시각은 갱신한다. 워치독이 봐야 하는 것은
+  // '값이 바뀌었는가' 가 아니라 '게이트웨이가 아직 살아 있는가' 다.
+  lastHeaterCommandMs = millis();
+  if (duty == heaterDutyPct) {
+    return;
+  }
+  heaterDutyPct = duty;
+  lastCommand = "heater_duty";
+  publishHeaterState(true);
+}
+
+void heaterTick() {
+  uint32_t now = millis();
+
+  // 워치독. 뺄셈은 부호 없는 연산이라 millis() 되돌이(49일)도 그대로 맞다.
+  if (heaterDutyPct > 0 &&
+      now - lastHeaterCommandMs >= HEATER_COMMAND_TIMEOUT_MS) {
+    Serial.println("[ir_01] heater watchdog fired - no command, forcing OFF");
+    heaterDutyPct = 0;
+    publishError("heaterTick", "watchdog: no duty command, heater forced OFF");
+    publishHeaterState(true);
+  }
+
+  if (heaterDutyPct <= 0) {
+    applyHeaterOutput(false);
+    return;
+  }
+  if (heaterDutyPct >= 100) {
+    applyHeaterOutput(true);
+    return;
+  }
+
+  // 창을 따로 두지 않고 millis() 를 주기로 나눈 나머지를 위상으로 쓴다.
+  // duty 를 도중에 바꿔도 다음 주기를 기다리지 않고 바로 반영된다.
+  uint32_t phase = now % HEATER_PWM_PERIOD_MS;
+  uint32_t onMs = (uint32_t)((uint64_t)HEATER_PWM_PERIOD_MS * heaterDutyPct / 100);
+  applyHeaterOutput(phase < onMs);
+}
+
+bool handleHeaterCommand(byte* payload, unsigned int length) {
+  // retained 를 지울 때 브로커가 보내는 빈 페이로드. 명령이 아니다.
+  if (length == 0) {
+    Serial.println("[ir_01] empty heater payload ignored (retained clear)");
+    return true;
+  }
+
+  char command[64];
+  unsigned int copyLength = min(length, (unsigned int)(sizeof(command) - 1));
+  for (unsigned int i = 0; i < copyLength; i++) {
+    command[i] = (char)payload[i];
+  }
+  command[copyLength] = '\0';
+
+  Serial.print("[ir_01] heater command received: ");
+  Serial.println(command);
+
+  String cmd = String(command);
+  cmd.trim();
+
+  if (cmd.equalsIgnoreCase("OFF")) {
+    setHeaterDuty(0);
+    return true;
+  }
+  if (cmd.equalsIgnoreCase("ON")) {
+    setHeaterDuty(HEATER_MAX_DUTY_PCT);
+    return true;
+  }
+
+  // 숫자만 받는다. 0~100 의 duty(%).
+  bool numeric = cmd.length() > 0;
+  for (unsigned int i = 0; i < cmd.length(); i++) {
+    if (!isDigit(cmd[i])) {
+      numeric = false;
+      break;
+    }
+  }
+  if (!numeric) {
+    Serial.println("[ir_01] unknown heater command. Expected 0-100 / ON / OFF");
+    publishError("handleHeaterCommand", "unknown heater command");
+    return false;
+  }
+
+  setHeaterDuty(cmd.toInt());
+  return true;
 }
 
 void forceRelayOffAtBoot() {
@@ -428,6 +598,7 @@ void handleAirconControl(JsonDocument& doc) {
   status["aircon_mode"] = doc["aircon_mode"] | "";
   status["vent_fan"] = doc["vent_fan"] | "";
   status["cooling_relay"] = relayIsOn ? "ON" : "OFF";
+  status["heater_duty"] = heaterDutyPct;
   status["ir_tx_ok"] = false;
   status["ir_rx_ok"] = true;
   status["uptime_ms"] = millis();
@@ -519,6 +690,11 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     return;
   }
 
+  if (strcmp(topic, HEATER_CMD_TOPIC) == 0) {
+    handleHeaterCommand(payload, length);
+    return;
+  }
+
   handleIrCommand(payload, length);
 }
 
@@ -545,18 +721,26 @@ bool reconnectMqtt() {
   }
 
   mqttClient.subscribe(CMD_TOPIC);
+  mqttClient.subscribe(HEATER_CMD_TOPIC);
   mqttClient.subscribe(TOPIC_CONTROL_IR);
   mqttClient.subscribe(TOPIC_CONTROL_ENV);
   mqttClient.subscribe(TOPIC_CONTROL_SELF);
 
   Serial.println("[ir_01] MQTT connected and subscribed");
   Serial.println(CMD_TOPIC);
+  Serial.println(HEATER_CMD_TOPIC);
   Serial.println(TOPIC_CONTROL_IR);
   Serial.println(TOPIC_CONTROL_ENV);
   Serial.println(TOPIC_CONTROL_SELF);
 
-  publishStatus("online", "IR bridge and cooling relay ready", true);
+  publishStatus("online", "IR bridge, cooling relay, heater ready", true);
   publishRelayState(true);
+  // 재접속 직후에는 duty 를 0 으로 되돌린다. 끊겨 있던 동안 게이트웨이의
+  // 실험 계획이 어디까지 갔는지 알 수 없는데, 옛 duty 를 유지하면 그
+  // 구간의 입력이 기록과 어긋나 식별 자료 전체가 못 쓰게 된다.
+  heaterDutyPct = 0;
+  lastHeaterCommandMs = millis();
+  publishHeaterState(true);
   return true;
 }
 
@@ -567,6 +751,7 @@ void publishHeartbeat() {
   doc["uptime_ms"] = millis();
   doc["wifi_rssi"] = wifiRssiOrZero();
   doc["cooling_relay"] = relayIsOn ? "ON" : "OFF";
+  doc["heater_duty"] = heaterDutyPct;
   doc["ir_tx_ok"] = true;
   doc["ir_rx_ok"] = true;
 
@@ -585,6 +770,7 @@ void setup() {
   Serial.println("======================================");
 
   forceRelayOffAtBoot();
+  forceHeaterOffAtBoot();
 
   pinMode(IR_TX_PIN, OUTPUT);
   digitalWrite(IR_TX_PIN, LOW);
@@ -610,6 +796,10 @@ void loop() {
       reconnectMqtt();
     }
   }
+
+  // MQTT 가 끊겨 있어도 매 루프 돌린다. 워치독이 여기 들어 있어서,
+  // 연결이 끊긴 상태야말로 히터를 꺼야 하는 상황이다.
+  heaterTick();
 
   uint32_t receivedCode = 0;
   if (readNec(receivedCode)) {

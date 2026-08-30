@@ -31,6 +31,7 @@ from app.config import get_config
 from app.data_quality import get_data_quality
 from app.feature_engine import get_feature_engine
 from app.ir_adapter import IRAdapter
+from app.heater import HeaterController
 from app.occupancy_hmm import get_occupancy_hmm
 from app.policy import (PolicyConfig, PolicyInput, ScheduleWindow, decide)
 from app.storage import get_storage
@@ -56,6 +57,13 @@ class HVACController:
         self.last_off_at: Optional[datetime] = None
         self.last_command_at: Optional[datetime] = None
         self.thermal = load_thermal_model()
+
+        # 합성 재실자(히팅패드). 목업이 12L 라 사람을 넣을 수 없어서,
+        # 재실 열부하를 히터 duty 로 만든다. app/heater.py 참고.
+        self.heater = HeaterController(
+            publish_func=ir_adapter.publish_func,
+            topic=self.config.heater.topic,
+        )
 
     # ------------------------------------------------------------------
     @property
@@ -98,6 +106,15 @@ class HVACController:
     def decide(self, features: Dict[str, Any], occupancy_state: str,
                p_occ: Dict[str, float]) -> dict:
         now = datetime.now(timezone.utc)
+        dq = get_data_quality()
+
+        # 공간 설정을 읽기 **전에** 부른다. 히터는 방 설정과 무관한 실험
+        # 부하다. DB 가 잠깐 흔들려 공간을 못 찾았다는 이유로 밤새 돌던
+        # 식별 실험이 끊기면 안 된다(노드 워치독이 120초 뒤 히터를 끈다).
+        # 안전 차단은 _tick_heater 안에 그대로 있으므로 이르게 불러도
+        # 위험하지 않다.
+        self._tick_heater(dq, now)
+
         room_id = self.storage.resolve_room_id()
         room = self.storage.fetch_room_settings(room_id)
 
@@ -109,7 +126,6 @@ class HVACController:
                     "executed": False, "reasons": ["ROOM_UNRESOLVED"]}
 
         room_mode = room["control_mode"]
-        dq = get_data_quality()
         fe = get_feature_engine()
         env = next(iter(dq.latest_env.values()), None)
 
@@ -190,6 +206,28 @@ class HVACController:
         }
 
     # ------------------------------------------------------------------
+    def _tick_heater(self, dq, now: datetime) -> None:
+        """합성 재실자 열원을 매 판단 주기마다 갱신한다.
+
+        duty 가 그대로여도 매번 발행한다. 노드의 워치독(120초)이 이
+        발행을 먹고 살기 때문이다. 게이트웨이가 죽으면 발행이 끊기고
+        노드가 스스로 히터를 끈다 — 그러라고 만든 구조다.
+
+        config.app.control_mode 의 shadow 상한과는 **무관하게** 돈다.
+        그 상한은 '에어컨을 건드리지 말라'는 뜻이고, 히터는 제어 출력이
+        아니라 실험 부하다. 오히려 shadow(냉방 정지) + 히터 가동이
+        개루프 열모델 식별에 쓰는 정확한 조합이다. 히터를 멈추는 스위치는
+        config.heater.enabled 하나뿐이다.
+        """
+        env = next(iter(dq.latest_env.values()), None)
+        last_seen = dq.last_seen.get("env")
+        age_sec = (now - last_seen).total_seconds() if last_seen else None
+
+        if not self.config.heater.enabled:
+            self.heater.request_duty(0)
+
+        self.heater.tick(env.temperature_c if env else None, age_sec)
+
     def _note_transmission(self, action: str, now: datetime) -> None:
         """송신 직후 상태를 갱신한다. 기기 보호 조건이 이 값들을 본다."""
         self.current_action = action

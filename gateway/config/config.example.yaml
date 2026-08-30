@@ -54,3 +54,20 @@ ir:
     COOL_24_AUTO: "COOL_24_AUTO_RAW_HASH_PLACEHOLDER"
     COOL_25_AUTO: "COOL_25_AUTO_RAW_HASH_PLACEHOLDER"
     COOL_26_AUTO: "COOL_26_AUTO_RAW_HASH_PLACEHOLDER"
+
+# 합성 재실자 — 히팅패드로 재실 열부하를 흉내 낸다(app/heater.py).
+# 목업이 20x20x30cm(12L) 라 사람을 넣을 수 없어서 둔 장치다.
+#
+# app.control_mode 의 shadow 상한과는 무관하게 돈다. 그 상한은 '에어컨을
+# 건드리지 말라'는 뜻이고 히터는 제어 출력이 아니라 실험 부하다. 오히려
+# shadow(냉방 정지) + heater.enabled(가열 가진) 가 개루프 열모델 식별에
+# 쓰는 정확한 조합이다.
+heater:
+  topic: "thermoshift/ir_01/heater/cmd"
+  # 켜기 전에 반드시 확인할 것:
+  #   - 패드를 알루미늄 판에 붙여 열을 퍼뜨렸는가 (지름 30mm 에 10W 면
+  #     전력밀도가 1.4W/cm2 라 벽에 닿으면 아크릴이 변형된다)
+  #   - 교반팬이 상시 가동 중인가 (없으면 단일 존 가정이 깨져서 식별
+  #     결과가 '잘 맞는 것처럼 보이는 무의미한 숫자' 가 된다)
+  #   - 펠티어 방열면이 상자 밖인가
+  enabled: false

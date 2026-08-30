@@ -28,7 +28,9 @@ class MQTTAdapter:
     # 오간다(firmware/ir_01 참고). 게이트웨이는 thermoshift/# 를 통째로
     # 구독하므로 이 토픽도 받게 되는데, 파싱 실패로 로그를 채울 일이 아니다.
     PLAINTEXT_TOPICS = ("thermoshift/ir_01/cooling/state",
-                        "thermoshift/ir_01/cooling/cmd")
+                        "thermoshift/ir_01/cooling/cmd",
+                        "thermoshift/ir_01/heater/state",
+                        "thermoshift/ir_01/heater/cmd")
 
     # 같은 측정이 두 토픽으로 들어와 두 번 저장되는 것을 막는 창(초).
     #
@@ -82,6 +84,14 @@ class MQTTAdapter:
                     "JSON 파싱 실패 %s: %s | payload=%.120s",
                     topic, exc, payload_str,
                 )
+            return
+
+        # JSON 이지만 객체가 아닌 것들. 히터 duty 처럼 평문 정수를 싣는
+        # 토픽이 PLAINTEXT_TOPICS 에 등록되기 전이면 json.loads("40") 이
+        # 정수 40 을 돌려주고, 바로 아래 payload.get 에서 AttributeError 로
+        # 수집 스레드가 죽는다. 알 수 없는 토픽 하나가 게이트웨이 전체를
+        # 세우는 일이 없도록 여기서 막는다.
+        if not isinstance(payload, dict):
             return
 
         now = datetime.now(timezone.utc)

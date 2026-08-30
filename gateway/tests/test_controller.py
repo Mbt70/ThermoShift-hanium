@@ -16,6 +16,12 @@ class MockIRAdapter:
     def __init__(self):
         self.locked_out = False
         self.sent_commands = []
+        # 컨트롤러가 히터 발행에 쓴다. 실제 IRAdapter 와 같은 이름이라야
+        # 목이 실물 인터페이스에서 어긋나지 않는다.
+        self.published = []
+
+    def publish_func(self, topic, payload):
+        self.published.append((topic, payload))
 
     def is_locked_out(self):
         return self.locked_out
@@ -59,6 +65,7 @@ def controller(monkeypatch):
             temperature_c = 27.0
             co2_ppm = 800.0
         latest_env = {"test": FakeEnv()}
+        last_seen = {"env": datetime.now(timezone.utc)}
 
     monkeypatch.setattr("app.controller.get_data_quality", lambda: MockDataQuality())
 
@@ -169,3 +176,38 @@ def test_transmission_updates_state_for_interlocks(controller):
     assert controller.cooling_on is True
     assert controller.last_on_at is not None
     assert controller.last_command_at is not None
+
+
+# ----------------------------------------------------------------------
+# 합성 재실자(히터)
+# ----------------------------------------------------------------------
+
+def test_히터는_판단마다_duty를_발행한다(controller):
+    """노드 워치독이 이 발행을 먹고 산다. 판단 경로가 무엇이든 나가야 한다."""
+    controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    topics = [t for t, _ in controller.ir.published]
+    assert controller.config.heater.topic in topics
+
+
+def test_히터가_꺼져_있으면_duty_0을_보낸다(controller):
+    # 기본값은 enabled=False 다. 그래도 발행은 해야 노드가 게이트웨이가
+    # 살아 있음을 안다.
+    controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    heater_sends = [p for t, p in controller.ir.published
+                    if t == controller.config.heater.topic]
+    assert heater_sends == ["0"]
+
+
+def test_공간을_못_찾아도_히터는_갱신된다(controller, monkeypatch):
+    """DB 가 흔들려 공간을 못 찾아도 밤새 돌던 실험이 끊기면 안 된다.
+
+    히터 발행이 멈추면 노드 워치독이 120초 뒤 히터를 끈다. 안전한 실패이긴
+    하지만 그때까지 쌓은 가진 실험이 통째로 못 쓰게 된다. 그래서 히터
+    갱신은 공간 조회보다 앞에 둔다.
+    """
+    monkeypatch.setattr(controller.storage, "fetch_room_settings", lambda _: None)
+    result = controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert result["reasons"] == ["ROOM_UNRESOLVED"]
+    heater_sends = [p for t, p in controller.ir.published
+                    if t == controller.config.heater.topic]
+    assert heater_sends == ["0"]
