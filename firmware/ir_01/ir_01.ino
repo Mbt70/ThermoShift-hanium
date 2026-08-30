@@ -56,6 +56,15 @@ const char* TOPIC_RX = "thermoshift/ir_01/ir_rx";
 const char* TOPIC_ERROR = "thermoshift/system/error";
 const char* TOPIC_HEARTBEAT = "thermoshift/system/heartbeat";
 
+// 브로커가 이 노드의 연결이 끊긴 것을 감지하면 대신 발행해 주는 유언(LWT).
+// 이게 없으면 노드가 죽어도 TOPIC_STATUS 의 retained "online" 이 영원히 남아,
+// 게이트웨이도 대시보드도 죽은 노드를 살아있다고 읽는다. 실제로 릴레이가
+// 응답하지 않는데 status 는 online 이라 원인 파악이 늦어진 적이 있다.
+const char* LWT_PAYLOAD =
+    "{\"node\":\"ir_01\",\"status\":\"offline\","
+    "\"detail\":\"broker detected disconnect (MQTT will)\","
+    "\"cooling_relay\":\"UNKNOWN\"}";
+
 const char* TOPIC_CONTROL_IR = "thermoshift/ir_01/control";
 const char* TOPIC_CONTROL_ENV = "esp32/device/env_01/control";
 const char* TOPIC_CONTROL_SELF = "esp32/device/ir_01/control";
@@ -187,7 +196,11 @@ void publishRelayState(bool retained = true) {
 
 void relayOn() {
   if (relayIsOn) {
+    // 이미 켜져 있어도 상태를 다시 발행한다. 게이트웨이가 cooling/state 로
+    // 명령 성사를 확인하는데, 여기서 조용히 return 하면 재전송이 영원히
+    // 무응답으로 보인다.
     Serial.println("[ir_01] cooling relay already ON");
+    publishRelayState(true);
     return;
   }
 
@@ -202,6 +215,7 @@ void relayOn() {
 void relayOff() {
   if (!relayIsOn) {
     Serial.println("[ir_01] cooling relay already OFF");
+    publishRelayState(true);
     return;
   }
 
@@ -220,8 +234,55 @@ void forceRelayOffAtBoot() {
   Serial.println("[ir_01] cooling relay initialized OFF");
 }
 
+// 릴레이 명령을 하나의 상태 문자열로 정규화한다.
+//   ON            (평문)
+//   "ON"          (JSON 문자열로 감싼 경우)
+//   {"state":"ON"}(오브젝트)
+// 셋 다 같은 값으로 본다. 게이트웨이·프론트·수동 테스트가 서로 다른 형식을
+// 보낸 적이 있는데, 평문만 받던 시절에는 나머지가 조용히 버려졌다.
+bool extractCoolingState(const char* raw, String& out) {
+  String text = String(raw);
+  text.trim();
+
+  if (text.startsWith("{")) {
+    StaticJsonDocument<192> doc;
+    if (deserializeJson(doc, text)) {
+      return false;
+    }
+    const char* keys[] = {"state", "cooling", "command", "value", "cooling_relay"};
+    for (const char* key : keys) {
+      if (doc[key].is<const char*>()) {
+        out = String((const char*)doc[key]);
+        out.trim();
+        return true;
+      }
+      if (doc[key].is<int>()) {
+        out = String((int)doc[key]);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (text.length() >= 2 && text.startsWith("\"") && text.endsWith("\"")) {
+    text = text.substring(1, text.length() - 1);
+    text.trim();
+  }
+
+  out = text;
+  return true;
+}
+
 bool handleCoolingCommand(byte* payload, unsigned int length) {
-  char command[16];
+  // retained 메시지를 지울 때 브로커가 빈 페이로드를 보낸다. 이건 명령이
+  // 아니므로 에러로 올리지 않는다. 올리면 정리할 때마다 error 토픽이 튄다.
+  if (length == 0) {
+    Serial.println("[ir_01] empty cooling payload ignored (retained clear)");
+    return true;
+  }
+
+  // 예전 버퍼는 16 바이트라 {"state":"ON"} 같은 JSON 이 잘려 들어왔다.
+  char command[128];
   unsigned int copyLength = min(length, (unsigned int)(sizeof(command) - 1));
 
   for (unsigned int i = 0; i < copyLength; i++) {
@@ -229,18 +290,22 @@ bool handleCoolingCommand(byte* payload, unsigned int length) {
   }
   command[copyLength] = '\0';
 
-  String cmd = String(command);
-  cmd.trim();
-
   Serial.print("[ir_01] cooling command received: ");
-  Serial.println(cmd);
+  Serial.println(command);
 
-  if (cmd.equalsIgnoreCase("ON") || cmd == "1") {
+  String cmd;
+  if (!extractCoolingState(command, cmd)) {
+    Serial.println("[ir_01] cooling command has no usable state field");
+    publishError("handleCoolingCommand", "no state field in cooling command");
+    return false;
+  }
+
+  if (cmd.equalsIgnoreCase("ON") || cmd == "1" || cmd.equalsIgnoreCase("true")) {
     relayOn();
     return true;
   }
 
-  if (cmd.equalsIgnoreCase("OFF") || cmd == "0") {
+  if (cmd.equalsIgnoreCase("OFF") || cmd == "0" || cmd.equalsIgnoreCase("false")) {
     relayOff();
     return true;
   }
@@ -471,7 +536,9 @@ bool reconnectMqtt() {
   Serial.print(":");
   Serial.println(MQTT_PORT);
 
-  if (!mqttClient.connect(MQTT_CLIENT_ID)) {
+  // willRetain=true 라야 나중에 붙는 구독자도 "이 노드는 죽어 있다"를 본다.
+  if (!mqttClient.connect(MQTT_CLIENT_ID, nullptr, nullptr,
+                          TOPIC_STATUS, 0, true, LWT_PAYLOAD)) {
     Serial.print("[ir_01] MQTT failed, rc=");
     Serial.println(mqttClient.state());
     return false;
