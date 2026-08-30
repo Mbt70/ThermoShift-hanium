@@ -142,7 +142,9 @@ def ai_judgment(room: dict) -> tuple[str, str] | None:
         decision = api_get(f"/rooms/{room['id']}/decisions/latest", ignore_404=True)
         if decision is None:
             return None
-        explanation = api_post(f"/ai/decisions/{decision['decision_id']}/explain")
+        # Gemini 호출(thinking 포함)은 10초를 넘기기도 해서, 다른 API 호출의
+        # 기본 5초 타임아웃보다 넉넉하게 잡는다.
+        explanation = api_post(f"/ai/decisions/{decision['decision_id']}/explain", timeout=25)
     except Exception:
         return None
     if not explanation or not explanation.get("headline") or not explanation.get("detail"):

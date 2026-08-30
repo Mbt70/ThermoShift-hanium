@@ -1,8 +1,9 @@
 """Gemini API 연동.
 
 제어 판단 근거를 사람 말로 풀어주고, 알림 원인을 진단하고, 주간 리포트를
-자동 생성한다. gateway가 남긴 reason_codes 같은 기계용 코드를 사용자와
-심사위원이 읽을 수 있는 문장으로 바꾸는 것이 목적이다.
+자동 생성한다. gateway(policy.py)가 남긴 판단 근거는 이미 한국어 문장이지만
+여러 줄 쌓인 채로 관측값(temp=/co2= 등)이 뒤섞여 있어, 이를 관리자와
+심사위원이 한눈에 읽을 수 있는 한두 문장 요약·설명으로 다듬는 것이 목적이다.
 
 API 키가 없으면 모든 함수가 None 을 돌려주고, 호출부는 기존 하드코딩된
 ERROR_CATALOG 로 폴백한다. 키 없이도 시스템 전체가 동작해야 한다.
@@ -100,20 +101,20 @@ _SYSTEM = """당신은 ThermoShift라는 실내 열환경 최적화 시스템의
 
 
 def _reason_code_glossary() -> str:
-    """gateway가 쓰는 reason code 의 뜻. 모델이 코드를 오해하지 않게 붙인다."""
-    return """reason code 의미
-- ENV_STALE: 온습도/CO2 센서 데이터가 오래돼 판단 근거로 쓸 수 없음 (안전을 위해 현 상태 유지)
-- MANUAL_LOCKOUT: 사람이 리모컨을 직접 조작해 자동 제어를 일시 차단한 상태
-- OCCUPIED_CONFIRMED: 재실로 확정
-- EMPTY_CONFIRMED: 공실로 확정
-- TRANSITION_MAINTAIN_STATE: 재실/공실이 불확실해 현 상태 유지
-- TEMPERATURE_HIGH_3MIN: 설정 임계보다 높은 온도가 3분 이상 지속
-- TEMPERATURE_LOW_5MIN: 설정 임계보다 낮은 온도가 5분 이상 지속
-- MIN_ON_TIME_SATISFIED / MIN_OFF_TIME_SATISFIED: 압축기 보호용 최소 가동/정지 시간 충족
-- VENTILATE_RECOMMENDED: CO2가 경고 기준을 넘어 환기 권장
-- CO2_CRITICAL: CO2가 위험 기준 초과
-- SHADOW_MODE_NO_TRANSMIT: shadow 모드라 신호를 보내지 않음 (정상)
-- LOCKOUT_NO_TRANSMIT: lockout 중이라 신호를 보내지 않음
+    """gateway(policy.py)가 남기는 판단 근거의 형식. 모델이 오해하지 않게 붙인다."""
+    return """판단 근거(reason) 형식
+gateway의 policy.py가 우선순위대로 판단하며, 판단할 때마다 근거 문장을
+쌓는다(예: "예약 진행 중 (목표 24.0℃)", "재실 중 · 실내 26.8℃ (쾌적
+23.0~25.0℃)", "CO2 1520ppm — 위험 기준(1500) 초과, 즉시 환기 필요").
+그 뒤에 " | " 로 구분해 판단 시점의 관측값이 영문 key=value 로 붙는다
+(temp=, co2=, occupancy=, executed=). 이 관측값은 코드가 아니라 그대로
+읽으면 되는 실측치다.
+
+우선순위(위에서부터 먼저 걸리는 조건이 그 판단으로 확정): 안전(센서
+끊김) → 수동 잠금(사람이 리모컨으로 직접 조작 중) → CO2 위험/경고 →
+예약 예냉(열모델이 리드타임 계산) → 공실 → 재실 중 온도.
+"열모델 미교정(가정값)" 문구가 보이면 선냉방 리드타임이 아직 실측
+보정 전 추정치라는 뜻 — 있는 그대로 전달하고 확정적으로 말하지 않는다.
 
 decision_type 의미
 - precool: 재실 예정 시각 전에 미리 냉방

@@ -101,10 +101,10 @@ def _build_url(path: str, params: dict | None) -> str:
     return url
 
 
-def _send(method: str, url: str, body: dict | None) -> tuple[int, str]:
+def _send(method: str, url: str, body: dict | None, timeout: float) -> tuple[int, str]:
     """(상태코드, 본문 문자열). 연결 자체가 실패하면 예외를 그대로 올린다."""
     if _session is not None:
-        response = _session.request(method, url, json=body, timeout=_TIMEOUT)
+        response = _session.request(method, url, json=body, timeout=timeout)
         return response.status_code, response.text
 
     if _XHR is not None:
@@ -123,8 +123,9 @@ def _send(method: str, url: str, body: dict | None) -> tuple[int, str]:
 
 
 def _request(method: str, path: str, *, params: dict | None = None,
-             json: dict | None = None, ignore_404: bool = False):
-    status, text = _send(method, _build_url(path, params), json)
+             json: dict | None = None, ignore_404: bool = False,
+             timeout: float = _TIMEOUT):
+    status, text = _send(method, _build_url(path, params), json, timeout)
 
     if ignore_404 and status == 404:
         return None
@@ -139,8 +140,9 @@ def api_get(path: str, *, params: dict | None = None, ignore_404: bool = False):
     return _request("GET", path, params=params, ignore_404=ignore_404)
 
 
-def api_post(path: str, *, json: dict | None = None, params: dict | None = None):
-    return _request("POST", path, json=json, params=params)
+def api_post(path: str, *, json: dict | None = None, params: dict | None = None,
+              timeout: float = _TIMEOUT):
+    return _request("POST", path, json=json, params=params, timeout=timeout)
 
 
 def api_patch(path: str, *, json: dict | None = None, ignore_404: bool = False):
