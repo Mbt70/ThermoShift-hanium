@@ -220,7 +220,25 @@ def decide(inp: PolicyInput, cfg: PolicyConfig) -> PolicyDecision:
         reasons.append(f"{lower:.1f}℃ 미만이 {cfg.cooling_off_duration_sec//60}분 지속 — 과냉")
         return _commit(inp, cfg, "off", "POWER_OFF", target, reasons)
 
-    # 쾌적 범위 안이다. 냉방이 돌고 있으면 완화한다.
+    # 여기까지 왔다는 것은 "지속 조건을 아직 못 채웠다" 는 뜻이다. 온도가
+    # 범위 밖이어도 그것이 충분히 오래 유지되지 않았으면 판단을 바꾸지 않는다.
+    # 근거 문구가 이 둘을 구분해야 한다 — 예전에는 범위 밖인데도 "쾌적 범위
+    # 안" 이라고 적어서, 27℃ 인 방의 제어 로그에 "쾌적 범위 안" 이 남았다.
+    if inp.temperature_c > upper:
+        reasons.append(
+            f"{upper:.1f}℃ 초과이지만 {cfg.cooling_on_duration_sec // 60}분 지속 "
+            "조건 미충족 — 관측 계속")
+        hold.blocked_by = "AWAITING_SUSTAINED_HIGH"
+        return hold
+
+    if inp.temperature_c < lower:
+        reasons.append(
+            f"{lower:.1f}℃ 미만이지만 {cfg.cooling_off_duration_sec // 60}분 지속 "
+            "조건 미충족 — 관측 계속")
+        hold.blocked_by = "AWAITING_SUSTAINED_LOW"
+        return hold
+
+    # 진짜로 쾌적 범위 안이다.
     if inp.cooling_on:
         relaxed = target + cfg.setback_delta_c
         reasons.append(f"쾌적 범위 안 — 설정을 {relaxed:.1f}℃ 로 완화(setback)")

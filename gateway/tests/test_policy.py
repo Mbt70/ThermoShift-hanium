@@ -100,6 +100,19 @@ def test_잠깐_더운_것만으로는_켜지_않는다():
     # 3분 지속 조건을 못 채우면 판단이 바뀌지 않아야 한다.
     d = decide(base(temperature_c=26.5, temp_history=history(1, 26.5)), CFG)
     assert d.decision_type != "maintain"
+    assert d.blocked_by == "AWAITING_SUSTAINED_HIGH"
+
+
+def test_지속조건_미충족을_쾌적범위_안이라고_적지_않는다():
+    """근거 문구가 사실과 달라선 안 된다.
+
+    실제로 27℃ 인 방의 제어 로그에 "쾌적 범위 안" 이 남은 적이 있다.
+    게이트웨이를 막 재시작해 이력이 짧았던 것뿐인데, 로그만 보면 방이
+    쾌적하다는 뜻이 되어 버린다.
+    """
+    d = decide(base(temperature_c=27.0, temp_history=history(1, 27.0)), CFG)
+    assert not any("쾌적 범위 안" in r for r in d.reasons)
+    assert any("지속" in r for r in d.reasons)
 
 
 def test_과냉되면_끈다():
