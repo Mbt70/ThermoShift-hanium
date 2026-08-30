@@ -58,6 +58,23 @@ def register(body: RegisterRequest):
     return _user_out(row)
 
 
+def _password_matches(password: str, stored_hash: str) -> bool:
+    """저장된 해시와 대조한다. 해시를 읽을 수 없으면 False.
+
+    bcrypt.checkpw 는 bcrypt 형식이 아닌 문자열을 받으면 False 를 돌려주는
+    게 아니라 ValueError 를 던진다. 구 SQLite 에서 이관해 온 계정은
+    pbkdf2_sha256$... 형식이라 여기서 예외가 나 로그인이 401 이 아니라
+    500 으로 끝났다. 인증 실패는 인증 실패로 끝나야 한다 — 서버 오류로
+    새면 "비밀번호가 틀렸다" 와 "시스템이 고장났다" 를 구분할 수 없고,
+    깨진 해시 한 줄이 로그인 전체를 무너뜨린다.
+    """
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"),
+                              stored_hash.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
+
+
 @router.post("/login")
 def login(body: LoginRequest):
     """POST /auth/login
@@ -72,9 +89,7 @@ def login(body: LoginRequest):
             (body.email,),
         )
         row = cur.fetchone()
-    if row is None or not bcrypt.checkpw(
-        body.password.encode("utf-8"), row["password_hash"].encode("utf-8")
-    ):
+    if row is None or not _password_matches(body.password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="invalid email or password")
     return _user_out(row)
 

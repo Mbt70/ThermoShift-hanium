@@ -37,6 +37,11 @@ DEFAULT_SQLITE = "/home/thermo/thermoshift-data/thermoshift.db"
 # gateway/app/storage.py 의 UNASSIGNED_ROOM_NAME 과 같은 이름을 쓴다.
 UNASSIGNED_ROOM_NAME = "미배정"
 
+# 옮길 수 없는 비밀번호 자리에 넣는 표식. users.password_hash 가 NOT NULL 이라
+# 무언가는 들어가야 하는데, bcrypt 해시가 아니면 대조가 항상 실패한다.
+# (auth.py 의 _password_matches 가 예외를 삼키고 False 를 돌려준다.)
+PASSWORD_RESET_REQUIRED = "!password-reset-required"
+
 # 구 rooms.control_mode / control_commands.method  ->  control_mode ENUM
 ROOM_MODE = {"rule": "rule", "manual": "manual", "predict": "mpc",
              "monitoring": "monitoring", "mpc": "mpc"}
@@ -134,14 +139,30 @@ def migrate(sq: sqlite3.Connection, pg: psycopg.Connection, reset: bool):
     # ---------------- users ----------------
     print("== users")
     user_id = {}
+    needs_reset = []
     for r in sq.execute("SELECT * FROM users ORDER BY created_at"):
+        stored = r["password_hash"] or ""
+        # 구 게이트웨이는 pbkdf2_sha256$... 로 저장했지만 새 api 는 bcrypt 를
+        # 쓴다(api/routers/auth.py). 형식이 다른 해시를 그대로 옮기면 그
+        # 계정으로는 영원히 로그인할 수 없다. 옮기는 대신 절대 일치하지
+        # 않는 표식을 넣고, 누구를 재설정해야 하는지 알려 준다.
+        if not stored.startswith(("$2a$", "$2b$", "$2y$")):
+            stored = PASSWORD_RESET_REQUIRED
+            needs_reset.append(r["email"])
         uid = cur.execute(
             """INSERT INTO users (name, email, password_hash, created_at)
                VALUES (%s,%s,%s,%s) RETURNING user_id""",
-            (r["name"], r["email"], r["password_hash"], ts(r["created_at"])),
+            (r["name"], r["email"], stored, ts(r["created_at"])),
         ).fetchone()[0]
         user_id[r["email"]] = uid
     log(f"{len(user_id)}명")
+    if needs_reset:
+        log("! 비밀번호를 옮기지 못했습니다 (bcrypt 형식이 아님). "
+            "아래 계정은 재설정해야 로그인됩니다:")
+        for e in needs_reset:
+            log(f"    {e}")
+        log("  재설정:  curl -X PATCH localhost:8000/auth/<user_id>/password "
+            "-H 'Content-Type: application/json' -d '{\"password\":\"...\"}'")
     if not user_id:
         sys.exit("users 가 비어 있습니다. 이관할 것이 없습니다.")
     default_owner = next(iter(user_id.values()))
