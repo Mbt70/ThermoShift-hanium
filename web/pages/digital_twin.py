@@ -145,7 +145,7 @@ with main_col:
                 st.session_state["_web_selected_room"] = picked_room["id"]
                 st.rerun()
 
-        co2_ok = avg_co2 < 700
+        co2_ok = avg_co2 < 1000
         kpi_items = [
             ("temp", "온도", f"{avg_temp:.1f}", "°C", "is-positive", f"{_CHECK_ICON}목표 24°C 근접"),
             (

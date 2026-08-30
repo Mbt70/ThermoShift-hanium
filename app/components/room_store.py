@@ -46,6 +46,8 @@ def _from_api(row: dict) -> dict:
         "location": row.get("location") or "",
         "floor_plan_name": row.get("floor_plan_url") or "",
         "target_temperature": round(row["target_temp"]),
+        "temp_tolerance": row["temp_tolerance"],
+        "co2_limit": row["co2_limit"],
         "control_mode": _MODE_DB_TO_UI.get(row["control_mode"], row["control_mode"]),
         "last_updated": row.get("updated_at"),
     }
