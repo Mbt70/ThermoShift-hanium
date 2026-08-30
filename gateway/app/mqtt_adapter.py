@@ -18,6 +18,8 @@ class MQTTAdapter:
         self.storage = get_storage()
         self.last_door_state = None
         self._last_decode_warning: Dict[str, float] = {}
+        # device_id -> (수신 시각(monotonic), (temp, hum, co2))
+        self._recent_env: Dict[str, tuple] = {}
 
     def register_callback(self, cb: Callable[[Any], None]):
         self.callbacks.append(cb)
@@ -27,6 +29,41 @@ class MQTTAdapter:
     # 구독하므로 이 토픽도 받게 되는데, 파싱 실패로 로그를 채울 일이 아니다.
     PLAINTEXT_TOPICS = ("thermoshift/ir_01/cooling/state",
                         "thermoshift/ir_01/cooling/cmd")
+
+    # 같은 측정이 두 토픽으로 들어와 두 번 저장되는 것을 막는 창(초).
+    #
+    # firmware/env_01 은 한 번 읽은 SCD41 값을 상세 토픽
+    # (thermoshift/env_01/scd41_main) 과 대시보드용 토픽
+    # (thermoshift/env_01/data) 에 각각 발행한다(env_01.ino:408, 418).
+    # 게이트웨이는 thermoshift/# 를 통째로 구독하므로 둘 다 받는다.
+    # measured_at 은 센서가 준 시각이 아니라 게이트웨이 수신 시각이라
+    # 두 사본의 시각이 12ms 쯤 어긋나고, 그래서 uq_env 제약도 이것을
+    # 걸러 내지 못했다. 2026-08-30 기록은 환경값이 전부 두 벌씩이다.
+    #
+    # 이 중복은 단순히 용량만 먹는 게 아니다. 회귀에서 표본 수를 두 배로
+    # 부풀리고 짝지어진 잔차가 완전상관이라 분산을 과소평가한다. 열모델
+    # 식별처럼 신뢰구간이 곧 결론인 작업에서는 결과를 뒤집을 수 있다.
+    #
+    # 1초인 근거: 노드의 발행 주기는 5초(SENSOR_PUBLISH_INTERVAL_MS)다.
+    # 1초 안에 같은 값이 또 들어왔다면 새 측정이 아니라 사본이다.
+    # 토픽 이름으로 거르지 않는 이유는 노드마다 토픽 구성이 달라서다
+    # (occ 노드는 thermoshift/occ/occ_01 처럼 형태가 아예 다르다).
+    ENV_DEDUP_WINDOW_SEC = 1.0
+
+    def _is_duplicate_env(self, device_id, topic, temp, hum, co2) -> bool:
+        signature = (temp, hum, co2)
+        now = time.monotonic()
+        previous = self._recent_env.get(device_id)
+        self._recent_env[device_id] = (now, signature)
+        if previous is None:
+            return False
+        elapsed = now - previous[0]
+        if previous[1] != signature or elapsed >= self.ENV_DEDUP_WINDOW_SEC:
+            return False
+        logger.debug(
+            "환경값 사본 무시 %s (%.0fms 전 같은 값)", topic, elapsed * 1000,
+        )
+        return True
 
     def process_message(self, topic: str, payload_str: str):
         if topic in self.PLAINTEXT_TOPICS:
@@ -70,7 +107,8 @@ class MQTTAdapter:
         hum = payload.get("humidity") if payload.get("humidity") is not None else payload.get("humidity_rh")
         co2 = payload.get("co2") if payload.get("co2") is not None else payload.get("co2_ppm")
         
-        if temp is not None or hum is not None or co2 is not None:
+        if (temp is not None or hum is not None or co2 is not None) \
+                and not self._is_duplicate_env(device_id, topic, temp, hum, co2):
             has_env = True
             env_data = EnvData(
                 device_id=device_id,
