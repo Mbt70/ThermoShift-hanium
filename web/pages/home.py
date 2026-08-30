@@ -13,6 +13,7 @@ if str(_REPOSITORY_ROOT) not in sys.path:
 
 from app.components.alert_store import alert_severity_counts
 from app.components.room_store import (
+    ai_judgment,
     comfort_index,
     environment_snapshot,
     list_rooms,
@@ -444,16 +445,22 @@ with main_col:
                         st.toast("예약 목록 페이지는 곧 제공될 예정이에요", icon="🛠️")
 
             with st.container(key="ts_dash_ai_card", border=True):
-                st.markdown(
-                    f'<p class="ts-dash-card-title">{_CHIP_ICON}AI 운영 설명 <span class="ts-dash-badge">LLM</span></p>',
-                    unsafe_allow_html=True,
-                )
                 flagged_rooms = [r for r in rooms if room_status(r) != "정상"]
                 notable_room = flagged_rooms[0] if flagged_rooms else rooms[0]
+                ai_result = None
                 if not notable_room.get("sensor_connected", True):
                     headline, subline = "센서 응답이 없어 제어를 보류했습니다", "센서 재연결이 필요해요"
                 else:
-                    headline, subline = system_judgment(notable_room)
+                    ai_result = ai_judgment(notable_room)
+                    if ai_result:
+                        headline, subline = ai_result
+                    else:
+                        headline, subline = system_judgment(notable_room)
+                badge_label = "LLM" if ai_result else "규칙 기반"
+                st.markdown(
+                    f'<p class="ts-dash-card-title">{_CHIP_ICON}AI 운영 설명 <span class="ts-dash-badge">{badge_label}</span></p>',
+                    unsafe_allow_html=True,
+                )
                 st.markdown(
                     f"""
                     <p class="ts-dash-judgment-headline">[{notable_room["name"]}] {headline}</p>

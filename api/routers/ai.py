@@ -1,4 +1,4 @@
-"""Claude 를 이용한 해설·진단·리포트.
+"""Gemini 를 이용한 해설·진단·리포트.
 
 게이트웨이가 남기는 것은 기계용 코드다(decision_type='off',
 reason='EMPTY_CONFIRMED | temp=24.53C ...'). 공간 관리자와 심사위원이
@@ -22,7 +22,7 @@ def _require_ai():
     if not ai.is_available():
         raise HTTPException(
             status_code=503,
-            detail="AI 기능이 설정되지 않았습니다 (ANTHROPIC_API_KEY 필요)",
+            detail="AI 기능이 설정되지 않았습니다 (GEMINI_API_KEY 필요)",
         )
 
 

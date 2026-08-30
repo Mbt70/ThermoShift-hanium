@@ -65,7 +65,7 @@ echo "4) 비밀 설정 파일"
 if [ ! -f "$ENV_FILE" ]; then
   sudo install -o thermo -g thermo -m 600 /dev/null "$ENV_FILE"
   echo "DB_PASSWORD=thermoshift1234" | sudo tee "$ENV_FILE" >/dev/null
-  echo "   $ENV_FILE 생성 — 비밀번호와 ANTHROPIC_API_KEY 를 여기에 넣으세요"
+  echo "   $ENV_FILE 생성 — 비밀번호와 GEMINI_API_KEY 를 여기에 넣으세요"
 fi
 
 echo "5) 서비스 등록"

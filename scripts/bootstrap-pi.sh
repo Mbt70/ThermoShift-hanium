@@ -93,11 +93,11 @@ fi
 
 # ---------------------------------------------------------------------
 say "4/4  $ENV_FILE 기록"
-# systemd 유닛들이 EnvironmentFile 로 읽는다. ANTHROPIC_API_KEY 를 넣으면
+# systemd 유닛들이 EnvironmentFile 로 읽는다. GEMINI_API_KEY 를 넣으면
 # api 의 AI 해설 기능이 켜진다 (키는 반드시 서버에만 둔다).
 KEEP_KEY=""
-if [ -f "$ENV_FILE" ] && grep -q '^ANTHROPIC_API_KEY=' "$ENV_FILE"; then
-  KEEP_KEY="$(grep '^ANTHROPIC_API_KEY=' "$ENV_FILE" | head -1)"
+if [ -f "$ENV_FILE" ] && grep -q '^GEMINI_API_KEY=' "$ENV_FILE"; then
+  KEEP_KEY="$(grep '^GEMINI_API_KEY=' "$ENV_FILE" | head -1)"
 fi
 
 install -o "$APP_USER" -g "$APP_USER" -m 600 /dev/null "$ENV_FILE"
