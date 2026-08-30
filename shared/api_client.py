@@ -31,6 +31,23 @@ class ApiError(Exception):
         self.message = message
 
 
+def _load_dotenv() -> None:
+    """로컬 실행(웹/앱을 그냥 파이썬으로 돌릴 때)엔 .env 를 읽어준다.
+
+    stlite/Pyodide 브라우저 환경엔 python-dotenv 도, 읽을 파일시스템도
+    없으므로 ImportError 는 조용히 넘어간다 - 그쪽은 애초에
+    app/api_config.json 경로로만 설정을 받는다.
+    """
+    try:
+        from dotenv import load_dotenv  # noqa: PLC0415
+    except ImportError:
+        return
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+
+_load_dotenv()
+
+
 def _resolve_base_url() -> str:
     # 127.0.0.1, not localhost: on Windows, resolving "localhost" through the
     # system resolver can take ~2 seconds per call (IPv6-then-IPv4 fallback) -

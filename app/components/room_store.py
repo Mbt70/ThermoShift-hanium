@@ -125,6 +125,35 @@ def system_judgment(room: dict) -> tuple[str, str]:
     return headline, subline
 
 
+def ai_judgment(room: dict) -> tuple[str, str] | None:
+    """게이트웨이의 최근 제어 판단을 Claude로 사람 문장으로 설명한다.
+
+    AI는 부가 기능이다 - 키가 없거나(503), 이 방에 판단 기록이 아직 없거나
+    (404), Claude 호출 자체가 실패해도 여기서 조용히 None 을 돌려주고
+    호출부가 system_judgment() 로 폴백해야 한다. 화면이 AI 때문에 죽으면
+    안 된다는 게 api/services/ai.py 자체의 설계 원칙이기도 하다.
+    """
+    try:
+        status = api_get("/ai/status")
+        if not status or not status.get("available"):
+            return None
+        decision = api_get(f"/rooms/{room['id']}/decisions/latest", ignore_404=True)
+        if decision is None:
+            return None
+        explanation = api_post(f"/ai/decisions/{decision['decision_id']}/explain")
+    except Exception:
+        return None
+
+    if not explanation or not explanation.get("headline") or not explanation.get("detail"):
+        return None
+
+    headline = explanation["headline"]
+    subline = explanation["detail"]
+    if explanation.get("recommendation"):
+        subline = f"{subline} {explanation['recommendation']}"
+    return headline, subline
+
+
 def trend_series(room: dict, points: int = 30) -> tuple[list[float], list[float]]:
     """Real temperature/CO2 history for the room's env sensor, most recent
     `points` minutes. Returns two empty lists if there's no env device or no

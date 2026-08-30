@@ -9,6 +9,44 @@ from api.db import get_conn
 
 router = APIRouter(tags=["control"])
 
+_DECISION_COLUMNS = (
+    "decision_id, room_id, estimate_id, schedule_id, control_mode, "
+    "decision_type, target_temp, reason, decided_at"
+)
+
+
+@router.get("/rooms/{room_id}/decisions/latest")
+def get_latest_decision(room_id: int):
+    """GET /rooms/{room_id}/decisions/latest
+
+    가장 최근 제어 판단(control_decisions) 한 건. AI 설명(POST
+    /ai/decisions/{id}/explain)에 넘길 decision_id 를 프론트가 알아내는
+    용도로 쓴다 - 그 외엔 아직 control_decisions 를 노출하는 엔드포인트가
+    없었다.
+
+    Response: {
+      "decision_id": int, "room_id": int, "estimate_id": int | null,
+      "schedule_id": int | null,
+      "control_mode": "monitoring" | "manual" | "rule" | "mpc",
+      "decision_type": "precool" | "maintain" | "setback" | "ventilate" | "off",
+      "target_temp": float | null, "reason": str | null, "decided_at": str
+    }
+
+    404 if the room has no recorded decision yet (게이트웨이가 아직 한 번도
+    안 돌았거나, 방금 막 등록된 공간인 경우).
+    """
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"SELECT {_DECISION_COLUMNS} FROM control_decisions"
+            " WHERE room_id = %s ORDER BY decided_at DESC LIMIT 1",
+            (room_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no control decision recorded for this room yet")
+    return row
+
+
 _COLUMNS = (
     "command_id, room_id, device_id, decision_id, schedule_id, issued_by, "
     "command_type, control_mode, target_temp, command_status, issued_at, "

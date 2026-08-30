@@ -1,10 +1,16 @@
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
 import psycopg
+from dotenv import load_dotenv
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
+
+# .env 는 저장소 루트에 있다 (api/ 가 아니라). 파일이 없어도(배포 환경처럼
+# 진짜 환경변수로 주는 경우) load_dotenv 는 조용히 넘어간다.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
