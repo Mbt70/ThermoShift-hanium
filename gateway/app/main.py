@@ -6,6 +6,8 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
+import psycopg
+
 _REPOSITORY_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_REPOSITORY_ROOT) not in sys.path:
     # ml/ 은 저장소 루트에 있다. 게이트웨이는 gateway/ 를 작업 디렉터리로
@@ -87,9 +89,19 @@ class EdgeNode:
 
         API는 control_commands 에 pending 으로 넣기만 하고, 실제 IR 송신은
         여기서만 일어난다. 제어 명령이 두 곳에서 나가지 않도록 하기 위해서다.
+
+        room_id 조회·명령 큐 조회 둘 다 읽기라 로컬 버퍼 대상이 아니다.
+        DB(EC2)가 안 보이면 이번 주기는 그냥 건너뛴다 — 여기서 예외를
+        올리면 run_loop 의 나머지(재실 추정·제어 판단, 이건 버퍼링됨)까지
+        통째로 스킵되므로 여기서 막는다.
         """
-        room_id = self.storage.resolve_room_id()
-        for command in self.storage.fetch_pending_commands(room_id):
+        try:
+            room_id = self.storage.resolve_room_id()
+            commands = self.storage.fetch_pending_commands(room_id)
+        except psycopg.OperationalError:
+            logger.warning("DB 연결 실패 - 수동 명령 큐 확인 건너뜀")
+            return
+        for command in commands:
             now = datetime.now(timezone.utc).isoformat()
             action = command["action"]
 
@@ -130,11 +142,15 @@ class EdgeNode:
                 features = self.fe.compute_features()
                 state, probs, reasons = self.hmm.update(features)
                 decision = self.controller.decide(
-                    features, 
-                    state, 
+                    features,
+                    state,
                     {"empty": probs[0], "transition": probs[1], "occupied": probs[2]}
                 )
                 logger.info(f"Decision: {decision}")
+                # DB(EC2)가 끊겨 있던 동안 로컬 버퍼(gateway/data/buffer.sqlite3)에
+                # 쌓인 게 있으면 매 주기 재전송을 시도한다. 버퍼가 비어 있으면
+                # SQLite count(*) 한 번뿐이라 거의 비용이 없다.
+                self.storage.flush_pending()
             except Exception as e:
                 logger.error(f"Error in control loop: {e}", exc_info=True)
             time.sleep(interval)

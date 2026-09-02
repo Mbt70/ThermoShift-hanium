@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+import psycopg
+
 _GATEWAY_APP_DIR = Path(__file__).resolve().parent
 _REPOSITORY_ROOT = _GATEWAY_APP_DIR.parent.parent
 if str(_REPOSITORY_ROOT) not in sys.path:
@@ -94,7 +96,13 @@ class HVACController:
     def _schedule_window(self, room_id: Optional[int], now: datetime) -> Optional[ScheduleWindow]:
         if room_id is None:
             return None
-        row = self.storage.get_upcoming_schedule(room_id, now)
+        try:
+            row = self.storage.get_upcoming_schedule(room_id, now)
+        except psycopg.OperationalError:
+            # DB 조회라 버퍼링 대상이 아니다(쓰기가 아니라 읽기). 오프라인이면
+            # 예약(선냉방) 없이 판단한다 - 판단 자체를 못 내리는 것보다 낫다.
+            logger.warning("DB 연결 실패 - 예약 조회 건너뜀, 이번 주기는 선냉방 없이 판단")
+            return None
         if row is None:
             return None
         # schedules.start_time/end_time 은 timezone 정보가 없는 time 컬럼이다.
@@ -122,7 +130,16 @@ class HVACController:
 
         fe = get_feature_engine()
         locked_out = self.ir.is_locked_out()
-        room_id = self.storage.resolve_room_id()
+        try:
+            room_id = self.storage.resolve_room_id()
+        except psycopg.OperationalError:
+            # config.app.room_id 가 비어 있어 DB 조회로 공간을 찾아야 하는데
+            # 그 DB 조회 자체가 실패한 경우. room_id=None 으로 진행하면
+            # insert_occupancy_estimate/insert_control_decision 이 내부에서
+            # resolve_room_id() 를 다시 시도하다 똑같이 실패해 로컬 버퍼에
+            # 쌓인다 - 판단은 계속 내려가고, 기록만 나중에 재전송된다.
+            logger.warning("DB 연결 실패 - 공간(room_id) 조회 실패, room_id=None 으로 진행")
+            room_id = None
 
         policy_input = PolicyInput(
             now=now,

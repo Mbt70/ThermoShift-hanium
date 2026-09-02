@@ -71,6 +71,15 @@ PostgreSQL. api 와 같은 데이터베이스를 봅니다. 접속 정보는 환
 허용해서 `env_01` 은 `ENV01` 로 정규화되고, 원래 이름은 `device_code` 에
 남습니다.
 
+### 오프라인 버퍼
+
+PostgreSQL은 EC2에 있고 게이트웨이(파이)는 Tailscale 사설망 너머로
+접속합니다. 그 구간이 끊기면 쓰기 메서드(`storage.py`의 insert_*)는
+예외 대신 `gateway/app/local_buffer.py`(SQLite, `gateway/data/buffer.sqlite3`)에
+쌓아 두고, 연결이 돌아오면 매 제어 주기 `storage.flush_pending()`이
+순서대로 다시 밀어 넣습니다. 자세한 배경은
+[`docs/decision-log.md`](../docs/decision-log.md) 2026-09-02 항목 참고.
+
 ## CLI 도구
 ```bash
 cd gateway && ../.venv/bin/python -m app.cli status
