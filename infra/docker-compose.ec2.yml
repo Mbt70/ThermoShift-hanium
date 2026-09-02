@@ -1,0 +1,57 @@
+# EC2 배포용 Compose 파일 — PostgreSQL + FastAPI 를 함께 띄운다.
+#
+#   docker compose -f infra/docker-compose.ec2.yml --env-file .env up -d --build
+#
+# 저장소 루트에서 실행할 것. --env-file 을 명시하는 이유는 Compose 의 자동
+# .env 탐색 경로가 버전마다 달라 혼동이 있기 때문 — 항상 저장소 루트의
+# .env 를 쓰도록 고정한다. 자세한 절차는 docs/deployment.md 참고.
+#
+# infra/docker-compose.yml(로컬 개발용)과의 차이:
+#   - postgres 비밀번호 등을 .env 에서 읽음 (하드코딩 제거)
+#   - postgres 의 5432 포트를 호스트에 노출하지 않음 (같은 네트워크에서
+#     서비스명 "postgres" 로만 접근 — 컨테이너 밖에서 DB에 직접 붙을 일 없음)
+#   - api 서비스 추가 (로컬은 .venv 에서 직접 uvicorn 실행)
+#   - db/ 전체가 아니라 스키마 파일(001~004)만 초기화 스크립트로 마운트함.
+#     로컬 개발용 파일은 db/seed.sql(더미 사용자·공간·센서값)도 같은 폴더에
+#     같이 두고 있어서, 그걸 그대로 마운트하면 운영 DB에도 더미 데이터가
+#     최초 기동 때 자동으로 들어간다 — 여기서는 파일을 하나씩 지정해 뺐다.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: thermoshift-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../db/001_types.sql:/docker-entrypoint-initdb.d/001_types.sql:ro
+      - ../db/002_tables.sql:/docker-entrypoint-initdb.d/002_tables.sql:ro
+      - ../db/003_indexs.sql:/docker-entrypoint-initdb.d/003_indexs.sql:ro
+      - ../db/004_gateway.sql:/docker-entrypoint-initdb.d/004_gateway.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: thermoshift-api
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
