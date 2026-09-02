@@ -1,4 +1,8 @@
 #!/bin/bash
+# [미사용 — 2026-09-02] API·DB를 EC2로 직접 옮기는 방식(B안)으로 전환하며
+# 이 리버스 SSH 터널(파이 API → EC2)은 더 이상 쓰지 않는다. 사유는
+# docs/decision-log.md 2026-09-02 항목 참고. 삭제하지 않고 보존만 함.
+#
 # 파이에서 실행. EC2로 나가는 리버스 SSH 터널을 만든다.
 #
 #   bash infra/tunnel/setup.sh <EC2-주소> [원격사용자]

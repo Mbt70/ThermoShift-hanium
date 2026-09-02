@@ -1,3 +1,6 @@
+# [미사용 — 2026-09-02] API·DB를 EC2로 직접 옮기는 방식(B안)으로 전환하며
+# 더 이상 쓰지 않는다. 사유는 docs/decision-log.md 2026-09-02 항목 참고.
+# 삭제하지 않고 보존만 함.
 [Unit]
 Description=ThermoShift 리버스 SSH 터널 (파이 :8000 → EC2 :18100)
 After=network-online.target
