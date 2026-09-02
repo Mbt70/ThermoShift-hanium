@@ -32,6 +32,7 @@ pwa/
 
 # Data / artifacts
 .data/
+gateway/data/
 *.csv
 *.xlsx
 *.parquet

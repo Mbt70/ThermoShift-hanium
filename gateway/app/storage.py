@@ -6,9 +6,16 @@ api/db.py 와 같은 데이터베이스를 본다. 스키마는 db/001~003 이 �
 
 MQTT 콜백 스레드에서 호출되므로 커넥션 풀을 쓴다. 요청마다 새로 접속하면
 핸드셰이크 비용이 그대로 지연이 된다.
+
+EC2 이전 이후 이 프로세스(파이)와 PostgreSQL(EC2)은 Tailscale 사설망을
+넘어 통신한다 — 로컬 접속일 때보다 끊길 일이 실질적으로 생겼다는 뜻이다.
+쓰기 계열 메서드(insert_*)는 연결 실패 시 예외를 올리는 대신
+local_buffer.LocalBuffer 에 쌓아 두고, flush_pending() 이 연결이 돌아오면
+순서대로 재전송한다.
 """
 
 import json
+import logging
 import os
 import re
 import threading
@@ -22,6 +29,9 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from app.config import get_config
+from app.local_buffer import LocalBuffer
+
+logger = logging.getLogger(__name__)
 
 # /etc/thermoshift.env or local .env
 load_dotenv("/etc/thermoshift.env")
@@ -89,9 +99,59 @@ class Storage:
         # 조회하면 5초 주기 × 노드 수만큼 불필요한 왕복이 생긴다.
         self._device_ids: dict[str, int] = {}
         self._lock = threading.Lock()
+        self._buffer = LocalBuffer()
 
     def close(self) -> None:
         self._pool.close()
+
+    # ------------------------------------------------------------------
+    # 오프라인 버퍼
+    # ------------------------------------------------------------------
+
+    def _write_or_buffer(self, method_name: str, kwargs: dict, write):
+        """write() 를 실행하고, DB 연결 실패면 예외를 삼키고 로컬 버퍼에
+        쌓는다. kwargs 는 나중에 flush_pending() 이 같은 이름의 public
+        메서드를 **kwargs 로 다시 부를 때 쓴다 — room_id 해석처럼 쓰기 전에
+        필요한 조회도 write() 안에서 다시 일어나므로 재전송 시에도 그대로
+        재현된다."""
+        try:
+            return write()
+        except psycopg.OperationalError:
+            self._buffer.enqueue(method_name, kwargs)
+            logger.warning(
+                "DB 연결 실패 - %s 를 로컬 버퍼에 저장함 (쌓인 건수 %d)",
+                method_name, self._buffer.count(),
+            )
+            return None
+
+    def flush_pending(self, limit: int = 200) -> int:
+        """오프라인 동안 쌓인 로컬 버퍼를 순서대로 재전송한다.
+
+        재전송한 항목이 또 실패하면(아직 오프라인) 그 지점에서 멈추고
+        나머지는 버퍼에 그대로 둔다 — 순서를 지키기 위해서다. 뒤 항목들도
+        어차피 같은 이유로 실패할 것이므로 굳이 다 시도하지 않는다.
+        main.py 의 run_loop 이 매 주기 호출한다.
+        """
+        flushed = 0
+        for row_id, method_name, kwargs in self._buffer.pending(limit=limit):
+            before = self._buffer.count()
+            self._buffer.discard(row_id)
+            method = getattr(self, method_name, None)
+            if method is None:
+                logger.error("로컬 버퍼에 알 수 없는 메서드 %s 가 있어 버림", method_name)
+                continue
+            method(**kwargs)
+            if self._buffer.count() >= before:
+                # discard 로 하나 줄었어야 하는데 그대로거나 늘었다 = 방금
+                # 재시도가 다시 버퍼링됐다는 뜻(여전히 오프라인).
+                break
+            flushed += 1
+        if flushed:
+            logger.info("로컬 버퍼 %d건 재전송 완료 (남음 %d건)", flushed, self._buffer.count())
+        return flushed
+
+    def pending_count(self) -> int:
+        return self._buffer.count()
 
     # ------------------------------------------------------------------
     # 공간 · 디바이스
@@ -142,47 +202,57 @@ class Storage:
             )
             return cur.fetchone()["room_id"]
 
-    def register_device(self, device_code: str, device_type: str, timestamp: str) -> int:
+    def register_device(self, device_code: str, device_type: str, timestamp: str) -> Optional[int]:
         """처음 보는 노드를 미배정 공간에 등록하고 last_seen_at 을 갱신한다.
 
         사용자가 프론트에서 실제 공간으로 옮기면 room_id 가 바뀌지만
         device_uid 는 그대로라 캐시가 계속 유효하다.
+
+        호출부(data_quality.py)가 반환값을 쓰지 않고 매 메시지마다 다시
+        부르는 등록성 호출이라, DB 연결이 끊겨 있으면 버퍼링 없이 그냥
+        건너뛴다 — 다음 메시지에서 자연히 재시도된다. 여기서 예외를 그대로
+        올리면 뒤이어 나오는 insert_sensor_reading 호출(진짜 측정값, 이건
+        버퍼링됨)까지 같이 못 나가므로 삼킨다.
         """
         cached = self._device_ids.get(device_code)
-        if cached is not None:
-            with self._pool.connection() as conn, conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE devices SET last_seen_at = %s, comm_status = 'normal'"
-                    " WHERE device_id = %s",
-                    (timestamp, cached),
-                )
-            return cached
-
-        uid = normalize_uid(device_code)
-        with self._lock, self._pool.connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT device_id FROM devices WHERE device_uid = %s", (uid,))
-                row = cur.fetchone()
-                if row is None:
-                    room_id = self._unassigned_room_id(conn)
-                    cur.execute(
-                        "INSERT INTO devices"
-                        " (room_id, device_code, device_uid, device_type, last_seen_at)"
-                        " VALUES (%s, %s, %s, %s, %s)"
-                        " ON CONFLICT (device_uid) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at"
-                        " RETURNING device_id",
-                        (room_id, device_code, uid, device_type, timestamp),
-                    )
-                    row = cur.fetchone()
-                else:
+        try:
+            if cached is not None:
+                with self._pool.connection() as conn, conn.cursor() as cur:
                     cur.execute(
                         "UPDATE devices SET last_seen_at = %s, comm_status = 'normal'"
                         " WHERE device_id = %s",
-                        (timestamp, row["device_id"]),
+                        (timestamp, cached),
                     )
-            device_id = row["device_id"]
-            self._device_ids[device_code] = device_id
-            return device_id
+                return cached
+
+            uid = normalize_uid(device_code)
+            with self._lock, self._pool.connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT device_id FROM devices WHERE device_uid = %s", (uid,))
+                    row = cur.fetchone()
+                    if row is None:
+                        room_id = self._unassigned_room_id(conn)
+                        cur.execute(
+                            "INSERT INTO devices"
+                            " (room_id, device_code, device_uid, device_type, last_seen_at)"
+                            " VALUES (%s, %s, %s, %s, %s)"
+                            " ON CONFLICT (device_uid) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at"
+                            " RETURNING device_id",
+                            (room_id, device_code, uid, device_type, timestamp),
+                        )
+                        row = cur.fetchone()
+                    else:
+                        cur.execute(
+                            "UPDATE devices SET last_seen_at = %s, comm_status = 'normal'"
+                            " WHERE device_id = %s",
+                            (timestamp, row["device_id"]),
+                        )
+                device_id = row["device_id"]
+                self._device_ids[device_code] = device_id
+                return device_id
+        except psycopg.OperationalError:
+            logger.warning("DB 연결 실패 - 디바이스 등록(%s) 건너뜀, 다음 메시지에서 재시도", device_code)
+            return None
 
     def _device_id_of(self, device_code: str) -> Optional[int]:
         cached = self._device_ids.get(device_code)
@@ -208,37 +278,46 @@ class Storage:
         main 스키마는 온·습도·CO2 를 sensor_env 의 한 행에 함께 담는다.
         게이트웨이는 metric 별로 따로 부르므로, 같은 (device_id, measured_at)
         에 대해 UPSERT 로 컬럼을 채워 나간다.
-        """
-        device_id = self._device_id_of(device_code)
-        if device_id is None:
-            return
-        flag = "ok" if quality.upper() == "OK" else "error"
 
-        with self._pool.connection() as conn, conn.cursor() as cur:
-            if metric in _ENV_COLUMNS:
-                column = _ENV_COLUMNS[metric]
-                flag_col = "temp_flag" if column == "temperature" else f"{column}_flag"
-                cur.execute(
-                    f"INSERT INTO sensor_env (device_id, {column}, {flag_col},"
-                    " measured_at, received_at) VALUES (%s, %s, %s, %s, now())"
-                    " ON CONFLICT (device_id, measured_at) DO UPDATE"
-                    f" SET {column} = EXCLUDED.{column}, {flag_col} = EXCLUDED.{flag_col}",
-                    (device_id, value, flag, timestamp),
-                )
-            elif metric == "pir":
-                cur.execute(
-                    "INSERT INTO sensor_pir (device_id, motion, flag, measured_at, received_at)"
-                    " VALUES (%s, %s, %s, %s, now())"
-                    " ON CONFLICT (device_id, measured_at) DO NOTHING",
-                    (device_id, value > 0, flag, timestamp),
-                )
-            elif metric == "door":
-                cur.execute(
-                    "INSERT INTO sensor_door (device_id, door_state, flag, measured_at, received_at)"
-                    " VALUES (%s, %s, %s, %s, now())"
-                    " ON CONFLICT (device_id, measured_at) DO NOTHING",
-                    (device_id, "open" if value > 0 else "closed", flag, timestamp),
-                )
+        DB 연결이 끊겨 있으면 로컬 버퍼에 쌓아 두고 조용히 반환한다
+        (flush_pending 참고).
+        """
+        kwargs = dict(timestamp=timestamp, device_code=device_code, metric=metric,
+                      value=value, quality=quality, raw_payload=raw_payload)
+
+        def _write():
+            device_id = self._device_id_of(device_code)
+            if device_id is None:
+                return
+            flag = "ok" if quality.upper() == "OK" else "error"
+
+            with self._pool.connection() as conn, conn.cursor() as cur:
+                if metric in _ENV_COLUMNS:
+                    column = _ENV_COLUMNS[metric]
+                    flag_col = "temp_flag" if column == "temperature" else f"{column}_flag"
+                    cur.execute(
+                        f"INSERT INTO sensor_env (device_id, {column}, {flag_col},"
+                        " measured_at, received_at) VALUES (%s, %s, %s, %s, now())"
+                        " ON CONFLICT (device_id, measured_at) DO UPDATE"
+                        f" SET {column} = EXCLUDED.{column}, {flag_col} = EXCLUDED.{flag_col}",
+                        (device_id, value, flag, timestamp),
+                    )
+                elif metric == "pir":
+                    cur.execute(
+                        "INSERT INTO sensor_pir (device_id, motion, flag, measured_at, received_at)"
+                        " VALUES (%s, %s, %s, %s, now())"
+                        " ON CONFLICT (device_id, measured_at) DO NOTHING",
+                        (device_id, value > 0, flag, timestamp),
+                    )
+                elif metric == "door":
+                    cur.execute(
+                        "INSERT INTO sensor_door (device_id, door_state, flag, measured_at, received_at)"
+                        " VALUES (%s, %s, %s, %s, now())"
+                        " ON CONFLICT (device_id, measured_at) DO NOTHING",
+                        (device_id, "open" if value > 0 else "closed", flag, timestamp),
+                    )
+
+        self._write_or_buffer("insert_sensor_reading", kwargs, _write)
 
     # ------------------------------------------------------------------
     # 재실 추정 · 제어 판단
@@ -251,31 +330,45 @@ class Storage:
 
         main 스키마는 확률을 하나만 들고 있으므로 채택된 상태의 확률을 쓰고,
         세 상태의 분포는 evidence_summary 에 함께 남겨 근거를 잃지 않는다.
-        """
-        room_id = room_id if room_id is not None else self.resolve_room_id()
-        if room_id is None:
-            return None
-        probability = {"EMPTY": p_empty, "TRANSITION": p_transition,
-                       "OCCUPIED": p_occupied}.get(state.upper(), 0.0)
-        evidence = "; ".join(reasons)
-        summary = (
-            f"p(empty)={p_empty:.3f} p(transition)={p_transition:.3f} "
-            f"p(occupied)={p_occupied:.3f} quality={quality}"
-        )
-        if evidence:
-            summary = f"{summary} | {evidence}"
 
-        with self._pool.connection() as conn, conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO occupancy_estimates"
-                " (room_id, occupancy_state, probability, evidence_summary, estimated_at)"
-                " VALUES (%s, %s, %s, %s, %s)"
-                " ON CONFLICT (room_id, estimated_at) DO NOTHING"
-                " RETURNING estimate_id",
-                (room_id, state.lower(), round(probability, 3), summary[:500], timestamp),
+        DB 연결이 끊겨 있으면 estimate_id 대신 None 을 돌려주고(호출부인
+        occupancy_hmm.py 는 이미 None 을 허용한다) 로컬 버퍼에 쌓는다.
+        재전송돼 성사되면 새 estimate_id 가 생기는데, 같은 주기에 함께
+        버퍼링됐을 control_decisions.estimate_id 는 그 값을 모른 채로
+        이미 NULL 로 나갔을 수 있다 — nullable 컬럼이라 연결만 못 할 뿐
+        판단 자체는 유실되지 않는다.
+        """
+        kwargs = dict(timestamp=timestamp, p_empty=p_empty, p_transition=p_transition,
+                      p_occupied=p_occupied, state=state, quality=quality,
+                      reasons=reasons, room_id=room_id)
+
+        def _write():
+            resolved_room_id = room_id if room_id is not None else self.resolve_room_id()
+            if resolved_room_id is None:
+                return None
+            probability = {"EMPTY": p_empty, "TRANSITION": p_transition,
+                           "OCCUPIED": p_occupied}.get(state.upper(), 0.0)
+            evidence = "; ".join(reasons)
+            summary = (
+                f"p(empty)={p_empty:.3f} p(transition)={p_transition:.3f} "
+                f"p(occupied)={p_occupied:.3f} quality={quality}"
             )
-            row = cur.fetchone()
-        return row["estimate_id"] if row else None
+            if evidence:
+                summary = f"{summary} | {evidence}"
+
+            with self._pool.connection() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO occupancy_estimates"
+                    " (room_id, occupancy_state, probability, evidence_summary, estimated_at)"
+                    " VALUES (%s, %s, %s, %s, %s)"
+                    " ON CONFLICT (room_id, estimated_at) DO NOTHING"
+                    " RETURNING estimate_id",
+                    (resolved_room_id, state.lower(), round(probability, 3), summary[:500], timestamp),
+                )
+                row = cur.fetchone()
+            return row["estimate_id"] if row else None
+
+        return self._write_or_buffer("insert_occupancy_estimate", kwargs, _write)
 
     def insert_control_decision(self, timestamp: str, control_mode: str, proposed_action: str,
                                 executed: bool, occupancy_state: str,
@@ -296,38 +389,50 @@ class Storage:
         구분 안 되는 판단 유형과, 정수로 반올림되지 않은 정확한 목표 온도를
         보존하기 위함이다. 안 주면 예전처럼 액션 이름에서 추정한다.
         """
-        room_id = room_id if room_id is not None else self.resolve_room_id()
-        if room_id is None:
-            return None
+        kwargs = dict(timestamp=timestamp, control_mode=control_mode,
+                      proposed_action=proposed_action, executed=executed,
+                      occupancy_state=occupancy_state, temperature_c=temperature_c,
+                      co2_ppm=co2_ppm, reason_codes=reason_codes, room_id=room_id,
+                      estimate_id=estimate_id, decision_type=decision_type,
+                      target_temp=target_temp)
 
-        observed = []
-        if temperature_c is not None:
-            observed.append(f"temp={temperature_c:.2f}C")
-        if co2_ppm is not None:
-            observed.append(f"co2={co2_ppm:.0f}ppm")
-        observed.append(f"occupancy={occupancy_state}")
-        observed.append(f"executed={'yes' if executed else 'no'}")
-        reason = f"{','.join(reason_codes)} | {' '.join(observed)}"
+        def _write():
+            resolved_room_id = room_id if room_id is not None else self.resolve_room_id()
+            if resolved_room_id is None:
+                return None
 
-        if decision_type is None:
-            # CO2 근거로 내려진 판단은 환기로 분류한다. 그 외에는 액션 이름을 따른다.
-            if any("CO2" in code or "VENT" in code for code in reason_codes):
-                decision_type = "ventilate"
-            else:
-                decision_type = _DECISION_TYPES.get(proposed_action, "maintain")
+            observed = []
+            if temperature_c is not None:
+                observed.append(f"temp={temperature_c:.2f}C")
+            if co2_ppm is not None:
+                observed.append(f"co2={co2_ppm:.0f}ppm")
+            observed.append(f"occupancy={occupancy_state}")
+            observed.append(f"executed={'yes' if executed else 'no'}")
+            reason = f"{','.join(reason_codes)} | {' '.join(observed)}"
 
-        if target_temp is None:
-            target_temp = _target_temp_of(proposed_action)
+            resolved_decision_type = decision_type
+            if resolved_decision_type is None:
+                # CO2 근거로 내려진 판단은 환기로 분류한다. 그 외에는 액션 이름을 따른다.
+                if any("CO2" in code or "VENT" in code for code in reason_codes):
+                    resolved_decision_type = "ventilate"
+                else:
+                    resolved_decision_type = _DECISION_TYPES.get(proposed_action, "maintain")
 
-        with self._pool.connection() as conn, conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO control_decisions"
-                " (room_id, estimate_id, control_mode, decision_type, target_temp, reason, decided_at)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING decision_id",
-                (room_id, estimate_id, _CONTROL_MODES.get(control_mode, "monitoring"),
-                 decision_type, target_temp, reason, timestamp),
-            )
-            return cur.fetchone()["decision_id"]
+            resolved_target_temp = target_temp
+            if resolved_target_temp is None:
+                resolved_target_temp = _target_temp_of(proposed_action)
+
+            with self._pool.connection() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO control_decisions"
+                    " (room_id, estimate_id, control_mode, decision_type, target_temp, reason, decided_at)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING decision_id",
+                    (resolved_room_id, estimate_id, _CONTROL_MODES.get(control_mode, "monitoring"),
+                     resolved_decision_type, resolved_target_temp, reason, timestamp),
+                )
+                return cur.fetchone()["decision_id"]
+
+        return self._write_or_buffer("insert_control_decision", kwargs, _write)
 
     def get_upcoming_schedule(self, room_id: int, now: datetime) -> Optional[dict]:
         """오늘 아직 안 끝난 예약 중 가장 빠른 것 하나.
