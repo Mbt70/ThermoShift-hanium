@@ -12,7 +12,6 @@ if str(_REPOSITORY_ROOT) not in sys.path:
 
 from app.components.alert_store import alert_severity_counts
 from app.components.room_store import (
-    ai_judgment,
     environment_snapshot,
     list_rooms,
     room_status,
@@ -192,7 +191,11 @@ with sidebar_col:
     render_sidebar("dashboard")
 
 with main_col:
-    @st.fragment(run_every=5)
+    # 센서는 약 30초 주기로 들어온다. 5초마다 같은 데이터를 다시 그리면
+    # Streamlit fragment가 모든 요소를 지웠다가 그리는 횟수만 늘어 화면이
+    # 흰색으로 번쩍인다. 10초 갱신으로 지연은 유지하면서 불필요한 redraw를
+    # 절반으로 줄인다.
+    @st.fragment(run_every="10s")
     def render_live_dashboard():
         rooms = list_rooms(current_user_id())
 
@@ -402,16 +405,15 @@ with main_col:
                 candidates = connected_rooms if connected_rooms else rooms
                 flagged_rooms = [r for r in candidates if room_status(r) != "정상"]
                 notable_room = flagged_rooms[0] if flagged_rooms else candidates[0]
-                ai_result = None
                 if not notable_room.get("sensor_connected", True):
                     headline, subline = "센서 응답이 없어 제어를 보류했습니다", "센서 재연결이 필요해요"
                 else:
-                    ai_result = ai_judgment(notable_room)
-                    if ai_result:
-                        headline, subline = ai_result
-                    else:
-                        headline, subline = system_judgment(notable_room)
-                badge_label = "LLM" if ai_result else "규칙 기반"
+                    # 자동 갱신 경로에서 생성형 AI를 동기 호출하면 새 제어
+                    # decision마다 최대 25초 동안 fragment 전체가 비어 보인다.
+                    # 라이브 화면은 즉시 계산되는 설명만 쓰고 LLM 해설은
+                    # 사용자가 요청하는 상세 화면에서만 실행한다.
+                    headline, subline = system_judgment(notable_room)
+                badge_label = "실시간 규칙"
                 st.markdown(
                     f'<p class="ts-dash-card-title">{_CHIP_ICON}AI 운영 설명 <span class="ts-dash-badge">{badge_label}</span></p>',
                     unsafe_allow_html=True,

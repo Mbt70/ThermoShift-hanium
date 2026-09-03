@@ -337,6 +337,21 @@
   flex-direction: column !important;
 }
 
+/* fragment rerun 때 내부 요소는 Streamlit 사양상 지웠다가 다시 그려진다.
+   라이브 본문과 차트가 잠깐 없어져도 흰 바탕이 드러나지 않도록 fragment
+   자체에 페이지 배경과 최소 높이를 유지한다. */
+[data-testid="stMainBlockContainer"]:has(.st-key-ts_dash_sidebar) [data-testid="stFragment"] {
+  min-height: 240px;
+  background: var(--bg);
+  contain: layout paint;
+}
+
+/* 자동 fragment 갱신은 정상 동작이므로 우측 상단의 running 상태표시가
+   매번 깜박이지 않게 한다. 오류 메시지는 숨기지 않는다. */
+[data-testid="stStatusWidget"] {
+  visibility: hidden;
+}
+
 /* Stretch the inner flex column to the full column height so the KPI
    summary card (last child, given margin-top:auto in home.css) can be
    pinned flush to the bottom of the viewport instead of just trailing
@@ -534,4 +549,3 @@
   font-weight: var(--font-weight-medium);
   line-height: 1.4;
 }
-

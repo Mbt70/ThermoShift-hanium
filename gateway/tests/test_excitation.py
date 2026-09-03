@@ -12,6 +12,7 @@ from app.excitation import (
     ExcitationPlan,
     check_prbs_design,
     maximum_length_sequence,
+    pilot_20min_plan,
     prbs_plan,
     step_calibration_plan,
 )
@@ -167,6 +168,12 @@ def test_0에서_시작해_0으로_끝난다():
     plan = compact_calibration_plan()
     assert plan.segments[0][0] == 0
     assert plan.segments[-1][0] == 0
+
+
+def test_20분_파일럿은_안전한_히터_구간만_쓴다():
+    plan = pilot_20min_plan()
+    assert plan.total_sec == 20 * 60
+    assert plan.segments == ((0, 180.0), (35, 300.0), (0, 720.0))
 
 
 def test_가열_구간이_하나뿐이다():

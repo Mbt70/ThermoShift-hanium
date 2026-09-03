@@ -142,6 +142,7 @@ def force_off(execute: bool):
 
 
 PLANS = {
+    "pilot20": ("pilot_20min_plan", "20분 파일럿 — 열·문·냉각 입력 정렬 확인"),
     "calib": ("compact_calibration_plan", "45분 교정 — c(히터 감도)와 d(표류) 확정"),
     "prbs": ("prbs_plan", "PRBS 5.2시간 — 서너 시간을 낼 수 있을 때만"),
 }
@@ -198,6 +199,11 @@ def experiment_start(plan_key: str, note=None):
     for duty, duration in plan.segments:
         print(f"    +{cursor/60:5.0f}분  duty {duty:3d}%  ({duration/60:.0f}분)")
         cursor += duration
+    if plan_key == "pilot20":
+        print("  수동/액추에이터 이벤트:")
+        print("    +11분  문 열기 → +12분 문 닫기")
+        print("    +15분  펠티어 ON → +18분 펠티어 OFF (운영자 자동 진행)")
+        print("  주의: 모델 학습 성과가 아니라 데이터 경로 검증용 PILOT run입니다.")
 
 
 def experiment_status():

@@ -110,7 +110,7 @@ def render_topbar(title: str, *, alert_count: int = 0) -> None:
             <h1 class="ts-dash-topbar-title">{title}</h1>
             <span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; color:#3fae66; background:rgba(63,174,102,0.1); padding:3px 8px; border-radius:12px;">
               <span style="width:7px; height:7px; background:#3fae66; border-radius:50%; display:inline-block;"></span>
-              실시간 연동 중 (5초)
+              실시간 연동 중 (10초)
             </span>
           </div>
           <div class="ts-dash-topbar-actions">

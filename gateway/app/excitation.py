@@ -289,3 +289,24 @@ def compact_calibration_plan(
         ),
         description="45분 교정 — c 와 d 확정, a 는 넓은 구간으로",
     )
+
+
+def pilot_20min_plan() -> ExcitationPlan:
+    """PINN/RC 파이프라인 점검용 20분 파일럿 가진.
+
+    이 길이로 시정수나 PINN을 확정하지 않는다. 히터 상승·자연감쇠·문 개방·
+    펠티어 냉각의 타임스탬프와 센서 응답이 정렬되는지 확인하는 run이다.
+    문은 11~12분에 사람이 열고, 펠티어는 15~18분에 운영자가 별도 명령한다.
+    """
+    return ExcitationPlan(
+        name="pilot_20min",
+        segments=(
+            (0, _round_to_pwm(180.0)),    # 0~3분: 폐문 안정화
+            (35, _round_to_pwm(300.0)),   # 3~8분: 3.5W 상당 열 step
+            (0, _round_to_pwm(720.0)),    # 8~20분: 감쇠/문/냉각 구간
+        ),
+        description=(
+            "20분 파일럿 — 0~3 안정화, 3~8 히터35%, 8~11 감쇠, "
+            "11~12 문 열림, 12~15 회복, 15~18 펠티어ON, 18~20 OFF"
+        ),
+    )
