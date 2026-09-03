@@ -42,6 +42,11 @@ min Σ [ λE·E(k) + λC·Poccupied(k)·ξ(k)^2 + λS·|Δu(k)| ]
 않는다. 새 라벨·hold-out 검증을 통과한 뒤 `use_learned_params`를 명시적으로
 활성화한다.
 
+20분 `pilot20` 시나리오는 히터·문·펠티어 이벤트와 센서 타임스탬프가
+정렬되는지만 확인한다. 시정수 식별이나 PINN 학습용 최종 데이터로 사용하지
+않는다. 종료 후 `python -m ml.export_experiment <run_id>`로 원본 CSV,
+실제 이벤트, phase별 기울기와 제한사항이 포함된 manifest를 내보낸다.
+
 ## 주장 가능 범위
 
 ### 지금 코드와 장치로 주장 가능

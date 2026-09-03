@@ -302,11 +302,11 @@ def pilot_20min_plan() -> ExcitationPlan:
         name="pilot_20min",
         segments=(
             (0, _round_to_pwm(180.0)),    # 0~3분: 폐문 안정화
-            (35, _round_to_pwm(300.0)),   # 3~8분: 3.5W 상당 열 step
+            (100, _round_to_pwm(300.0)),  # 3~8분: binary 히터 ON
             (0, _round_to_pwm(720.0)),    # 8~20분: 감쇠/문/냉각 구간
         ),
         description=(
-            "20분 파일럿 — 0~3 안정화, 3~8 히터35%, 8~11 감쇠, "
+            "20분 파일럿 — 0~3 안정화, 3~8 히터ON, 8~11 감쇠, "
             "11~12 문 열림, 12~15 회복, 15~18 펠티어ON, 18~20 OFF"
         ),
     )
