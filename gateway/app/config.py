@@ -49,6 +49,9 @@ class ControlConfig(BaseModel):
 
 class HMMConfig(BaseModel):
     transition_matrix_30s: List[List[float]]
+    # 라벨·hold-out 검증을 통과한 파라미터만 명시적으로 활성화한다.
+    # 현재 개발 데이터로 만든 ml/params/occupancy.json은 자동 사용하지 않는다.
+    use_learned_params: bool = False
 
 class IRConfig(BaseModel):
     codes: Dict[str, str]

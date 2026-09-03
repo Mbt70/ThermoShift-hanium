@@ -2,9 +2,10 @@
 
 바뀐 점
 -------
-전이확률과 관측 우도가 코드에 박혀 있었다. 이제 ml/params/occupancy.json 이
-있으면 그것을 쓰고, 없으면 config.yaml 의 전이행렬 + 아래 기본 우도로
-그대로 동작한다. 학습이 필수 경로가 되면 안 되기 때문이다.
+전이확률과 관측 우도가 코드에 박혀 있었다. 이제 검증된 학습 결과를 설정에서
+명시적으로 승인한 경우에만 ml/params/occupancy.json을 쓴다. 파일이 있어도
+승인 전에는 config.yaml 전이행렬 + 아래 기본 우도로 동작한다. 개발 과정의
+불완전한 데이터가 실제 제어에 자동 유입되지 않게 하기 위해서다.
 
 파일에는 이산화 경계(bins)까지 함께 들어 있다. 학습 때와 추론 때 관측을
 같은 규칙으로 만들어야 확률이 같은 뜻을 갖는다.
@@ -74,7 +75,7 @@ class OccupancyHMM:
 
     # ---------------- 파라미터 ----------------
     def _load_params(self) -> Tuple[Dict[str, Any], str]:
-        if PARAM_PATH.is_file():
+        if self.config.hmm.use_learned_params and PARAM_PATH.is_file():
             try:
                 data = json.loads(PARAM_PATH.read_text(encoding="utf-8"))
                 meta = data.get("metadata", {})
@@ -89,7 +90,10 @@ class OccupancyHMM:
         params = dict(FALLBACK)
         params["transition"] = self.config.hmm.transition_matrix_30s
         params["initial"] = [1/3, 1/3, 1/3]
-        return params, "기본값 (config.yaml 전이행렬 + 내장 우도)"
+        source = "기본값 (config.yaml 전이행렬 + 내장 우도)"
+        if PARAM_PATH.is_file() and not self.config.hmm.use_learned_params:
+            source += " — 미검증 학습 파일 비활성화"
+        return params, source
 
     @property
     def is_trained(self) -> bool:
