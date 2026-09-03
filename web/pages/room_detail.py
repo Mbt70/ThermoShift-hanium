@@ -284,9 +284,8 @@ def _reservation_list_dialog(room: dict) -> None:
 
 
 def _trend_chart(temps: list[float], co2s: list[float], target: float) -> alt.LayerChart:
-    idx = list(range(len(temps)))
-    temp_df = pd.DataFrame({"분": idx, "값": temps})
-    co2_df = pd.DataFrame({"분": idx, "값": co2s})
+    temp_df = pd.DataFrame({"분": list(range(len(temps))), "값": temps})
+    co2_df = pd.DataFrame({"분": list(range(len(co2s))), "값": co2s})
     target_df = pd.DataFrame({"y": [target]})
 
     temp_line = (

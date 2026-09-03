@@ -51,7 +51,7 @@ class MockStorage:
         return None
 
     def insert_control_decision(self, *a, **kw):
-        self.decisions.append(kw)
+        self.decisions.append((a, kw))
 
     def insert_system_event(self, *a, **kw):
         self.events.append((a, kw))
@@ -143,6 +143,18 @@ def test_manual_override_cannot_bypass_stale_sensor(controller):
     assert d["blocked_by"] == "ENV_STALE"
     assert d["executed"] is False
     assert controller.ir.sent_commands == []
+
+
+def test_manual_override_records_the_command_actually_sent(controller):
+    controller.config.app.control_mode = "active"
+    controller.config.ir.manual_override = "ON"
+    d = controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert controller.ir.sent_commands == ["COOL_24_AUTO"]
+    assert d["proposed_action"] == "COOL_24_AUTO"
+    assert d["decision_type"] == "maintain"
+    assert d["target_temp_c"] == 24.0
+    assert "MANUAL_OVERRIDE_ON (policy=COOL_25_AUTO)" in d["reason_codes"]
+    assert controller.storage.decisions[-1][0][2] == "COOL_24_AUTO"
 
 
 def test_active_mode_transmits(controller):

@@ -249,6 +249,7 @@ class HVACController:
         result = policy_decide(inp, self._policy_config(room))
 
         executed = False
+        executed_action = None
         # config의 강제 구동도 최상위 안전조건을 우회할 수 없다. 예전에는
         # manual_override=ON 한 줄이 shadow/monitoring, 센서 stale, lockout까지
         # 모두 무시하고 냉각 릴레이를 켰다. 하드웨어 점검용 override는 허용된
@@ -263,13 +264,19 @@ class HVACController:
             try:
                 self.ir.send_command(action_to_send)
                 executed = True
+                executed_action = action_to_send
                 self._note_transmission(action_to_send, now)
+                result.reasons.append(
+                    f"MANUAL_OVERRIDE_{self.config.ir.manual_override.upper()} "
+                    f"(policy={result.action})"
+                )
             except Exception:
                 logger.exception("수동 제어 명령 전송 실패")
         elif result.execute:
             try:
                 self.ir.send_command(result.action)
                 executed = True
+                executed_action = result.action
                 self._note_transmission(result.action, now)
             except Exception:
                 logger.exception("제어 명령 %s 전송 실패", result.action)
@@ -287,10 +294,21 @@ class HVACController:
         # shadow/active 는 안전 스위치일 뿐이고, "이 판단이 어떤 운전 방식에서
         # 나왔는가" 는 사용자가 고른 모드다. 나중에 baseline(monitoring) 대비
         # rule 구간을 나눠 KPI 를 계산할 때 이 값이 기준이 된다.
+        recorded_action = executed_action or result.action
+        recorded_decision_type = result.decision_type
+        recorded_target_temp = result.target_temp_c
+        if executed_action is not None and override_allowed:
+            if executed_action == "POWER_OFF":
+                recorded_decision_type = "off"
+                recorded_target_temp = None
+            else:
+                recorded_decision_type = "maintain"
+                recorded_target_temp = 24.0
+
         self.storage.insert_control_decision(
             now.isoformat(),
             effective_mode,
-            result.action,
+            recorded_action,
             executed,
             occupancy_state,
             inp.temperature_c,
@@ -298,20 +316,20 @@ class HVACController:
             result.reasons,
             room_id=room_id,
             estimate_id=get_occupancy_hmm().last_estimate_id,
-            decision_type=result.decision_type,
-            target_temp=result.target_temp_c,
+            decision_type=recorded_decision_type,
+            target_temp=recorded_target_temp,
         )
 
         return {
             "timestamp": now.isoformat(),
             "room": room["name"],
             "room_mode": room_mode,
-            "decision_type": result.decision_type,
+            "decision_type": recorded_decision_type,
             "occupancy_state": occupancy_state,
             "temperature_c": inp.temperature_c,
             "co2_ppm": inp.co2_ppm,
-            "target_temp_c": result.target_temp_c,
-            "proposed_action": result.action,
+            "target_temp_c": recorded_target_temp,
+            "proposed_action": recorded_action,
             "executed": executed,
             "blocked_by": result.blocked_by,
             "reason_codes": result.reasons,
