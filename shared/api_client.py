@@ -11,9 +11,12 @@ ApiError 는 두 환경에서 동일하게 동작한다.
 """
 
 import json as jsonlib
+import logging
 import os
 from pathlib import Path
 from urllib.parse import urlencode
+
+logger = logging.getLogger(__name__)
 
 _TIMEOUT = 5
 _access_token: str | None = None
@@ -129,26 +132,34 @@ def _build_url(path: str, params: dict | None) -> str:
 
 
 def _send(method: str, url: str, body: dict | None, timeout: float) -> tuple[int, str]:
-    """(상태코드, 본문 문자열). 연결 자체가 실패하면 예외를 그대로 올린다."""
+    """(상태코드, 본문 문자열). 전송 오류도 HTTP 503 형태로 통일한다."""
     token = _current_access_token()
     if _session is not None:
         headers = {"Authorization": f"Bearer {token}"} if token else None
-        response = _session.request(
-            method, url, json=body, headers=headers, timeout=timeout
-        )
-        return response.status_code, response.text
+        try:
+            response = _session.request(
+                method, url, json=body, headers=headers, timeout=timeout
+            )
+            return response.status_code, response.text
+        except Exception as exc:
+            logger.warning("API 통신 실패 (%s %s): %s", method, url, exc)
+            return 503, jsonlib.dumps({"detail": "API connection unavailable"})
 
     if _XHR is not None:
-        xhr = _XHR.new()
-        xhr.open(method, url, False)  # 세 번째 인자 False = 동기 요청
-        payload = None
-        if body is not None:
-            xhr.setRequestHeader("Content-Type", "application/json")
-            payload = jsonlib.dumps(body, ensure_ascii=False)
-        if token:
-            xhr.setRequestHeader("Authorization", f"Bearer {token}")
-        xhr.send(payload)
-        return int(xhr.status), str(xhr.responseText or "")
+        try:
+            xhr = _XHR.new()
+            xhr.open(method, url, False)  # 세 번째 인자 False = 동기 요청
+            payload = None
+            if body is not None:
+                xhr.setRequestHeader("Content-Type", "application/json")
+                payload = jsonlib.dumps(body, ensure_ascii=False)
+            if token:
+                xhr.setRequestHeader("Authorization", f"Bearer {token}")
+            xhr.send(payload)
+            return int(xhr.status), str(xhr.responseText or "")
+        except Exception as exc:
+            logger.warning("XHR 통신 실패 (%s %s): %s", method, url, exc)
+            return 503, jsonlib.dumps({"detail": "API connection unavailable"})
 
     raise RuntimeError(
         "사용 가능한 HTTP 전송 계층이 없습니다 (requests 도 XMLHttpRequest 도 없음)"

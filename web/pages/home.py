@@ -195,12 +195,17 @@ with main_col:
     @st.fragment(run_every=5)
     def render_live_dashboard():
         rooms = list_rooms(current_user_id())
+
+        if not rooms:
+            render_topbar("대시보드", alert_count=0)
+            st.info("등록된 공간이 없습니다. 공간 및 기기를 먼저 등록해 주세요.")
+            if st.button("기기 관리로 이동", key="dash_go_devices"):
+                st.switch_page("pages/devices.py")
+            return
+
         snapshots = {r["id"]: environment_snapshot(r) for r in rooms}
         room_count = len(rooms)
 
-        # A brand-new room (or one whose sensor hasn't reported yet) has no reading
-        # at all rather than a mock-random float, so temperature/co2/power can be
-        # None here - average/sum only over the rooms that actually have a value.
         temps = [s["temperature"] for s in snapshots.values() if s["temperature"] is not None]
         co2s = [s["co2"] for s in snapshots.values() if s["co2"] is not None]
         powers = [s["power"] for s in snapshots.values() if s["power"] is not None]
@@ -215,10 +220,6 @@ with main_col:
         measured_power = bool(powers)
 
         render_topbar("대시보드", alert_count=alert_total)
-
-        if not rooms:
-            st.switch_page("pages/devices.py")
-            return
 
         temp_diff = avg_temp - 24
         temp_state = "근접" if abs(temp_diff) <= 1 else ("초과" if temp_diff > 0 else "미달")
@@ -397,8 +398,10 @@ with main_col:
                         st.toast("예약 목록 페이지는 곧 제공될 예정이에요", icon="🛠️")
 
             with st.container(key="ts_dash_ai_card", border=True):
-                flagged_rooms = [r for r in rooms if room_status(r) != "정상"]
-                notable_room = flagged_rooms[0] if flagged_rooms else rooms[0]
+                connected_rooms = [r for r in rooms if r.get("sensor_connected")]
+                candidates = connected_rooms if connected_rooms else rooms
+                flagged_rooms = [r for r in candidates if room_status(r) != "정상"]
+                notable_room = flagged_rooms[0] if flagged_rooms else candidates[0]
                 ai_result = None
                 if not notable_room.get("sensor_connected", True):
                     headline, subline = "센서 응답이 없어 제어를 보류했습니다", "센서 재연결이 필요해요"

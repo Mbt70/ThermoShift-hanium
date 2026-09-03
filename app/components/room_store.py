@@ -129,6 +129,10 @@ def system_judgment(room: dict) -> tuple[str, str]:
     return headline, subline
 
 
+_EXPLANATION_CACHE: dict[int, tuple[str, str]] = {}
+_EXPLANATION_CACHE_MAX = 128
+
+
 def ai_judgment(room: dict) -> tuple[str, str] | None:
     """AI(Gemini)가 최근 제어 판단을 설명한 문장. 사용 불가하면 None.
 
@@ -142,9 +146,13 @@ def ai_judgment(room: dict) -> tuple[str, str] | None:
         decision = api_get(f"/rooms/{room['id']}/decisions/latest", ignore_404=True)
         if decision is None:
             return None
+        decision_id = decision.get("decision_id")
+        if decision_id and decision_id in _EXPLANATION_CACHE:
+            return _EXPLANATION_CACHE[decision_id]
+
         # Gemini 호출(thinking 포함)은 10초를 넘기기도 해서, 다른 API 호출의
         # 기본 5초 타임아웃보다 넉넉하게 잡는다.
-        explanation = api_post(f"/ai/decisions/{decision['decision_id']}/explain", timeout=25)
+        explanation = api_post(f"/ai/decisions/{decision_id}/explain", timeout=25)
     except Exception:
         return None
     if not explanation or not explanation.get("headline") or not explanation.get("detail"):
@@ -153,6 +161,10 @@ def ai_judgment(room: dict) -> tuple[str, str] | None:
     subline = explanation["detail"]
     if explanation.get("recommendation"):
         subline = f"{subline} {explanation['recommendation']}"
+    if decision_id:
+        _EXPLANATION_CACHE[decision_id] = (headline, subline)
+        while len(_EXPLANATION_CACHE) > _EXPLANATION_CACHE_MAX:
+            _EXPLANATION_CACHE.pop(next(iter(_EXPLANATION_CACHE)))
     return headline, subline
 
 
