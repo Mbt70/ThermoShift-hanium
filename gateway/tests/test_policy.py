@@ -232,3 +232,18 @@ def test_예약_진행_중에는_예약_목표_온도를_쓴다():
                     schedule=sched), CFG)
     assert d.decision_type == "maintain"
     assert d.action == "COOL_22_AUTO"
+
+
+def test_mpc_모드에서_쾌적_상태이면_setback_최적화한다():
+    d = decide(base(temperature_c=24.5, humidity_pct=45.0, occupancy_state="OCCUPIED",
+                    p_occupied=0.95, control_mode="mpc"), CFG)
+    assert d.decision_type == "setback"
+    assert any("MPC 최적화" in r for r in d.reasons)
+
+
+def test_mpc_모드에서_덥고_재실중이면_maintain_최적화한다():
+    d = decide(base(temperature_c=27.5, humidity_pct=75.0, occupancy_state="OCCUPIED",
+                    p_occupied=0.95, control_mode="mpc"), CFG)
+    assert d.decision_type == "maintain"
+    assert any("MPC 최적화" in r for r in d.reasons)
+

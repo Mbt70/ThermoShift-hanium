@@ -222,6 +222,9 @@ class HeaterController:
         self.applied_duty = 0
         self._last_block_reason: str | None = None
         self._last_block_log_at: float = 0.0
+        # 직전 tick 에서 안전 차단이 걸렸다면 그 사유. 기록에 남긴다 —
+        # 지령과 실제가 다른 구간은 분석에서 따로 봐야 한다.
+        self.last_block_reason: str | None = None
 
     def request_occupants(self, occupants: float) -> int:
         """재실 인원 상당으로 지령한다. 실제로 적용되는 값은 tick 이 정한다."""
@@ -242,6 +245,7 @@ class HeaterController:
         import time
 
         duty, reason = safe_duty(self.requested_duty, temperature_c, temp_age_sec)
+        self.last_block_reason = reason
 
         if reason is not None:
             now = time.monotonic()

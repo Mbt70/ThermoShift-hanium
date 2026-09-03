@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Json
 from psycopg_pool import ConnectionPool
 
 from app.config import get_config
@@ -437,6 +438,75 @@ class Storage:
                         "ends_at": ends, "target_temp": float(r["target_temp"]),
                         "precooling_min": r["precooling_min"]}
         return best
+
+    # ------------------------------------------------------------------
+    # 가진 실험 (db/006_experiments.sql)
+    # ------------------------------------------------------------------
+
+    def start_experiment(self, room_id: int, plan_name: str, plan: dict,
+                         started_at: datetime, ends_at: datetime,
+                         note: Optional[str] = None) -> Optional[int]:
+        """실험을 연다. 같은 공간에 진행 중인 실험이 있으면 None 을 돌려준다.
+
+        막는 이유는 uq_run_active 와 같다 — 실험이 둘 겹치면 어느 duty 가
+        누구 것인지 알 수 없어 두 실험 자료가 모두 못 쓰게 된다.
+        """
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT run_id FROM experiment_runs"
+                " WHERE room_id = %s AND stopped_at IS NULL",
+                (room_id,),
+            )
+            if cur.fetchone() is not None:
+                return None
+            cur.execute(
+                "INSERT INTO experiment_runs"
+                " (room_id, plan_name, plan, started_at, ends_at, note)"
+                " VALUES (%s, %s, %s, %s, %s, %s) RETURNING run_id",
+                (room_id, plan_name, Json(plan), started_at, ends_at, note),
+            )
+            return cur.fetchone()["run_id"]
+
+    def fetch_active_experiment(self, room_id: Optional[int]) -> Optional[dict]:
+        """진행 중인 실험. 게이트웨이가 재시작해도 여기서 다시 이어붙인다."""
+        if room_id is None:
+            return None
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT run_id, plan_name, plan, started_at, ends_at"
+                " FROM experiment_runs"
+                " WHERE room_id = %s AND stopped_at IS NULL",
+                (room_id,),
+            )
+            return cur.fetchone()
+
+    def stop_experiment(self, run_id: int, stopped_at: datetime) -> None:
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE experiment_runs SET stopped_at = %s"
+                " WHERE run_id = %s AND stopped_at IS NULL",
+                (stopped_at, run_id),
+            )
+
+    def insert_heater_log(self, recorded_at: datetime, requested_duty: int,
+                          applied_duty: int, occupants_equiv: float,
+                          blocked_reason: Optional[str] = None,
+                          run_id: Optional[int] = None) -> None:
+        """히터 이력 한 줄. 이것이 모델 비교에 쓸 정답 라벨이다.
+
+        실험이 없을 때도 남긴다. duty 0 이 계속 기록돼야 "이 구간에는
+        합성 열부하가 없었다"를 자료가 스스로 증명한다. 안 남기면 기록이
+        없는 것이 '0' 인지 '모름' 인지 구분할 수 없다.
+        """
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO heater_log"
+                " (run_id, requested_duty, applied_duty, occupants_equiv,"
+                "  blocked_reason, recorded_at)"
+                " VALUES (%s, %s, %s, %s, %s, %s)",
+                (run_id, requested_duty, applied_duty, occupants_equiv,
+                 blocked_reason, recorded_at),
+            )
 
     def fetch_pending_commands(self, room_id: Optional[int]) -> List[dict]:
         """프론트에서 들어온 수동 제어 명령 큐를 가져온다."""

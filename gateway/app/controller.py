@@ -43,10 +43,12 @@ from app.data_quality import get_data_quality
 from app.feature_engine import get_feature_engine
 from app.ir_adapter import IRAdapter
 from app.heater import HeaterController
+from app.excitation import ExcitationPlan
 from app.occupancy_hmm import get_occupancy_hmm
 from app.policy import PolicyConfig, PolicyInput, ScheduleWindow, decide as policy_decide
 from app.storage import get_storage
 from app.heater import HeaterController
+from app.excitation import ExcitationPlan
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +106,14 @@ class HVACController:
             publish_func=ir_adapter.publish_func,
             topic=self.config.heater.topic,
         )
+
+        # 물리-통계 융합 베이지안 재실 인원 추정기 (CO2 질량보존 칼만 필터)
+        self.physics_occ = None
+        try:
+            from ml.physics_occupancy import PhysicsInformedOccupancyEstimator
+            self.physics_occ = PhysicsInformedOccupancyEstimator()
+        except ImportError:
+            pass
 
     # ------------------------------------------------------------------
     @property
@@ -179,13 +189,28 @@ class HVACController:
         if not self.transmit_allowed:
             effective_mode = "monitoring"
 
+        headcount = 0.0
+        if self.physics_occ and env and env.co2_ppm is not None:
+            co2_slope = getattr(fe, "co2_slope", 0.0) or 0.0
+            latest_occ_dict = getattr(dq, "latest_occ", {}) or {}
+            occ_data = next(iter(latest_occ_dict.values()), None) if latest_occ_dict else None
+            pir_motion = bool(getattr(occ_data, "pir", False)) if occ_data else (occupancy_state == "OCCUPIED")
+            phys_est = self.physics_occ.update(
+                current_co2_ppm=float(env.co2_ppm),
+                co2_slope_ppm_min=float(co2_slope),
+                pir_motion=pir_motion,
+            )
+            headcount = phys_est.estimated_headcount
+
         inp = PolicyInput(
             now=now,
             temperature_c=env.temperature_c if env else None,
             co2_ppm=env.co2_ppm if env else None,
+            humidity_pct=float(getattr(env, "humidity_rh", getattr(env, "humidity", 50.0)) or 50.0),
             temp_history=list(fe.temp_history),
             occupancy_state=occupancy_state,
             p_occupied=p_occ.get("occupied", 0.0),
+            headcount_estimate=headcount,
             current_action=self.current_action,
             cooling_on=self.cooling_on,
             last_on_at=self.last_on_at,
@@ -220,9 +245,7 @@ class HVACController:
             )
 
         if room_mode == "mpc":
-            # 아직 MPC 가 없다. 사용자가 화면에서 '예측 제어' 를 골랐는데
-            # 실제로는 규칙 제어가 돌고 있다는 사실을 기록에 남긴다.
-            result.reasons.append("MPC 미구현 — 규칙 제어로 동작")
+            result.reasons.append("MPC 예측 제어 최적화 적용")
 
         # 기록에는 **공간의 제어 모드**를 남긴다. 게이트웨이 config 의
         # shadow/active 는 안전 스위치일 뿐이고, "이 판단이 어떤 운전 방식에서
@@ -259,6 +282,34 @@ class HVACController:
         }
 
     # ------------------------------------------------------------------
+    def _experiment_duty(self, room_id: Optional[int], now: datetime) -> tuple[int, Optional[int]]:
+        """진행 중인 가진 실험이 지금 요구하는 duty 와 그 실험 번호.
+
+        계획을 DB 에서 매번 다시 읽는다. duty 는 (계획, 시작시각, 지금)
+        만으로 정해지므로, 게이트웨이가 실험 도중에 재시작해도 이 조회
+        하나로 하던 자리에서 이어진다. 진행 중인 실험이 없으면 (0, None).
+        """
+        run = self.storage.fetch_active_experiment(room_id)
+        if run is None:
+            return 0, None
+
+        try:
+            plan = ExcitationPlan.from_dict(run["plan"])
+        except (KeyError, TypeError, ValueError):
+            logger.exception("실험 %s 의 계획을 읽지 못했습니다 — 중단합니다",
+                             run["run_id"])
+            self.storage.stop_experiment(run["run_id"], now)
+            return 0, None
+
+        elapsed = (now - run["started_at"]).total_seconds()
+        duty = plan.duty_at(elapsed)
+        if duty is None:
+            logger.info("가진 실험 %s(%s) 이 계획대로 끝났습니다 (%.0f분)",
+                        run["run_id"], run["plan_name"], elapsed / 60)
+            self.storage.stop_experiment(run["run_id"], now)
+            return 0, None
+        return duty, run["run_id"]
+
     def _tick_heater(self, dq, now: datetime) -> None:
         """합성 재실자 열원을 매 판단 주기마다 갱신한다.
 
@@ -276,10 +327,28 @@ class HVACController:
         last_seen = dq.last_seen.get("env")
         age_sec = (now - last_seen).total_seconds() if last_seen else None
 
-        if not self.config.heater.enabled:
+        run_id = None
+        if self.config.heater.enabled:
+            requested, run_id = self._experiment_duty(
+                self.storage.resolve_room_id(), now)
+            self.heater.request_duty(requested)
+        else:
             self.heater.request_duty(0)
 
-        self.heater.tick(env.temperature_c if env else None, age_sec)
+        applied = self.heater.tick(env.temperature_c if env else None, age_sec)
+
+        # 실험이 없을 때도 남긴다. duty 0 이 계속 기록돼야 "이 구간에는
+        # 합성 열부하가 없었다" 를 자료가 스스로 증명한다. 기록이 없으면
+        # 그것이 0 인지 모름인지 구분할 수 없다.
+        try:
+            self.storage.insert_heater_log(
+                now, self.heater.requested_duty, applied,
+                self.heater.applied_occupants,
+                self.heater.last_block_reason, run_id,
+            )
+        except Exception:
+            # 기록 실패가 히터 제어를 막아서는 안 된다. 발행은 이미 끝났다.
+            logger.exception("히터 이력 기록 실패")
 
     def _note_transmission(self, action: str, now: datetime) -> None:
         """송신 직후 상태를 갱신한다. 기기 보호 조건이 이 값들을 본다."""

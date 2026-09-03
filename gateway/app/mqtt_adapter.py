@@ -113,9 +113,21 @@ class MQTTAdapter:
         has_ir = False
 
         # EnvData
-        temp = payload.get("temperature") if payload.get("temperature") is not None else payload.get("temp_c")
-        hum = payload.get("humidity") if payload.get("humidity") is not None else payload.get("humidity_rh")
-        co2 = payload.get("co2") if payload.get("co2") is not None else payload.get("co2_ppm")
+        temp = payload.get("temperature")
+        if temp is None:
+            temp = payload.get("temp_c")
+        if temp is None:
+            temp = payload.get("temperature_c")
+
+        hum = payload.get("humidity")
+        if hum is None:
+            hum = payload.get("humidity_rh")
+        if hum is None:
+            hum = payload.get("humidity_pct")
+
+        co2 = payload.get("co2")
+        if co2 is None:
+            co2 = payload.get("co2_ppm")
         
         if (temp is not None or hum is not None or co2 is not None) \
                 and not self._is_duplicate_env(device_id, topic, temp, hum, co2):

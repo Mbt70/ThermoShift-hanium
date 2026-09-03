@@ -86,10 +86,12 @@ class PolicyInput:
     # --- 측정 ---
     temperature_c: float | None
     co2_ppm: float | None
+    humidity_pct: float = 50.0
     temp_history: list[tuple[datetime, float]] = field(default_factory=list)
     # --- 추정 ---
     occupancy_state: str = "UNKNOWN"       # EMPTY | TRANSITION | OCCUPIED
     p_occupied: float = 0.0
+    headcount_estimate: float = 0.0
     # --- 상태 ---
     current_action: str = "POWER_OFF"
     cooling_on: bool = False
@@ -204,6 +206,12 @@ def decide(inp: PolicyInput, cfg: PolicyConfig) -> PolicyDecision:
         reasons.append("온도값 없음 — 현 상태 유지")
         hold.blocked_by = "NO_TEMPERATURE"
         return hold
+
+    # MPC (Model Predictive Control) 최적 제어 모드
+    if inp.control_mode == "mpc":
+        mpc_decision = _mpc_decide(inp, cfg)
+        if mpc_decision is not None:
+            return mpc_decision
 
     upper = target + cfg.temp_tolerance_c
     lower = target - cfg.temp_tolerance_c
@@ -329,3 +337,30 @@ def _commit(inp: PolicyInput, cfg: PolicyConfig, decision_type: str,
                               blocked_by="MONITORING_MODE")
 
     return PolicyDecision(decision_type, action, target, True, reasons)
+
+
+def _mpc_decide(inp: PolicyInput, cfg: PolicyConfig) -> PolicyDecision | None:
+    """전력 소비량과 PMV 쾌적도를 동시 최적화하는 다목적 경제적 MPC 의사결정."""
+    try:
+        from ml.mpc_controller import ModelPredictiveController
+    except ImportError:
+        return None
+
+    sched_minutes = None
+    if inp.schedule and inp.now < inp.schedule.starts_at:
+        sched_minutes = (inp.schedule.starts_at - inp.now).total_seconds() / 60.0
+
+    peak_hour = (14 <= inp.now.hour <= 17) # TOU 피크 요금제 반영 (14~17시)
+    mpc = ModelPredictiveController()
+    sol = mpc.solve(
+        current_temp_c=inp.temperature_c,
+        humidity_pct=inp.humidity_pct,
+        p_occupied=inp.p_occupied,
+        thermal_model=inp.thermal,
+        target_temp_setting=cfg.target_temp_c,
+        schedule_in_minutes=sched_minutes,
+        current_cooling_on=inp.cooling_on,
+        headcount_estimate=inp.headcount_estimate,
+        peak_hour=peak_hour,
+    )
+    return _commit(inp, cfg, sol.decision_type, sol.optimal_action, sol.target_temp_c, sol.reasons)

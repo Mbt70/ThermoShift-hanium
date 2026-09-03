@@ -38,6 +38,8 @@ class MockStorage:
                      "target_temp": 25.0, "temp_tolerance": 1.0, "co2_limit": 1000}
         self.decisions = []
         self.events = []
+        self.heater_logs = []
+        self.experiment = None
 
     def resolve_room_id(self):
         return 1
@@ -53,6 +55,20 @@ class MockStorage:
 
     def insert_system_event(self, *a, **kw):
         self.events.append((a, kw))
+
+    def fetch_active_experiment(self, room_id):
+        return self.experiment
+
+    def stop_experiment(self, run_id, stopped_at):
+        self.experiment = None
+
+    def insert_heater_log(self, recorded_at, requested, applied, occupants,
+                          blocked_reason=None, run_id=None):
+        self.heater_logs.append({
+            "requested": requested, "applied": applied,
+            "occupants": occupants, "blocked_reason": blocked_reason,
+            "run_id": run_id,
+        })
 
 
 @pytest.fixture
@@ -264,3 +280,46 @@ def test_예약이_아직_멀면_켜지_않는다(controller):
     d = controller.decide(FRESH, "EMPTY", EMPTY)
     assert d["decision_type"] != "precool"
     assert d["executed"] is False
+
+
+def test_히터_이력이_실제로_기록된다(controller):
+    """정답 라벨은 이 기록이 전부다. 기록 호출은 예외를 삼키는 자리에 있어서
+    (히터 제어를 막지 않으려고) 메서드 이름이 틀려도 조용히 넘어간다.
+    그 침묵을 여기서 깬다."""
+    controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert len(controller.storage.heater_logs) == 1
+    entry = controller.storage.heater_logs[0]
+    assert entry["applied"] == 0
+    assert entry["run_id"] is None
+
+
+def test_실험이_돌면_그_duty가_기록된다(controller):
+    from app.excitation import ExcitationPlan
+    controller.config.heater.enabled = True
+    plan = ExcitationPlan("t", ((0, 600.0), (40, 900.0)))
+    controller.storage.experiment = {
+        "run_id": 7,
+        "plan_name": "t",
+        "plan": plan.to_dict(),
+        "started_at": datetime.now(timezone.utc) - timedelta(seconds=700),
+        "ends_at": datetime.now(timezone.utc) + timedelta(seconds=800),
+    }
+    controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    entry = controller.storage.heater_logs[-1]
+    assert entry["requested"] == 40      # 700초 경과 -> 두 번째 구간
+    assert entry["applied"] == 40
+    assert entry["run_id"] == 7
+
+
+def test_계획이_끝나면_실험을_닫는다(controller):
+    from app.excitation import ExcitationPlan
+    controller.config.heater.enabled = True
+    plan = ExcitationPlan("t", ((40, 600.0),))
+    controller.storage.experiment = {
+        "run_id": 7, "plan_name": "t", "plan": plan.to_dict(),
+        "started_at": datetime.now(timezone.utc) - timedelta(seconds=900),
+        "ends_at": datetime.now(timezone.utc) - timedelta(seconds=300),
+    }
+    controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert controller.storage.experiment is None
+    assert controller.storage.heater_logs[-1]["applied"] == 0
