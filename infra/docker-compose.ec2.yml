@@ -8,8 +8,8 @@
 #
 # infra/docker-compose.yml(로컬 개발용)과의 차이:
 #   - postgres 비밀번호 등을 .env 에서 읽음 (하드코딩 제거)
-#   - postgres 의 5432 포트를 호스트에 노출하지 않음 (같은 네트워크에서
-#     서비스명 "postgres" 로만 접근 — 컨테이너 밖에서 DB에 직접 붙을 일 없음)
+#   - postgres·API 포트는 EC2의 127.0.0.1에만 바인딩함. 인터넷에는 열리지
+#     않으며 라즈베리파이 SSH 터널이 이 loopback 포트로만 연결함
 #   - api 서비스 추가 (로컬은 .venv 에서 직접 uvicorn 실행)
 #   - db/ 전체가 아니라 스키마 파일(001~008)만 초기화 스크립트로 마운트함.
 #     로컬 개발용 파일은 db/seed.sql(더미 사용자·공간·센서값)도 같은 폴더에
@@ -37,6 +37,8 @@ services:
       - ../db/006_experiments.sql:/docker-entrypoint-initdb.d/006_experiments.sql:ro
       - ../db/007_demo_access.sql:/docker-entrypoint-initdb.d/007_demo_access.sql:ro
       - ../db/008_sensor_raw_payload.sql:/docker-entrypoint-initdb.d/008_sensor_raw_payload.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
