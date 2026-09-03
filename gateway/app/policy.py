@@ -86,10 +86,12 @@ class PolicyInput:
     # --- 측정 ---
     temperature_c: float | None
     co2_ppm: float | None
+    humidity_pct: float = 50.0
     temp_history: list[tuple[datetime, float]] = field(default_factory=list)
     # --- 추정 ---
     occupancy_state: str = "UNKNOWN"       # EMPTY | TRANSITION | OCCUPIED
     p_occupied: float = 0.0
+    headcount_estimate: float = 0.0
     # --- 상태 ---
     current_action: str = "POWER_OFF"
     cooling_on: bool = False
@@ -205,6 +207,12 @@ def decide(inp: PolicyInput, cfg: PolicyConfig) -> PolicyDecision:
         hold.blocked_by = "NO_TEMPERATURE"
         return hold
 
+    # MPC (Model Predictive Control) 최적 제어 모드
+    if inp.control_mode == "mpc":
+        mpc_decision = _mpc_decide(inp, cfg)
+        if mpc_decision is not None:
+            return mpc_decision
+
     upper = target + cfg.temp_tolerance_c
     lower = target - cfg.temp_tolerance_c
     reasons.append(f"재실 중 · 실내 {inp.temperature_c:.1f}℃ "
@@ -220,7 +228,25 @@ def decide(inp: PolicyInput, cfg: PolicyConfig) -> PolicyDecision:
         reasons.append(f"{lower:.1f}℃ 미만이 {cfg.cooling_off_duration_sec//60}분 지속 — 과냉")
         return _commit(inp, cfg, "off", "POWER_OFF", target, reasons)
 
-    # 쾌적 범위 안이다. 냉방이 돌고 있으면 완화한다.
+    # 여기까지 왔다는 것은 "지속 조건을 아직 못 채웠다" 는 뜻이다. 온도가
+    # 범위 밖이어도 그것이 충분히 오래 유지되지 않았으면 판단을 바꾸지 않는다.
+    # 근거 문구가 이 둘을 구분해야 한다 — 예전에는 범위 밖인데도 "쾌적 범위
+    # 안" 이라고 적어서, 27℃ 인 방의 제어 로그에 "쾌적 범위 안" 이 남았다.
+    if inp.temperature_c > upper:
+        reasons.append(
+            f"{upper:.1f}℃ 초과이지만 {cfg.cooling_on_duration_sec // 60}분 지속 "
+            "조건 미충족 — 관측 계속")
+        hold.blocked_by = "AWAITING_SUSTAINED_HIGH"
+        return hold
+
+    if inp.temperature_c < lower:
+        reasons.append(
+            f"{lower:.1f}℃ 미만이지만 {cfg.cooling_off_duration_sec // 60}분 지속 "
+            "조건 미충족 — 관측 계속")
+        hold.blocked_by = "AWAITING_SUSTAINED_LOW"
+        return hold
+
+    # 진짜로 쾌적 범위 안이다.
     if inp.cooling_on:
         relaxed = target + cfg.setback_delta_c
         reasons.append(f"쾌적 범위 안 — 설정을 {relaxed:.1f}℃ 로 완화(setback)")
@@ -311,3 +337,30 @@ def _commit(inp: PolicyInput, cfg: PolicyConfig, decision_type: str,
                               blocked_by="MONITORING_MODE")
 
     return PolicyDecision(decision_type, action, target, True, reasons)
+
+
+def _mpc_decide(inp: PolicyInput, cfg: PolicyConfig) -> PolicyDecision | None:
+    """전력 소비량과 PMV 쾌적도를 동시 최적화하는 다목적 경제적 MPC 의사결정."""
+    try:
+        from ml.mpc_controller import ModelPredictiveController
+    except ImportError:
+        return None
+
+    sched_minutes = None
+    if inp.schedule and inp.now < inp.schedule.starts_at:
+        sched_minutes = (inp.schedule.starts_at - inp.now).total_seconds() / 60.0
+
+    peak_hour = (14 <= inp.now.hour <= 17) # TOU 피크 요금제 반영 (14~17시)
+    mpc = ModelPredictiveController()
+    sol = mpc.solve(
+        current_temp_c=inp.temperature_c,
+        humidity_pct=inp.humidity_pct,
+        p_occupied=inp.p_occupied,
+        thermal_model=inp.thermal,
+        target_temp_setting=cfg.target_temp_c,
+        schedule_in_minutes=sched_minutes,
+        current_cooling_on=inp.cooling_on,
+        headcount_estimate=inp.headcount_estimate,
+        peak_hour=peak_hour,
+    )
+    return _commit(inp, cfg, sol.decision_type, sol.optimal_action, sol.target_temp_c, sol.reasons)

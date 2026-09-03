@@ -140,6 +140,12 @@ with right_col:
                     set_current_user(email)
                     st.switch_page("pages/home.py")
 
+            st.markdown("<div style='text-align:center; margin:10px 0 6px 0; color:#94a3b8; font-size:12px;'>또는</div>", unsafe_allow_html=True)
+            if st.button("🚀 로그인 없이 바로 체험하기 (심사위원 시연)", key="demo_guest_login", type="primary", use_container_width=True):
+                check_credentials("thermoshift@thermo.kr", "thermo123!")
+                set_current_user("thermoshift@thermo.kr")
+                st.switch_page("pages/home.py")
+
         else:
             with st.container(key="signup_fields", border=False):
                 name = st.text_input(

@@ -1,8 +1,10 @@
 import logging
+import os
 import signal
 import sys
 import time
 import threading
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -41,7 +43,22 @@ class EdgeNode:
         self.fe = get_feature_engine()
         self.hmm = get_occupancy_hmm()
         
-        self.client = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id=self.config.mqtt.client_id)
+        # client_id 에 프로세스마다 다른 꼬리를 붙인다.
+        #
+        # 고정 ID 를 쓰면 같은 ID 로 붙은 다른 클라이언트와 브로커가 서로를
+        # 밀어낸다. MQTT 규격상 나중에 붙은 쪽이 먼저 붙은 쪽을 끊기 때문에,
+        # 둘이 1초 간격으로 무한히 재접속하며 그 사이 메시지를 잃는다.
+        # 실제로 이 문제로 게이트웨이가 초당 한 번씩 재접속했고, 원인이
+        # (1) 종료되지 않고 남은 이전 인스턴스와 (2) 브로커에 남은 유령
+        # 세션이었다. 로그에는 "Connected" 만 반복돼 원인이 드러나지 않는다.
+        #
+        # 이 게이트웨이는 clean session 으로 붙고 LWT 도 쓰지 않으므로 ID 가
+        # 매번 달라져도 잃는 것이 없다. config 의 값은 접두사로 남겨
+        # 브로커 로그에서 사람이 알아볼 수 있게 한다.
+        client_id = f"{self.config.mqtt.client_id}-{uuid.uuid4().hex[:8]}"
+        logger.info("MQTT client_id: %s", client_id)
+        self.client = mqtt.Client(
+            callback_api_version=CallbackAPIVersion.VERSION2, client_id=client_id)
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         # 끊긴 이유를 남긴다. 이게 없으면 재접속이 반복돼도 원인을 알 수 없다
@@ -105,21 +122,23 @@ class EdgeNode:
             now = datetime.now(timezone.utc).isoformat()
             action = command["action"]
 
-            if self.config.app.control_mode != "active":
-                # shadow 모드에서는 실제로 쏘지 않는다. 사용자가 왜 반영되지
-                # 않았는지 알 수 있도록 실패 사유를 남긴다.
-                self.storage.mark_command(command["id"], "failed", "shadow_mode", now)
-                logger.info("shadow 모드라 수동 명령 %s 를 전송하지 않음", action)
+            # 수동 명령을 실행해도 되는지는 두 가지가 함께 정한다.
+            #   config.yaml  안전 상한 (shadow 면 무조건 금지)
+            #   rooms.control_mode  사용자가 화면에서 고른 모드
+            # monitoring 은 "보기만 한다" 는 뜻이므로 수동 명령도 실행하지 않는다.
+            room = self.storage.fetch_room_settings(room_id)
+            room_mode = room["control_mode"] if room else "monitoring"
+            if not self.controller.manual_allowed(room_mode):
+                reason = ("shadow_mode" if self.config.app.control_mode != "active"
+                          else "monitoring_mode")
+                self.storage.mark_command(command["id"], "failed", reason, now)
+                logger.info("수동 명령 %s 미전송 (%s, 공간 모드=%s)",
+                            action, reason, room_mode)
                 continue
 
             if self.ir.is_locked_out():
                 self.storage.mark_command(command["id"], "failed", "manual_lockout", now)
                 logger.info("수동 조작 lockout 중이라 %s 를 전송하지 않음", action)
-                continue
-
-            if action not in self.config.ir.codes:
-                self.storage.mark_command(command["id"], "failed", "command_failed", now)
-                logger.warning("등록되지 않은 IR 코드: %s", action)
                 continue
 
             try:
@@ -129,7 +148,10 @@ class EdgeNode:
                 logger.exception("수동 명령 %s 전송 실패", action)
                 continue
 
-            self.controller.current_action = action
+            # 컨트롤러 상태를 함께 갱신해야 다음 자동 판단이 "지금 켜져 있다"
+            # 는 것을 안다. 예전에는 current_action 만 바꿔서, 수동으로 켠 뒤
+            # 최소 가동시간 같은 기기 보호 조건이 동작하지 않았다.
+            self.controller._note_transmission(action, datetime.now(timezone.utc))
             self.storage.mark_command(command["id"], "sent", None, now)
             logger.info("수동 명령 %s 전송 완료", action)
 
@@ -182,6 +204,22 @@ class EdgeNode:
             logger.info("Stopping...")
             self.client.loop_stop()
             self.client.disconnect()
+            # 커넥션 풀을 닫지 않으면 psycopg 의 워커 스레드가 살아 있어
+            # 인터프리터가 끝나지 않는다. 실제로 SIGTERM 을 처리하고
+            # "Stopping..." 까지 찍은 뒤에도 프로세스가 남아, 다음 인스턴스와
+            # MQTT client_id 를 놓고 다투는 원인이 됐다.
+            self.storage.close()
+            logger.info("종료 완료")
+
+        # 정리가 끝났는데도 인터프리터가 남는다. paho 와 psycopg 풀이 띄운
+        # 스레드 중 일부가 비데몬이라 파이썬이 그것들을 기다리기 때문이다.
+        # 그대로 두면 프로세스가 유령으로 남아 다음 인스턴스와 MQTT
+        # client_id 를 놓고 다투고, systemd 는 TimeoutStopSec 만큼 기다렸다가
+        # SIGKILL 로 죽인다(그동안 재시작이 지연된다).
+        #
+        # 위에서 연결과 커넥션 풀을 이미 닫았으므로 더 정리할 것이 없다.
+        # os._exit 로 즉시 끝낸다.
+        os._exit(0)
 
 if __name__ == "__main__":
     node = EdgeNode()

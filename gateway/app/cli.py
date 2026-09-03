@@ -3,6 +3,9 @@
     python -m app.cli status            # 현재 센서·재실·제어 상태
     python -m app.cli set-mode active   # 제어 모드 변경 (재시작 필요)
     python -m app.cli force-off --execute
+    python -m app.cli experiment start calib   # 45분 교정 가진 실험
+    python -m app.cli experiment status
+    python -m app.cli experiment stop
 
 접속 정보는 storage 와 같은 환경변수(DB_HOST 등)를 쓴다.
 """
@@ -138,6 +141,108 @@ def force_off(execute: bool):
     print(f"Published OFF to {topic}")
 
 
+PLANS = {
+    "calib": ("compact_calibration_plan", "45분 교정 — c(히터 감도)와 d(표류) 확정"),
+    "prbs": ("prbs_plan", "PRBS 5.2시간 — 서너 시간을 낼 수 있을 때만"),
+}
+
+
+def experiment_start(plan_key: str, note=None):
+    """가진 실험을 연다.
+
+    켜기 전에 확인할 것 세 가지는 config.example.yaml 의 heater 절에 있다.
+    특히 교반팬이 안 돌면 단일 존 가정이 깨져서, 결과가 '잘 맞는 것처럼
+    보이는 무의미한 숫자' 가 된다.
+    """
+    from datetime import timedelta
+
+    from app import excitation
+    from app.config import get_config
+    from app.storage import get_storage
+
+    builder_name, _ = PLANS[plan_key]
+    plan = getattr(excitation, builder_name)()
+
+    config = get_config()
+    if not config.heater.enabled:
+        print("heater.enabled 가 false 입니다. config.yaml 에서 켜고 게이트웨이를")
+        print("다시 띄운 뒤 실행하세요 — 지금 시작하면 duty 0 만 기록됩니다.")
+        return
+
+    warnings = excitation.check_prbs_design(
+        excitation.DEFAULT_BIT_SEC, excitation.DEFAULT_N_BITS, tau_min=70.0,
+    ) if plan_key == "prbs" else []
+    for warning in warnings:
+        print(f"  경고: {warning}")
+
+    storage = get_storage()
+    room_id = storage.resolve_room_id()
+    if room_id is None:
+        print("담당 공간을 찾지 못했습니다.")
+        return
+
+    now = datetime.now(timezone.utc)
+    run_id = storage.start_experiment(
+        room_id, plan.name, plan.to_dict(), now,
+        now + timedelta(seconds=plan.total_sec), note,
+    )
+    if run_id is None:
+        print("이미 진행 중인 실험이 있습니다. 먼저 stop 하세요.")
+        return
+
+    print(f"실험 {run_id} 시작: {plan.summary()}")
+    print(f"  {plan.description}")
+    print(f"  끝나는 시각: {(now + timedelta(seconds=plan.total_sec)).astimezone()}")
+    print("  구간:")
+    cursor = 0.0
+    for duty, duration in plan.segments:
+        print(f"    +{cursor/60:5.0f}분  duty {duty:3d}%  ({duration/60:.0f}분)")
+        cursor += duration
+
+
+def experiment_status():
+    from app.storage import get_storage
+
+    storage = get_storage()
+    room_id = storage.resolve_room_id()
+    run = storage.fetch_active_experiment(room_id)
+    if run is None:
+        print("진행 중인 실험이 없습니다.")
+    else:
+        elapsed = (datetime.now(timezone.utc) - run["started_at"]).total_seconds()
+        print(f"실험 {run['run_id']} ({run['plan_name']}) 진행 중")
+        print(f"  경과 {elapsed/60:.1f}분 / 총 "
+              f"{(run['ends_at'] - run['started_at']).total_seconds()/60:.0f}분")
+
+    with storage._pool.connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT recorded_at, requested_duty, applied_duty, occupants_equiv,"
+            "       blocked_reason"
+            " FROM heater_log ORDER BY recorded_at DESC LIMIT 5"
+        )
+        rows = cur.fetchall()
+    if rows:
+        print("  최근 히터 이력:")
+        for r in rows:
+            blocked = f"  차단: {r['blocked_reason']}" if r["blocked_reason"] else ""
+            print(f"    {r['recorded_at'].astimezone():%H:%M:%S}  "
+                  f"지령 {r['requested_duty']:3d}%  실제 {r['applied_duty']:3d}%  "
+                  f"({r['occupants_equiv']}명 상당){blocked}")
+
+
+def experiment_stop():
+    from app.storage import get_storage
+
+    storage = get_storage()
+    room_id = storage.resolve_room_id()
+    run = storage.fetch_active_experiment(room_id)
+    if run is None:
+        print("진행 중인 실험이 없습니다.")
+        return
+    storage.stop_experiment(run["run_id"], datetime.now(timezone.utc))
+    print(f"실험 {run['run_id']} 중단했습니다. 다음 주기에 히터가 꺼집니다.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="ThermoShift Gateway CLI")
     subparsers = parser.add_subparsers(dest="command")
@@ -152,6 +257,14 @@ def main():
     off_parser = subparsers.add_parser("force-off")
     off_parser.add_argument("--execute", action="store_true")
 
+    exp_parser = subparsers.add_parser("experiment", help="가진 실험 제어")
+    exp_sub = exp_parser.add_subparsers(dest="exp_command")
+    start_parser = exp_sub.add_parser("start")
+    start_parser.add_argument("plan", choices=sorted(PLANS))
+    start_parser.add_argument("--note", default=None)
+    exp_sub.add_parser("status")
+    exp_sub.add_parser("stop")
+
     args = parser.parse_args()
 
     if args.command == "status":
@@ -160,8 +273,26 @@ def main():
         set_mode(args.mode)
     elif args.command == "force-off":
         force_off(args.execute)
+    elif args.command == "experiment":
+        if args.exp_command == "start":
+            experiment_start(args.plan, args.note)
+        elif args.exp_command == "status":
+            experiment_status()
+        elif args.exp_command == "stop":
+            experiment_stop()
+        else:
+            exp_parser.print_help()
     else:
         parser.print_help()
+
+    # 커넥션 풀을 명시적으로 닫는다. 안 닫으면 psycopg 가 종료 때
+    # "couldn't stop thread pool-1-worker-0" 경고를 네 줄씩 뱉는데,
+    # 시연 중에 이런 소음이 나면 진짜 오류와 구분이 안 된다.
+    try:
+        from app.storage import get_storage
+        get_storage().close()
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

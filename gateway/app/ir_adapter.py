@@ -36,11 +36,18 @@ class IRAdapter:
         예전 코드는 esp32/device/ir_01/cmd 로 보냈는데 이 토픽을 구독하는
         노드가 없어, active 모드로 올려도 명령이 어디에도 닿지 않았다.
         """
-        if action not in self.config.ir.codes:
-            logger.warning("등록되지 않은 IR 코드: %s", action)
-            return
-
-        code_hash = self.config.ir.codes[action]
+        # IR 코드 등록 여부로 냉방 자체를 막지 않는다.
+        #
+        # 실제로 동작하는 액추에이터는 펠티어 릴레이이고, 그것은 평문 ON/OFF
+        # 한 줄이면 된다 — IR 프로파일이 필요 없다. 예전에는 config.ir.codes
+        # 에 없는 액션(POWER_ON, COOL_23_AUTO 등)을 통째로 거절해서, 등록된
+        # 세 온도(24/25/26) 밖의 명령은 릴레이까지 못 갔다. IR 프로파일은
+        # 아직 전부 PLACEHOLDER 라 어차피 쏘지 못하는데, 그것 때문에 되는
+        # 기능까지 막혀 있던 셈이다.
+        code_hash = self.config.ir.codes.get(action)
+        if code_hash is None:
+            logger.info("IR 코드가 없는 액션 %s — 릴레이만 제어합니다", action)
+            code_hash = f"{action}_NO_IR_PROFILE"
         now = datetime.now(timezone.utc)
         cooling_on = action != "POWER_OFF"
 

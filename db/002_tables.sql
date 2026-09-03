@@ -119,8 +119,14 @@ CREATE TABLE schedules (
 CREATE TABLE sensor_env (
     reading_id    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     device_id     bigint       NOT NULL,
-    temperature   numeric(4,1),
-    humidity      numeric(4,1),
+    -- 소수 두 자리. SCD41 은 0.01℃ 단위로 값을 주는데 numeric(4,1) 로
+    -- 받으면 0.1℃ 로 잘려 나간다. 12L 목업에서 재실자 1명 상당(0.36W)이
+    -- 30분에 만드는 온도 변화가 약 0.22℃ 라, 0.1℃ 눈금으로는 두 칸밖에
+    -- 안 되어 열모델 식별이 불가능했다. 두 자리로 늘리면 같은 실험이
+    -- 22칸으로 잡힌다. 설정 온도(target_temp)는 사람이 정하는 값이라
+    -- 0.1℃ 로 둔다 — 여기서 바꾸는 것은 '측정값' 뿐이다.
+    temperature   numeric(5,2),
+    humidity      numeric(5,2),
     co2           integer,
     temp_flag     quality_flag NOT NULL DEFAULT 'ok',  -- [v2.3] 항목별 품질 플래그
     humidity_flag quality_flag NOT NULL DEFAULT 'ok',  -- [v2.3]

@@ -1,6 +1,6 @@
 import yaml
 import os
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
 class MQTTConfig(BaseModel):
@@ -47,12 +47,25 @@ class IRConfig(BaseModel):
     # 에어컨 IR 명령 토픽. JSON 을 받는다. IR 프로파일 학습 후 동작한다.
     aircon_topic: str = "esp32/device/ir_01/control"
 
+class HeaterConfig(BaseModel):
+    """합성 재실자(히팅패드) 설정. app/heater.py 참고.
+
+    기본값만으로 동작하므로 config.yaml 에 heater 절이 없어도 된다 —
+    기존 설정 파일이 그대로 뜨게 하려는 것이다.
+    """
+    # 히터 duty(%) 명령 토픽. 평문 정수 0~100 을 받는다.
+    topic: str = "thermoshift/ir_01/heater/cmd"
+    # 합성 재실자를 실제로 구동할지. False 면 duty 0 만 계속 보낸다.
+    # (그래도 보내야 노드 워치독이 게이트웨이가 살아 있음을 안다.)
+    enabled: bool = False
+
 class Config(BaseModel):
     mqtt: MQTTConfig
     app: AppConfig
     control: ControlConfig
     hmm: HMMConfig
     ir: IRConfig
+    heater: HeaterConfig = Field(default_factory=HeaterConfig)
 
 def load_config(path: str = "config/config.yaml") -> Config:
     if not os.path.exists(path):
