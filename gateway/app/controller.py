@@ -156,6 +156,10 @@ class HVACController:
             internal_heat_drift_c_per_min_per_person=(
                 c.internal_heat_drift_c_per_min_per_person
             ),
+            actuator_power_w=c.actuator_power_w,
+            mpc_weight_energy=c.mpc_weight_energy,
+            mpc_weight_comfort=c.mpc_weight_comfort,
+            mpc_weight_switch=c.mpc_weight_switch,
         )
 
     def _schedule_window(self, room_id, now) -> Optional[ScheduleWindow]:

@@ -11,8 +11,9 @@ ThermoShift는 재실자가 만드는 열부하와 실내 열환경의 미래 �
 
 고정 설정온도 제어는 공간이 비어 있어도 동작하거나, 사람이 이미 쾌적한데도
 온도 한 점을 맞추기 위해 에너지를 사용할 수 있습니다. 반대로 절전만
-우선하면 재실자의 불쾌감이 커집니다. ThermoShift는 다음 세 항목을 한
-목적함수에서 다룹니다.
+우선하면 재실자의 불쾌감이 커집니다. ThermoShift에서 온도는 목표가 아니라
+미래 쾌적도를 계산하기 위한 **예측 상태**입니다. 다음 세 항목을 목적함수에서
+다룹니다.
 
 - 에너지 비용 또는 전력 사용 대리지표
 - 재실 확률로 가중한 PMV 쾌적 허용대역 이탈
@@ -74,15 +75,17 @@ V·dC/dt = G·N - Q_vent·(C - C_out)
 60분 예측구간에서 이진 제어 후보를 비교합니다.
 
 ```text
-min Σ [ scenario_cost(k)·u(k)·Δt
-      + λc·P_occupied(k)·max(0, |PMV(k)| - 0.5)²·Δt
+min Σ [ λe·normalized_energy(k)
+      + λc·P_occupied(k)·max(0, |PMV(k)| - 0.5)²
       + λs·|u(k)-u(k-1)| ]
 ```
 
 PMV 허용대역 이탈은 현재 hard constraint가 아닌 soft penalty입니다. 따라서
 “24℃를 항상 맞추는 제어”가 아니라 “재실자가 쾌적한 범위 안에서 불필요한
-동작을 줄이는 제어”를 지향합니다. TOU는 아직 실제 요금제 연동이 아닌
-피크시간 가중 시나리오입니다.
+동작을 줄이는 제어”를 지향합니다. 설정온도 추종 오차는 이 목적함수에
+없습니다. 펠티어 입력전력을 계측·교정하기 전 `normalized_energy`는 이진
+가동시간 대리지표이고, 교정 후에는 `Power[W] × runtime[h]`로 Wh를 함께
+보고합니다. TOU는 아직 실제 요금제 연동이 아닌 피크시간 가중 시나리오입니다.
 
 ## 12 L 목업 실증 범위
 
@@ -160,6 +163,8 @@ docs/      아키텍처·배포·공모전 주장 및 실험 가이드
 
 - [ISO 7730:2025 — PMV/PPD 기반 열쾌적 평가](https://www.iso.org/standard/85803.html)
 - [ASHRAE Handbook, Thermal Comfort — 휴식 성인 약 100 W 대표값](https://handbook.ashrae.org/Handbooks/F21/SI/F21_Ch09/F21_Ch09_si.aspx)
+- [Yang et al. (2018) — PMV와 에너지 다목적 MPC](https://doi.org/10.1016/j.enbuild.2018.03.082)
+- [Chen et al. (2015) — 사용자 피드백 기반 쾌적·에너지 MPC](https://doi.org/10.1016/j.enbuild.2015.06.002)
 
 PMV는 환경과 의복·활동량 가정에 따른 모델 평가값입니다. 사람이 들어갈 수
 없는 목업에서 계산한 PMV를 실제 재실자의 만족도 실증값으로 표현하지 않습니다.

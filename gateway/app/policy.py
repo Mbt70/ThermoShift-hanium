@@ -71,6 +71,12 @@ class PolicyConfig:
     # 밤새 냉방이 도는 일은 없어야 한다.
     precool_max_lead_min: float = 90.0
     internal_heat_drift_c_per_min_per_person: float = 0.0
+    # 전압·전류계로 확인한 펠티어 입력전력. None이면 실제 Wh 대신
+    # 이진 가동시간 대리지표를 사용하고 결과에도 그 사실을 표시한다.
+    actuator_power_w: float | None = None
+    mpc_weight_energy: float = 0.45
+    mpc_weight_comfort: float = 14.0
+    mpc_weight_switch: float = 1.2
 
 
 @dataclass
@@ -359,7 +365,12 @@ def _mpc_decide(inp: PolicyInput, cfg: PolicyConfig) -> PolicyDecision | None:
     # 14시로 해석하지 않고 실증 지역(KST)의 14:00~17:00만 가중한다.
     local_hour = inp.now.astimezone(ZoneInfo("Asia/Seoul")).hour
     peak_hour = 14 <= local_hour < 17
-    mpc = ModelPredictiveController()
+    mpc = ModelPredictiveController(
+        actuator_power_w=cfg.actuator_power_w,
+        w_energy=cfg.mpc_weight_energy,
+        w_comfort=cfg.mpc_weight_comfort,
+        w_switch=cfg.mpc_weight_switch,
+    )
     sol = mpc.solve(
         current_temp_c=inp.temperature_c,
         humidity_pct=inp.humidity_pct,

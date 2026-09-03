@@ -3,11 +3,11 @@
 산업공학적 정식화 (Industrial Engineering & Optimization Formulation):
 ----------------------------------------------------------------------
 본 컨트롤러는 전통적인 고정 설정온도 추종(Tracking Control)을 탈피하여,
-에너지 비용(Economic Cost)과 열적 쾌적도(ISO 7730 PMV)를 파레토 최적화(Pareto Optimization)합니다.
+에너지 사용과 열적 쾌적도(PMV proxy)를 함께 평가하는 후보정책 최적화를 수행합니다.
 
   min_{u_0, ..., u_{N-1}}  J = sum_{k=0}^{N-1} [
-        C_scenario(k) * u_k * dt                            # 1. 에너지 비용 대리지표
-      + w_comfort * P_occ(k) * DiscomfortPenalty(PMV_k) * dt # 2. ISO 7730 PMV 쾌적도 이탈 페널티
+        w_energy * C_scenario(k) * E_normalized(k)           # 1. 에너지 항
+      + w_comfort * P_occ(k) * ComfortSlack(PMV_k)^2         # 2. PMV 쾌적 이탈
       + w_switch * |u_k - u_{k-1}|                          # 3. 액추에이터 변동 억제
   ]
 
@@ -15,9 +15,11 @@
     T_{k+1} = T_k + dt * [ -a * T_k + d_ext + d_internal(N_occ) + b * u_k ]  # 물리 동역학
     u_k in {0, 1}                                                           # 액추에이터 제약
 
-PMV 허용대역 이탈은 현재 hard constraint가 아니라 목적함수의 soft penalty다.
-전력계가 연결되고 열모델이 교정되기 전까지 출력되는 절감률은 실증 성과가
-아니라 동일 모델 안에서 고정 설정온도 기준정책과 비교한 [SIM] 값이다.
+여기에는 설정온도 추종 오차 항이 없다. 온도는 RC 모델이 예측하는 상태이고,
+제어기는 재실 가중 PMV 이탈과 에너지의 trade-off를 푼다. PMV 허용대역
+이탈은 현재 hard constraint가 아니라 목적함수의 soft penalty다. 펠티어
+입력전력을 측정·설정하기 전까지 에너지 항은 가동시간 대리지표이며, 출력되는
+절감률은 실증 성과가 아니라 동일 모델 안의 [SIM] 비교값이다.
 
 특징 (Key Novelties):
 --------------------
@@ -31,12 +33,14 @@ PMV 허용대역 이탈은 현재 hard constraint가 아니라 목적함수의 s
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Any
 
-from ml.comfort_model import calculate_pmv, ComfortMetrics
+from ml.comfort_model import (
+    calculate_pmv,
+    calculate_pmv_value,
+    PMV_COMFORT_LIMIT,
+)
 from ml.thermal_model import ThermalModel
 
 
@@ -62,6 +66,7 @@ class ModelPredictiveController:
         w_energy: float = 0.45,         # 에너지 비용 가중치
         w_comfort: float = 14.0,        # 재실 시 쾌적도 가중치
         w_switch: float = 1.2,          # 제어 빈도 억제 가중치
+        actuator_power_w: Optional[float] = None,
     ):
         self.horizon_minutes = horizon_minutes
         self.dt_minutes = dt_minutes
@@ -69,6 +74,7 @@ class ModelPredictiveController:
         self.w_energy = w_energy
         self.w_comfort = w_comfort
         self.w_switch = w_switch
+        self.actuator_power_w = actuator_power_w
 
     def _fixed_setpoint_baseline(
         self, current_temp_c: float, target_temp_c: float,
@@ -105,7 +111,7 @@ class ModelPredictiveController:
         heat_drift_c_per_min_per_person: float = 0.0,
         peak_hour: bool = False,                     # TOU 피크 요금 시간대 여부
     ) -> MPCOutput:
-        """MPC 롤링 호라이즌 최적화를 수행하여 파레토 최적 제어 결정을 도출한다."""
+        """MPC 롤링 호라이즌에서 쾌적도·에너지 후보정책을 비교한다."""
         if thermal_model is None:
             thermal_model = ThermalModel()
 
@@ -151,13 +157,17 @@ class ModelPredictiveController:
         candidate_policies.append(("DUTY_50", [1, 0] * (self.steps // 2)))
         candidate_policies.append(("DUTY_66", [1, 1, 0] * (self.steps // 3)))
 
-        # 4. 각 정책의 목적함수 J 계산
+        # 4. 각 정책의 목적함수 J 계산. 온도 추종 오차는 목적함수에 없다.
+        # 세 항을 horizon 기준으로 정규화해 가중치의 의미를 비교 가능하게 한다.
         best_cost = float("inf")
         best_u_seq = [0] * self.steps
         best_temp_traj = []
+        best_components: Dict[str, float] = {}
 
-        for name, u_seq in candidate_policies:
-            cost = 0.0
+        for _name, u_seq in candidate_policies:
+            energy_fraction = 0.0
+            comfort_violation = 0.0
+            switch_fraction = 0.0
             temp = current_temp_c
             traj = [(0.0, temp)]
             prev_u = 1 if current_cooling_on else 0
@@ -168,26 +178,37 @@ class ModelPredictiveController:
                 temp = temp + d_temp
                 traj.append(((k + 1) * dt, temp))
 
-                # 에너지 소비 비용
-                cost += eff_energy_weight * float(u) * dt
+                # 정전력 이진 펠티어에서는 가동시간 비율과 Wh가 비례한다.
+                # 전력을 교정하기 전에는 이를 실제 Wh라고 부르지 않는다.
+                energy_fraction += float(u) / self.steps
 
-                # 불쾌도 페널티: PMV 쾌적 대역(|PMV| <= 0.45) 밖 이탈 시 볼록 2차 페널티
-                step_pmv = calculate_pmv(temp, humidity_pct).pmv
-                if abs(step_pmv) > 0.45:
-                    discomfort = ((abs(step_pmv) - 0.45) * 5.0) ** 2
-                else:
-                    discomfort = 0.0
-                cost += self.w_comfort * p_occ_profile[k] * discomfort * dt
+                # PMV 쾌적 허용대역 밖 slack의 2차 penalty.
+                step_pmv = calculate_pmv_value(temp, humidity_pct)
+                slack = max(0.0, abs(step_pmv) - PMV_COMFORT_LIMIT)
+                normalized_slack = slack / PMV_COMFORT_LIMIT
+                comfort_violation += (
+                    p_occ_profile[k] * normalized_slack**2 / self.steps
+                )
 
                 # 스위칭 진동 억제
                 if u != prev_u:
-                    cost += self.w_switch
+                    switch_fraction += 1.0 / self.steps
                 prev_u = u
+
+            energy_cost = eff_energy_weight * energy_fraction
+            comfort_cost = self.w_comfort * comfort_violation
+            switching_cost = self.w_switch * switch_fraction
+            cost = energy_cost + comfort_cost + switching_cost
 
             if cost < best_cost:
                 best_cost = cost
                 best_u_seq = u_seq
                 best_temp_traj = traj
+                best_components = {
+                    "energy": energy_cost,
+                    "comfort": comfort_cost,
+                    "switching": switching_cost,
+                }
 
         # 5. 최적 제어 결정 해석
         next_action_u = best_u_seq[0]
@@ -239,7 +260,7 @@ class ModelPredictiveController:
                 reasons.append(f"MPC 최적화: 재실 온열감(PMV {current_comfort.pmv:+.2f}) 해소를 위한 냉방 가동")
                 reasons.append(f"목표 중립온도 {target_c:.1f}℃ (예측 만족도 {100-current_comfort.ppd:.0f}%)")
         else:
-            if current_comfort.comfort_score >= 80 and p_occupied > 0.4:
+            if abs(current_comfort.pmv) <= PMV_COMFORT_LIMIT and p_occupied > 0.4:
                 decision_type = "setback"
                 target_c = current_comfort.setback_temp_c
                 reasons.append(f"MPC 최적화: 쾌적 밴드(PMV {current_comfort.pmv:+.2f}) 유지 중")
@@ -256,7 +277,7 @@ class ModelPredictiveController:
                 reasons.append(f"MPC 최적화: 공실(재실확률 {p_occupied:.2f}) 또는 자연 냉각 구간")
                 reasons.append("불필요한 펠티어 가동을 피해 전력 사용을 억제")
 
-        pmv_values = [calculate_pmv(t, humidity_pct).pmv for _, t in best_temp_traj[1:]]
+        pmv_values = [calculate_pmv_value(t, humidity_pct) for _, t in best_temp_traj[1:]]
         comfort_violation_rate = (
             round(100.0 * sum(abs(v) > 0.5 for v in pmv_values) / len(pmv_values), 1)
             if pmv_values else 0.0
@@ -267,6 +288,30 @@ class ModelPredictiveController:
             "baseline_runtime_min": round(baseline_runtime, 1),
             "optimized_runtime_min": round(optimized_runtime, 1),
             "runtime_reduction_pct": simulated_reduction_pct,
+            "energy_basis": (
+                "CONFIGURED_ACTUATOR_POWER"
+                if self.actuator_power_w is not None
+                else "RUNTIME_PROXY_POWER_CALIBRATION_REQUIRED"
+            ),
+            "optimized_energy_wh": (
+                round(self.actuator_power_w * optimized_runtime / 60.0, 3)
+                if self.actuator_power_w is not None else None
+            ),
+            "baseline_energy_wh": (
+                round(self.actuator_power_w * baseline_runtime / 60.0, 3)
+                if self.actuator_power_w is not None else None
+            ),
+            "objective_terms": {
+                key: round(value, 5) for key, value in best_components.items()
+            },
+            "objective_weights": {
+                "energy": self.w_energy,
+                "comfort": self.w_comfort,
+                "switching": self.w_switch,
+            },
+            "objective_has_temperature_tracking_term": False,
+            "comfort_model_scope": "SIM_FIXED_MET_CLO_AIR_SPEED_MRT_EQUALS_AIR_TEMP",
+            "pmv_comfort_limit": PMV_COMFORT_LIMIT,
             "comfort_violation_rate_pct": comfort_violation_rate,
             "baseline_switch_count": baseline_switches,
             "optimized_switch_count": optimized_switches,

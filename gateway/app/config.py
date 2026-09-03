@@ -40,6 +40,12 @@ class ControlConfig(BaseModel):
     # 인원 상당 1명당 온도 표류(℃/min). 가진 실험으로 식별하기 전에는 0으로
     # 두어, 근거 없는 인체 발열 feedforward가 실제 제어에 들어가지 않게 한다.
     internal_heat_drift_c_per_min_per_person: float = Field(default=0.0, ge=0)
+    actuator_power_w: Optional[float] = Field(default=None, gt=0)
+    # 정규화된 에너지·PMV slack·스위칭 항의 가중치. 통제 실험 전 기본값은
+    # 설계값이며 민감도 분석과 Pareto plot으로 최종 선정해야 한다.
+    mpc_weight_energy: float = Field(default=0.45, ge=0)
+    mpc_weight_comfort: float = Field(default=14.0, ge=0)
+    mpc_weight_switch: float = Field(default=1.2, ge=0)
 
 class HMMConfig(BaseModel):
     transition_matrix_30s: List[List[float]]

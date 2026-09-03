@@ -40,6 +40,13 @@ control:
   # [TARGET] 합성 열원 가진 실험/실공간 데이터로 식별한 뒤에만 설정한다.
   # 0이면 MPC의 재실 발열 feedforward를 비활성화한다.
   internal_heat_drift_c_per_min_per_person: 0.0
+  # 전압·전류를 측정해 확인하기 전에는 null. null이면 실제 Wh가 아닌
+  # 가동시간 대리지표로 최적화하며 실측 절감률을 주장하지 않는다.
+  actuator_power_w: null
+  # 정규화 목적함수 가중치. 통제 실험의 민감도 분석 전 설계 기본값이다.
+  mpc_weight_energy: 0.45
+  mpc_weight_comfort: 14.0
+  mpc_weight_switch: 1.2
 
 hmm:
   transition_matrix_30s:
