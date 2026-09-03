@@ -25,7 +25,8 @@ if [ -r /etc/thermoshift.env ]; then
 fi
 export PGHOST="${DB_HOST:-localhost}" PGPORT="${DB_PORT:-5432}"
 export PGUSER="${DB_USER:-thermoshift}" PGDATABASE="${DB_NAME:-thermoshift}"
-export PGPASSWORD="${DB_PASSWORD:-thermoshift1234}"
+: "${DB_PASSWORD:?DB_PASSWORD 환경변수가 필요합니다}"
+export PGPASSWORD="$DB_PASSWORD"
 
 say() { printf '\n\033[1;36m== %s\033[0m\n' "$*"; }
 
@@ -39,7 +40,7 @@ psql -tAc "SELECT version()" | head -1
 RESET=""
 [ "${1:-}" = "--reset" ] && RESET="--reset"
 
-# 스키마는 001~004 가 단일 원본이다. 이미 적용돼 있으면(users 표 존재)
+# 스키마는 001~008 이 단일 원본이다. 이미 적용돼 있으면(users 표 존재)
 # 다시 돌리지 않는다 — 002 는 CREATE TABLE 이라 두 번 돌면 실패한다.
 if psql -tAc "SELECT to_regclass('public.users')" | grep -q users; then
   say "스키마 이미 적용됨 — 넘어감"

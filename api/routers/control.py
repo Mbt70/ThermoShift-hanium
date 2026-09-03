@@ -1,11 +1,13 @@
 from datetime import date
+from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from psycopg.types.json import Json
 
 from api.db import get_conn
+from api.security import get_current_user_id, require_owned_resource, require_room_owner
 
 router = APIRouter(tags=["control"])
 
@@ -23,7 +25,8 @@ _DECISION_COLUMNS = (
 
 
 @router.get("/rooms/{room_id}/commands")
-def list_commands(room_id: int, day: date | None = None):
+def list_commands(room_id: int, day: date | None = None,
+                  current_user_id: int = Depends(get_current_user_id)):
     """GET /rooms/{room_id}/commands?day=2026-08-19
 
     Response: list of HVAC command/control-log entries for the room, newest
@@ -47,6 +50,7 @@ def list_commands(room_id: int, day: date | None = None):
       ...
     ]
     """
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         if day is None:
             cur.execute(
@@ -66,8 +70,10 @@ def list_commands(room_id: int, day: date | None = None):
 
 
 @router.get("/commands/{command_id}")
-def get_command(command_id: int):
+def get_command(command_id: int,
+                current_user_id: int = Depends(get_current_user_id)):
     """GET /commands/{command_id} - Response: same shape as one list_commands() entry."""
+    require_owned_resource("hvac_commands", "command_id", command_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(f"SELECT {_COLUMNS} FROM hvac_commands WHERE command_id = %s", (command_id,))
         row = cur.fetchone()
@@ -81,13 +87,14 @@ class IssueCommandRequest(BaseModel):
 
     command_type: str = Field(pattern="^(power_on|power_off|set_temp|set_mode|set_fan)$")
     target_temp: float | None = Field(default=None, ge=16, le=30)
-    control_mode: str = Field(default="manual", pattern="^(monitoring|manual|rule|mpc)$")
+    control_mode: Literal["manual"] = "manual"
     issued_by: int | None = None
     payload: dict | None = None
 
 
 @router.post("/rooms/{room_id}/commands", status_code=201)
-def issue_command(room_id: int, body: IssueCommandRequest):
+def issue_command(room_id: int, body: IssueCommandRequest,
+                  current_user_id: int = Depends(get_current_user_id)):
     """POST /rooms/{room_id}/commands
 
     명령을 'pending' 으로 큐에 넣기만 한다. API 는 액추에이터를 직접
@@ -97,6 +104,7 @@ def issue_command(room_id: int, body: IssueCommandRequest):
 
     Response: {"command_id": int, "command_status": "pending", "issued_at": str}
     """
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         # 이 공간의 IR 송신기를 찾는다. 냉방 명령이 나갈 통로다.
         cur.execute(
@@ -125,14 +133,15 @@ def issue_command(room_id: int, body: IssueCommandRequest):
             "  target_temp, command_status, payload)"
             " VALUES (%s, %s, %s, %s, %s, %s, 'pending', %s)"
             " RETURNING command_id, command_status, issued_at",
-            (room_id, device["device_id"], body.issued_by, body.command_type,
-             body.control_mode, body.target_temp, Json(body.payload or {})),
+            (room_id, device["device_id"], current_user_id, body.command_type,
+             "manual", body.target_temp, Json(body.payload or {})),
         )
         return cur.fetchone()
 
 
 @router.get("/rooms/{room_id}/decisions/latest")
-def get_latest_decision(room_id: int):
+def get_latest_decision(room_id: int,
+                        current_user_id: int = Depends(get_current_user_id)):
     """GET /rooms/{room_id}/decisions/latest
 
     이 공간에서 게이트웨이가 가장 최근에 내린 제어 판단 한 건. AI 해설
@@ -141,6 +150,7 @@ def get_latest_decision(room_id: int):
     Response: same columns as control_decisions, or 404 if this room has
     no recorded decision yet.
     """
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             f"SELECT {_DECISION_COLUMNS} FROM control_decisions"

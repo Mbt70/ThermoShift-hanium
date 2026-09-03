@@ -1,4 +1,3 @@
-import random
 import sys
 from datetime import date, time
 from pathlib import Path
@@ -12,7 +11,6 @@ if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
 from app.components.room_store import (
-    comfort_index,
     environment_snapshot,
     list_rooms,
     set_target_temperature,
@@ -31,6 +29,7 @@ from app.components.schedule_store import (
 from components.auth_store import current_user_id, is_logged_in
 from components.dash_shell import render_sidebar
 from components.mobile_ui import apply_mobile_styles, icon_data_uri
+from ml.comfort_model import calculate_pmv
 
 _KPI_ICON_FILES = {
     "temp": "temperture.svg",
@@ -46,14 +45,6 @@ _WARN_ICON = (
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
     'stroke-linecap="round" stroke-linejoin="round">'
     '<path d="M12 4 3 20h18L12 4Z"/><path d="M12 10.5v4M12 17.5v.1"/></svg>'
-)
-_ARROW_DOWN_ICON = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
-    'stroke-linecap="round" stroke-linejoin="round"><path d="M6 8l12 12M18 20H9M18 20v-9"/></svg>'
-)
-_ARROW_UP_ICON = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
-    'stroke-linecap="round" stroke-linejoin="round"><path d="M6 16 18 4M18 4H9M18 4v9"/></svg>'
 )
 _HUMIDITY_ICON = (
     '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '
@@ -383,11 +374,6 @@ with main_col:
             fresh_rooms = list_rooms(current_user_id())
             current_r = next((r for r in fresh_rooms if r["id"] == current_room_id), room)
             snapshot = environment_snapshot(current_r)
-            occupied = bool(current_r.get("occupied"))
-            occupancy_estimate = random.Random(f"occ-head-{current_r['id']}").randint(1, 6) if occupied else 0
-            occupancy_rate = random.Random(f"occ-rate-{current_r['id']}-{date.today()}").randint(60, 95) if occupied else 0
-            power_delta_pct = round(random.Random(f"power-yday-{current_r['id']}-{date.today()}").uniform(-9, 6), 1)
-
             temp_val, co2_val, humidity_val, power_val = (
                 snapshot["temperature"], snapshot["co2"], snapshot["humidity"], snapshot["power"],
             )
@@ -452,8 +438,8 @@ with main_col:
                     "HVAC 전력",
                     power_display,
                     "kW",
-                    "is-positive" if power_delta_pct < 0 else "is-negative",
-                    f"{_ARROW_DOWN_ICON if power_delta_pct < 0 else _ARROW_UP_ICON}어제 대비 {power_delta_pct:+.1f}%",
+                    "is-positive" if power_val is not None else "",
+                    f"{_CHECK_ICON}전력 센서 실측" if power_val is not None else "전력 센서 미연동",
                 ),
             ]
             kpi_cols = st.columns(6, gap="small")
@@ -565,7 +551,7 @@ with main_col:
 
                 with st.container(key="ts_room_ai_card", border=True):
                     st.markdown(
-                        f'<p class="ts-dash-card-title">{_CHIP_ICON}AI 운영 설명</p>',
+                        f'<p class="ts-dash-card-title">{_CHIP_ICON}운영 설명 <span class="ts-dash-badge">규칙 기반</span></p>',
                         unsafe_allow_html=True,
                     )
                     headline, subline = system_judgment(current_r)
@@ -577,15 +563,19 @@ with main_col:
                         unsafe_allow_html=True,
                     )
 
-            comfort = comfort_index(current_r)
+            pmv = (
+                calculate_pmv(float(temp_val), float(humidity_val)).pmv
+                if temp_val is not None and humidity_val is not None
+                else None
+            )
             with st.container(key="ts_dash_summary_card", border=True):
-                st.markdown('<p class="ts-dash-card-title">KPI 요약 (오늘)</p>', unsafe_allow_html=True)
+                st.markdown('<p class="ts-dash-card-title">현재 상태 요약</p>', unsafe_allow_html=True)
                 summary_items = [
-                    ("power", "HVAC 전력 사용량", f"{power_val * 24:.0f}kWh" if power_val is not None else "--"),
-                    ("temp", "평균 온도", f"{temp_display}°C" if temp_val is not None else "--"),
-                    ("co2", "평균 CO₂", f"{co2_display}ppm" if co2_val is not None else "--"),
-                    ("occupancy", "공간 사용률", f"{occupancy_rate}%"),
-                    (None, "종합 쾌적도 지수", f"{comfort}/100"),
+                    ("power", "순간 HVAC 전력", f"{power_val:.1f}kW" if power_val is not None else "--"),
+                    ("temp", "현재 온도", f"{temp_display}°C" if temp_val is not None else "--"),
+                    ("co2", "현재 CO₂", f"{co2_display}ppm" if co2_val is not None else "--"),
+                    ("occupancy", "현재 재실 상태", "재실" if current_r.get("occupied") else "공실"),
+                    (None, "현재 PMV", f"{pmv:+.2f}" if pmv is not None else "--"),
                 ]
                 items_html = "".join(
                     f'<div class="ts-dash-summary-item">'

@@ -6,7 +6,7 @@
 ---------------------
 구 스키마는 게이트웨이가 급하게 만든 평면 구조였다. 센서값이 metric/value
 한 표(sensor_readings)에 다 들어 있고, 식별자는 전부 TEXT UUID 였다. 새
-스키마(db/001~004)는 센서를 종류별 표로 나누고(sensor_env/pir/door),
+스키마(db/001~008)는 센서를 종류별 표로 나누고(sensor_env/pir/door),
 식별자를 bigint identity 로 쓰며, ENUM 과 CHECK 로 값을 강제한다. 그래서
 이관은 피벗 + 식별자 재발급 + 값 매핑이 전부 필요하다.
 
@@ -105,7 +105,7 @@ def conninfo():
         host=os.getenv("DB_HOST", "localhost"),
         port=os.getenv("DB_PORT", "5432"),
         user=os.getenv("DB_USER", "thermoshift"),
-        password=os.getenv("DB_PASSWORD", "thermoshift1234"),
+        password=os.environ["DB_PASSWORD"],
         dbname=os.getenv("DB_NAME", "thermoshift"),
     )
 

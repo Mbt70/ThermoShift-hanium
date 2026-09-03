@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.db import get_conn
+from api.security import get_current_user_id, require_owned_resource, require_room_owner
 
 router = APIRouter(tags=["devices"])
 
@@ -16,7 +17,7 @@ class UpdateEnabledRequest(BaseModel):
 
 
 @router.get("/rooms/{room_id}/devices")
-def list_devices(room_id: int):
+def list_devices(room_id: int, current_user_id: int = Depends(get_current_user_id)):
     """GET /rooms/{room_id}/devices
 
     Response: list of
@@ -35,6 +36,7 @@ def list_devices(room_id: int):
       ...
     ]
     """
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             f"SELECT {_COLUMNS} FROM devices WHERE room_id = %s ORDER BY device_code",
@@ -44,8 +46,10 @@ def list_devices(room_id: int):
 
 
 @router.patch("/devices/{device_id}/enabled")
-def update_enabled(device_id: int, body: UpdateEnabledRequest):
+def update_enabled(device_id: int, body: UpdateEnabledRequest,
+                   current_user_id: int = Depends(get_current_user_id)):
     """PATCH /devices/{device_id}/enabled - Response: same shape as one list_devices() entry."""
+    require_owned_resource("devices", "device_id", device_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             f"UPDATE devices SET is_enabled = %s WHERE device_id = %s RETURNING {_COLUMNS}",

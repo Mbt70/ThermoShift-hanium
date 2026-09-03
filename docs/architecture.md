@@ -1,56 +1,64 @@
-# Architecture Draft
+# ThermoShift Architecture
 
-## 전체 구조 초안
+## 시스템 경계
+
+ThermoShift는 12 L 목업에서 폐루프 제어 아키텍처를 검증한다. 현재 목업
+결과를 실제 45m³ 공간 성능으로 환산하지 않는다.
 
 ```text
-Sensor / Input Data
-        ↓
-Backend API / Data Processing
-        ↓
-Comfort & Energy Logic
-        ↓
-Dashboard / Recommendation UI
+┌────────────────────── 12 L physical mock-up ──────────────────────┐
+│ SCD41 / PIR / door ─ ESP32 ─ MQTT ─ Raspberry Pi gateway          │
+│                                              │                    │
+│ 10 W heater ◀─ excitation plan              ├─ HMM state estimate│
+│ Peltier     ◀─ safety policy ◀─ RC/MPC       └─ local SQLite buffer│
+└──────────────────────────────────────────────┬────────────────────┘
+                                               │ private network
+                                  ┌────────────▼────────────┐
+                                  │ PostgreSQL + FastAPI    │
+                                  │ decision/evidence logs  │
+                                  └────────────┬────────────┘
+                                               │ authenticated API
+                                  ┌────────────▼────────────┐
+                                  │ Web dashboard / PWA     │
+                                  └─────────────────────────┘
 ```
 
-## 주요 모듈
+## 제어 흐름
 
-### 1. Data Input
+1. 센서의 측정 시각, 수신 시각, 품질 플래그를 함께 저장한다.
+2. PIR·문·CO₂ 특징으로 HMM 재실 상태를 추정한다.
+3. 목업 시험에서는 히터 duty로 알고 있는 합성 열부하를 사용한다.
+4. RC 모델로 제어 후보별 미래 온도를 계산한다.
+5. MPC는 에너지 대리지표, PMV 허용대역 이탈, 제어 변경을 비교한다.
+6. 안전 정책이 stale sensor, 수동 잠금, 최소 가동시간을 확인한다.
+7. 게이트웨이만 실제 MQTT 제어 명령을 송신하고 결과를 기록한다.
+8. DB 연결 실패 시 쓰기를 로컬 SQLite에 보관한 뒤 순서대로 재전송한다.
 
-- 온도
-- 습도
-- CO₂
-- 재실 여부
-- 외부 날씨
-- 전력 사용량 또는 추정 변수
+## 모델 경계
 
-### 2. Comfort Model
+- HMM: 현재 구현·단위 테스트 완료. 학습 데이터는 성능 주장에 부족하다.
+- CO₂ 인원수 추정: 실제 공간 체적·ACH 교정 전에는 비활성화한다.
+- RC 모델: 교정 파일이 없으면 가정값으로 동작하며 로그에 표시한다.
+- PMV: ISO 7730 계열 계산 모델에 따른 지표다. 목업의 인간 만족도 실측이 아니다.
+- MPC: 제한된 후보 정책을 비교하는 프로토타입이다. 전력계 전에는 가동시간
+  대리지표를 사용하며 출력은 `[SIM]`이다.
+- 생성형 AI: 판단 로그를 자연어로 설명하는 부가 기능이며 제어 안전 경로에
+  포함되지 않는다.
 
-초기에는 단순 규칙 기반으로 시작하고, 데이터가 쌓이면 모델을 고도화합니다.
+## 실공간 확장
 
-- Rule-based comfort score
-- PMV/PPD 참고
-- 사용자 피드백 기반 보정
+재사용하는 것:
 
-### 3. Energy Logic
+- 센서·게이트웨이·API 데이터 계약
+- 상태추정과 안전 제어 흐름
+- RC 모델 구조
+- MPC 목적함수 및 최적화 절차
+- 실험·KPI 평가 코드
 
-- 냉난방 설정 변화에 따른 전력 영향 추정
-- 시간대별 사용 패턴 분석
-- 절감 가능 구간 탐지
+현장마다 다시 측정하는 것:
 
-### 4. Recommendation
-
-예시:
-
-- “현재 쾌적도는 양호하므로 설정온도를 1℃ 완화해도 됩니다.”
-- “CO₂ 농도가 높아 환기가 필요합니다.”
-- “습도가 높아 체감온도가 상승할 수 있습니다.”
-
-## 기술 스택 후보
-
-아직 결정 전입니다.
-
-- Frontend: React / Next.js / Streamlit 중 선택
-- Backend: FastAPI / Node.js 중 선택
-- DB: SQLite / PostgreSQL / Supabase 중 선택
-- Data/ML: Python, pandas, scikit-learn
-- Deployment: Vercel / Render / Railway / GitHub Pages 중 선택
+- 공간 체적, 외기 CO₂, 환기량/ACH
+- 유효 열저항과 열용량
+- 내부발열과 액추에이터 냉각 효율
+- 실제 전력 단가와 설비 제약
+- 의복량·활동량·기류·복사온도 등 PMV 입력

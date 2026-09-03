@@ -8,8 +8,8 @@
 -- =====================================================================
 
 -- 1) 사용자 1명
-INSERT INTO users (name, email, password_hash)
-VALUES ('테스트관리자', 'admin@thermoshift.dev', 'dev-dummy-hash-not-real');
+INSERT INTO users (name, email, password_hash, is_demo)
+VALUES ('테스트관리자', 'admin@thermoshift.dev', 'dev-dummy-hash-not-real', true);
 
 -- 2) 공간 1개 (소유자 = 위 사용자)
 INSERT INTO rooms (owner_user_id, name, location, control_mode,

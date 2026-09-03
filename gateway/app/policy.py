@@ -38,6 +38,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # 런타임 의존을 만들지 않는다 — 정책은 ml 패키지 없이도 돈다.
@@ -58,7 +59,7 @@ class PolicyConfig:
     cooling_on_duration_sec: int = 180
     cooling_off_duration_sec: int = 300
 
-    # 압축기 보호. 켠 직후 끄거나 끈 직후 켜면 기기가 상한다.
+    # 액추에이터 보호. 켠 직후 끄거나 끈 직후 켜는 잦은 변동을 막는다.
     minimum_on_time_sec: int = 600
     minimum_off_time_sec: int = 300
     command_rate_limit_sec: int = 120
@@ -69,6 +70,7 @@ class PolicyConfig:
     # 예냉을 이보다 일찍 시작하지 않는다. 리드타임 계산이 빗나가도
     # 밤새 냉방이 도는 일은 없어야 한다.
     precool_max_lead_min: float = 90.0
+    internal_heat_drift_c_per_min_per_person: float = 0.0
 
 
 @dataclass
@@ -209,9 +211,13 @@ def decide(inp: PolicyInput, cfg: PolicyConfig) -> PolicyDecision:
 
     # MPC (Model Predictive Control) 최적 제어 모드
     if inp.control_mode == "mpc":
-        mpc_decision = _mpc_decide(inp, cfg)
-        if mpc_decision is not None:
-            return mpc_decision
+        if inp.thermal is None or not getattr(inp.thermal, "calibrated", False):
+            reasons.append("MPC 보류 — 현장 열모델 미교정, 안전 규칙 제어로 대체")
+        else:
+            mpc_decision = _mpc_decide(inp, cfg)
+            if mpc_decision is not None:
+                return mpc_decision
+            reasons.append("MPC 모듈을 불러오지 못해 안전 규칙 제어로 대체")
 
     upper = target + cfg.temp_tolerance_c
     lower = target - cfg.temp_tolerance_c
@@ -263,7 +269,8 @@ def _precool(inp: PolicyInput, cfg: PolicyConfig) -> PolicyDecision | None:
     계산한다. 더운 날은 일찍, 이미 시원하면 아예 켜지 않는다.
     """
     sched = inp.schedule
-    if inp.temperature_c is None or inp.thermal is None:
+    if (inp.temperature_c is None or inp.thermal is None
+            or not getattr(inp.thermal, "calibrated", False)):
         return None
 
     lead = inp.thermal.lead_time_minutes(inp.temperature_c, sched.target_temp_c)
@@ -285,9 +292,7 @@ def _precool(inp: PolicyInput, cfg: PolicyConfig) -> PolicyDecision | None:
 
     reasons = [
         f"{minutes_left:.0f}분 뒤 예약 시작 (목표 {sched.target_temp_c:.1f}℃)",
-        f"현재 {inp.temperature_c:.1f}℃ → 도달까지 {lead:.0f}분 필요"
-        + ("" if getattr(inp.thermal, "calibrated", False)
-           else " ※ 열모델 미교정(가정값)"),
+        f"현재 {inp.temperature_c:.1f}℃ → 도달까지 {lead:.0f}분 필요",
     ]
     return _commit(inp, cfg, "precool", _cool_action(sched.target_temp_c),
                    sched.target_temp_c, reasons)
@@ -350,7 +355,10 @@ def _mpc_decide(inp: PolicyInput, cfg: PolicyConfig) -> PolicyDecision | None:
     if inp.schedule and inp.now < inp.schedule.starts_at:
         sched_minutes = (inp.schedule.starts_at - inp.now).total_seconds() / 60.0
 
-    peak_hour = (14 <= inp.now.hour <= 17) # TOU 피크 요금제 반영 (14~17시)
+    # 현재는 실제 전력회사 요금표 연동 전인 목업 시나리오다. UTC 시각을 그대로
+    # 14시로 해석하지 않고 실증 지역(KST)의 14:00~17:00만 가중한다.
+    local_hour = inp.now.astimezone(ZoneInfo("Asia/Seoul")).hour
+    peak_hour = 14 <= local_hour < 17
     mpc = ModelPredictiveController()
     sol = mpc.solve(
         current_temp_c=inp.temperature_c,
@@ -361,6 +369,7 @@ def _mpc_decide(inp: PolicyInput, cfg: PolicyConfig) -> PolicyDecision | None:
         schedule_in_minutes=sched_minutes,
         current_cooling_on=inp.cooling_on,
         headcount_estimate=inp.headcount_estimate,
+        heat_drift_c_per_min_per_person=cfg.internal_heat_drift_c_per_min_per_person,
         peak_hour=peak_hour,
     )
     return _commit(inp, cfg, sol.decision_type, sol.optimal_action, sol.target_temp_c, sol.reasons)

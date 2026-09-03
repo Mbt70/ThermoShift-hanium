@@ -18,9 +18,13 @@ CREATE TABLE users (
     name          varchar(50)  NOT NULL,
     email         varchar(255) NOT NULL,
     password_hash varchar(255) NOT NULL,
+    is_demo       boolean      NOT NULL DEFAULT false,
+    demo_owner_user_id bigint,
     created_at    timestamptz  NOT NULL DEFAULT now(),
     updated_at    timestamptz  NOT NULL DEFAULT now(),
-    deleted_at    timestamptz            -- [v2.3] soft delete (NULL=활성)
+    deleted_at    timestamptz,           -- [v2.3] soft delete (NULL=활성)
+    CONSTRAINT fk_users_demo_owner FOREIGN KEY (demo_owner_user_id)
+        REFERENCES users (user_id) ON DELETE SET NULL
     -- email UNIQUE 는 부분 유니크 인덱스로 003 에서 정의
     -- (WHERE deleted_at IS NULL — 탈퇴 계정은 이메일 재사용 허용)
 );
@@ -131,6 +135,7 @@ CREATE TABLE sensor_env (
     temp_flag     quality_flag NOT NULL DEFAULT 'ok',  -- [v2.3] 항목별 품질 플래그
     humidity_flag quality_flag NOT NULL DEFAULT 'ok',  -- [v2.3]
     co2_flag      quality_flag NOT NULL DEFAULT 'ok',  -- [v2.3]
+    raw_payload   jsonb        NOT NULL DEFAULT '{}'::jsonb,
     measured_at   timestamptz  NOT NULL,               -- 센서 측정 시각 (기본값 없음)
     received_at   timestamptz  NOT NULL,               -- [v2.3] DB 도착 시각 (FastAPI 기록)
     CONSTRAINT uq_env UNIQUE (device_id, measured_at),
@@ -152,6 +157,7 @@ CREATE TABLE sensor_pir (
     device_id     bigint       NOT NULL,
     motion        boolean      NOT NULL,
     flag          quality_flag NOT NULL DEFAULT 'ok',  -- [v2.3 / 확인 필요] 단일 품질 플래그
+    raw_payload   jsonb        NOT NULL DEFAULT '{}'::jsonb,
     measured_at   timestamptz  NOT NULL,
     received_at   timestamptz  NOT NULL,               -- [v2.3]
     CONSTRAINT uq_pir UNIQUE (device_id, measured_at),
@@ -168,6 +174,7 @@ CREATE TABLE sensor_door (
     device_id     bigint       NOT NULL,
     door_state    door_state   NOT NULL,
     flag          quality_flag NOT NULL DEFAULT 'ok',  -- [v2.3 / 확인 필요]
+    raw_payload   jsonb        NOT NULL DEFAULT '{}'::jsonb,
     measured_at   timestamptz  NOT NULL,
     received_at   timestamptz  NOT NULL,               -- [v2.3]
     CONSTRAINT uq_door UNIQUE (device_id, measured_at),

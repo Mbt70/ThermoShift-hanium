@@ -1,6 +1,11 @@
 import streamlit as st
 
-from app.components.auth_store import check_credentials, is_registered, set_current_user
+from app.components.auth_store import (
+    check_credentials,
+    is_registered,
+    set_current_user,
+    start_demo_session,
+)
 from app.components.mobile_ui import (
     apply_mobile_styles,
     auth_switch_link,
@@ -59,5 +64,16 @@ if submitted:
     if credentials_ok:
         set_current_user(email)
         st.switch_page("pages/room_list.py")
+
+st.markdown('<div class="ts-form-submit-space"></div>', unsafe_allow_html=True)
+if st.button(
+    "로그인 없이 둘러보기",
+    key="demo_guest_login",
+    use_container_width=True,
+):
+    if start_demo_session():
+        st.switch_page("pages/room_list.py")
+    else:
+        inline_error("DB에 시연 계정이 지정되지 않았습니다")
 
 auth_switch_link("pages/signup.py", "회원가입", key="login_signup_link")

@@ -8,6 +8,7 @@ class EnvData(BaseModel):
     temperature_c: Optional[float] = None
     humidity_rh: Optional[float] = None
     co2_ppm: Optional[float] = None
+    raw_payload: str = "{}"
 
 class OccData(BaseModel):
     device_id: str
@@ -15,6 +16,7 @@ class OccData(BaseModel):
     pir: bool
     door: str
     door_event: bool
+    raw_payload: str = "{}"
 
 class IrData(BaseModel):
     device_id: str
@@ -22,6 +24,7 @@ class IrData(BaseModel):
     protocol: Optional[str] = None
     raw: Optional[Any] = None
     code_hash: str
+    raw_payload: str = "{}"
 
 class OccupancyProbabilities(BaseModel):
     empty: float

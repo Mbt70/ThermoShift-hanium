@@ -69,6 +69,7 @@ After=network.target thermoshift-api.service
 Type=simple
 WorkingDirectory=$REPO
 Environment=THERMOSHIFT_API_URL=http://127.0.0.1:8000
+EnvironmentFile=-/etc/thermoshift.env
 ExecStartPre=$REPO/scripts/wait-for.sh 127.0.0.1 8000 60
 ExecStart=$PY -m streamlit run web/main.py \\
   --server.port 8501 --server.address 127.0.0.1 \\

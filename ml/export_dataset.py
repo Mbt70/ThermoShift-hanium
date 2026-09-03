@@ -20,48 +20,52 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
-from api.db import get_conn
+from api.db import close_pool, get_conn, open_pool
 
 
 def export_dataset(output_path: str = "dataset_pinn_thermal.csv", date_filter: str | None = None) -> str:
     print(f"📊 실측 데이터베이스에서 시계열 데이터 추출 중... (필터: {date_filter or '전체'})")
 
-    with get_conn() as conn, conn.cursor() as cur:
-        # 1. 환경 센서 데이터 조회
-        where_clause = ""
-        params = []
-        if date_filter:
-            where_clause = "WHERE DATE(e.measured_at) = %s"
-            params.append(date_filter)
+    open_pool()
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            # 1. 환경 센서 데이터 조회
+            where_clause = ""
+            params = []
+            if date_filter:
+                where_clause = "WHERE DATE(e.measured_at) = %s"
+                params.append(date_filter)
 
-        query = f"""
-            SELECT 
-                e.reading_id,
-                e.measured_at,
-                e.temperature,
-                e.humidity,
-                e.co2,
-                d.room_id
-            FROM sensor_env e
-            JOIN devices d USING (device_id)
-            {where_clause}
-            ORDER BY e.measured_at ASC
-        """
-        cur.execute(query, tuple(params))
-        env_rows = cur.fetchall()
+            query = f"""
+                SELECT
+                    e.reading_id,
+                    e.measured_at,
+                    e.temperature,
+                    e.humidity,
+                    e.co2,
+                    d.room_id
+                FROM sensor_env e
+                JOIN devices d USING (device_id)
+                {where_clause}
+                ORDER BY e.measured_at ASC
+            """
+            cur.execute(query, tuple(params))
+            env_rows = cur.fetchall()
 
-        # 2. 제어 판단 및 냉방 가동 여부 조회
-        cur.execute("""
-            SELECT 
-                decided_at,
-                decision_type,
-                control_mode,
-                target_temp,
-                reason
-            FROM control_decisions
-            ORDER BY decided_at ASC
-        """)
-        decision_rows = cur.fetchall()
+            # 2. 제어 판단 및 냉방 가동 여부 조회
+            cur.execute("""
+                SELECT
+                    decided_at,
+                    decision_type,
+                    control_mode,
+                    target_temp,
+                    reason
+                FROM control_decisions
+                ORDER BY decided_at ASC
+            """)
+            decision_rows = cur.fetchall()
+    finally:
+        close_pool()
 
     if not env_rows:
         print("⚠️ 조건에 맞는 센서 데이터가 없습니다.")

@@ -1,7 +1,10 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 from api.db import get_conn
+from api.security import get_current_user_id, require_room_owner
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -12,28 +15,30 @@ _LIST_COLUMNS = (
 
 
 class CreateRoomRequest(BaseModel):
-    owner_user_id: int
-    name: str
-    location: str | None = None
-    floor_plan_url: str | None = None
+    # 구버전 클라이언트 호환용. 서버는 이 값을 신뢰하지 않고 인증 사용자를 저장한다.
+    owner_user_id: int | None = None
+    name: str = Field(min_length=1, max_length=100)
+    location: str | None = Field(default=None, max_length=200)
+    floor_plan_url: str | None = Field(default=None, max_length=500)
 
 
 class UpdateRoomRequest(BaseModel):
-    name: str
-    location: str | None = None
-    floor_plan_url: str | None = None
+    name: str = Field(min_length=1, max_length=100)
+    location: str | None = Field(default=None, max_length=200)
+    floor_plan_url: str | None = Field(default=None, max_length=500)
 
 
 class UpdateTargetTempRequest(BaseModel):
-    target_temp: float
+    target_temp: float = Field(ge=16, le=30)
 
 
 class UpdateControlModeRequest(BaseModel):
-    control_mode: str
+    control_mode: Literal["monitoring", "manual", "rule", "mpc"]
 
 
 @router.get("")
-def list_rooms(owner_user_id: int | None = None):
+def list_rooms(owner_user_id: int | None = None,
+               current_user_id: int = Depends(get_current_user_id)):
     """GET /rooms?owner_user_id=1
 
     Response: list of
@@ -56,19 +61,18 @@ def list_rooms(owner_user_id: int | None = None):
     ]
     """
     with get_conn() as conn, conn.cursor() as cur:
-        if owner_user_id is None:
-            cur.execute(f"SELECT {_LIST_COLUMNS} FROM rooms ORDER BY room_id")
-        else:
-            cur.execute(
-                f"SELECT {_LIST_COLUMNS} FROM rooms WHERE owner_user_id = %s ORDER BY room_id",
-                (owner_user_id,),
-            )
+        # query parameter는 구버전 클라이언트 호환용이며 접근 범위를 넓히지 않는다.
+        cur.execute(
+            f"SELECT {_LIST_COLUMNS} FROM rooms WHERE owner_user_id = %s ORDER BY room_id",
+            (current_user_id,),
+        )
         return cur.fetchall()
 
 
 @router.get("/{room_id}")
-def get_room(room_id: int):
+def get_room(room_id: int, current_user_id: int = Depends(get_current_user_id)):
     """GET /rooms/{room_id} - Response: same shape as one list_rooms() entry."""
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(f"SELECT {_LIST_COLUMNS} FROM rooms WHERE room_id = %s", (room_id,))
         row = cur.fetchone()
@@ -78,7 +82,8 @@ def get_room(room_id: int):
 
 
 @router.post("")
-def create_room(body: CreateRoomRequest):
+def create_room(body: CreateRoomRequest,
+                current_user_id: int = Depends(get_current_user_id)):
     """POST /rooms - Response: same shape as one list_rooms() entry."""
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
@@ -87,7 +92,7 @@ def create_room(body: CreateRoomRequest):
             VALUES (%s, %s, %s, %s)
             RETURNING {_LIST_COLUMNS}
             """,
-            (body.owner_user_id, body.name, body.location, body.floor_plan_url),
+            (current_user_id, body.name, body.location, body.floor_plan_url),
         )
         row = cur.fetchone()
         conn.commit()
@@ -95,8 +100,10 @@ def create_room(body: CreateRoomRequest):
 
 
 @router.patch("/{room_id}")
-def update_room(room_id: int, body: UpdateRoomRequest):
+def update_room(room_id: int, body: UpdateRoomRequest,
+                current_user_id: int = Depends(get_current_user_id)):
     """PATCH /rooms/{room_id} - Response: same shape as one list_rooms() entry."""
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             f"""
@@ -115,8 +122,10 @@ def update_room(room_id: int, body: UpdateRoomRequest):
 
 
 @router.patch("/{room_id}/target-temp")
-def update_target_temp(room_id: int, body: UpdateTargetTempRequest):
+def update_target_temp(room_id: int, body: UpdateTargetTempRequest,
+                       current_user_id: int = Depends(get_current_user_id)):
     """PATCH /rooms/{room_id}/target-temp - Response: same shape as one list_rooms() entry."""
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             f"UPDATE rooms SET target_temp = %s WHERE room_id = %s RETURNING {_LIST_COLUMNS}",
@@ -130,8 +139,10 @@ def update_target_temp(room_id: int, body: UpdateTargetTempRequest):
 
 
 @router.patch("/{room_id}/control-mode")
-def update_control_mode(room_id: int, body: UpdateControlModeRequest):
+def update_control_mode(room_id: int, body: UpdateControlModeRequest,
+                        current_user_id: int = Depends(get_current_user_id)):
     """PATCH /rooms/{room_id}/control-mode - Response: same shape as one list_rooms() entry."""
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             f"UPDATE rooms SET control_mode = %s WHERE room_id = %s RETURNING {_LIST_COLUMNS}",
@@ -145,8 +156,9 @@ def update_control_mode(room_id: int, body: UpdateControlModeRequest):
 
 
 @router.delete("/{room_id}")
-def delete_room(room_id: int):
+def delete_room(room_id: int, current_user_id: int = Depends(get_current_user_id)):
     """DELETE /rooms/{room_id} - Response: {"status": "ok"}"""
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute("DELETE FROM rooms WHERE room_id = %s RETURNING room_id", (room_id,))
         row = cur.fetchone()
@@ -157,11 +169,13 @@ def delete_room(room_id: int):
 
 
 @router.get("/{room_id}/latest")
-def get_room_latest(room_id: int):
+def get_room_latest(room_id: int,
+                    current_user_id: int = Depends(get_current_user_id)):
     """GET /rooms/{room_id}/latest
 
     Response includes env, power, occupancy, door, pir latest telemetry.
     """
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -264,7 +278,12 @@ def get_room_latest(room_id: int):
 
 
 @router.get("/{room_id}/trend")
-def get_room_trend(room_id: int, minutes: int = 30):
+def get_room_trend(
+    room_id: int,
+    minutes: int = Query(default=30, ge=1, le=43_200),
+    points: int = Query(default=300, ge=10, le=1_000),
+    current_user_id: int = Depends(get_current_user_id),
+):
     """GET /rooms/{room_id}/trend?minutes=30
 
     Response: list of readings from the room's env sensor over the window,
@@ -273,16 +292,26 @@ def get_room_trend(room_id: int, minutes: int = 30):
 
     Empty list (not 404) if the room has no env device or no readings yet.
     """
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT se.measured_at, se.temperature, se.co2
-            FROM sensor_env se
-            JOIN devices d ON d.device_id = se.device_id
-            WHERE d.room_id = %s AND d.device_type = 'env'
-                  AND se.measured_at >= now() - (%s || ' minutes')::interval
-            ORDER BY se.measured_at ASC
+            WITH ordered AS (
+                SELECT se.measured_at, se.temperature, se.co2,
+                       row_number() OVER (ORDER BY se.measured_at) AS row_no,
+                       count(*) OVER () AS total
+                FROM sensor_env se
+                JOIN devices d ON d.device_id = se.device_id
+                WHERE d.room_id = %s AND d.device_type = 'env'
+                      AND se.measured_at >= now() - (%s || ' minutes')::interval
+            )
+            SELECT measured_at, temperature, co2
+            FROM ordered
+            WHERE total <= %s
+               OR mod(row_no - 1, greatest(1, ceil(total::numeric / (%s - 1))::int)) = 0
+               OR row_no = total
+            ORDER BY measured_at ASC
             """,
-            (room_id, minutes),
+            (room_id, minutes, points, points),
         )
         return cur.fetchall()

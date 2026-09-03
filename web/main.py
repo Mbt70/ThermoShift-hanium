@@ -1,8 +1,12 @@
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 WEB_ROOT = Path(__file__).resolve().parent
 REPOSITORY_ROOT = WEB_ROOT.parent
+load_dotenv("/etc/thermoshift.env")
+load_dotenv(REPOSITORY_ROOT / ".env")
 if str(WEB_ROOT) not in sys.path:
     sys.path.insert(0, str(WEB_ROOT))
 if str(REPOSITORY_ROOT) not in sys.path:

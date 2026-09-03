@@ -11,7 +11,7 @@
 #   - postgres 의 5432 포트를 호스트에 노출하지 않음 (같은 네트워크에서
 #     서비스명 "postgres" 로만 접근 — 컨테이너 밖에서 DB에 직접 붙을 일 없음)
 #   - api 서비스 추가 (로컬은 .venv 에서 직접 uvicorn 실행)
-#   - db/ 전체가 아니라 스키마 파일(001~004)만 초기화 스크립트로 마운트함.
+#   - db/ 전체가 아니라 스키마 파일(001~008)만 초기화 스크립트로 마운트함.
 #     로컬 개발용 파일은 db/seed.sql(더미 사용자·공간·센서값)도 같은 폴더에
 #     같이 두고 있어서, 그걸 그대로 마운트하면 운영 DB에도 더미 데이터가
 #     최초 기동 때 자동으로 들어간다 — 여기서는 파일을 하나씩 지정해 뺐다.
@@ -33,6 +33,10 @@ services:
       - ../db/002_tables.sql:/docker-entrypoint-initdb.d/002_tables.sql:ro
       - ../db/003_indexs.sql:/docker-entrypoint-initdb.d/003_indexs.sql:ro
       - ../db/004_gateway.sql:/docker-entrypoint-initdb.d/004_gateway.sql:ro
+      - ../db/005_measurement_precision.sql:/docker-entrypoint-initdb.d/005_measurement_precision.sql:ro
+      - ../db/006_experiments.sql:/docker-entrypoint-initdb.d/006_experiments.sql:ro
+      - ../db/007_demo_access.sql:/docker-entrypoint-initdb.d/007_demo_access.sql:ro
+      - ../db/008_sensor_raw_payload.sql:/docker-entrypoint-initdb.d/008_sensor_raw_payload.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s

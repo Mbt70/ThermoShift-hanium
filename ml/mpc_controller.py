@@ -1,4 +1,4 @@
-"""다목적 적응형 경제적 MPC (Multi-Objective Adaptive Economic MPC).
+"""목업용 다목적 경제적 MPC 프로토타입.
 
 산업공학적 정식화 (Industrial Engineering & Optimization Formulation):
 ----------------------------------------------------------------------
@@ -6,24 +6,27 @@
 에너지 비용(Economic Cost)과 열적 쾌적도(ISO 7730 PMV)를 파레토 최적화(Pareto Optimization)합니다.
 
   min_{u_0, ..., u_{N-1}}  J = sum_{k=0}^{N-1} [
-        C_tou(k) * P_electric(u_k) * dt                    # 1. TOU 차등 전력 요금
+        C_scenario(k) * u_k * dt                            # 1. 에너지 비용 대리지표
       + w_comfort * P_occ(k) * DiscomfortPenalty(PMV_k) * dt # 2. ISO 7730 PMV 쾌적도 이탈 페널티
-      + w_switch * |u_k - u_{k-1}|                          # 3. 압축기 수명 보호 (Chattering 방지)
+      + w_switch * |u_k - u_{k-1}|                          # 3. 액추에이터 변동 억제
   ]
 
-  s.t.
+  model
     T_{k+1} = T_k + dt * [ -a * T_k + d_ext + d_internal(N_occ) + b * u_k ]  # 물리 동역학
-    -0.5 <= PMV_k <= +0.5 (for P_occ >= 0.8)                                # 쾌적 불감대 제약
     u_k in {0, 1}                                                           # 액추에이터 제약
+
+PMV 허용대역 이탈은 현재 hard constraint가 아니라 목적함수의 soft penalty다.
+전력계가 연결되고 열모델이 교정되기 전까지 출력되는 절감률은 실증 성과가
+아니라 동일 모델 안에서 고정 설정온도 기준정책과 비교한 [SIM] 값이다.
 
 특징 (Key Novelties):
 --------------------
-1. Physics-Informed Feedforward: 재실 인원 추정치(N_occ)에 따른 인체 발열(Q_int = N * 100W)을
-   외란(Disturbance)으로 사전 보상하여 지연 없는 선제 제어 달성.
-2. TOU Tariff Awareness: 전력 피크 시간대(오후 2~5시)를 회피하고, 사전 축냉(Precooling)을 통한
-   피크 컷(Peak Shaving) 달성.
-3. Small-Data Robustness: 1차 RC 에너지 보존 법칙이 상태 궤적의 경계조건을 보장하므로,
-   수개월 치의 학습 데이터 없이도 첫날부터 과적합 없이 완벽 동작.
+1. Physics-Guided Feedforward: 재실 인원 또는 합성 열부하와 현장 식별 계수를
+   이용해 내부발열 외란을 예측에 반영한다. 계수 미교정 시 이 항은 비활성화한다.
+2. Tariff Scenario Awareness: 피크 시간대 가중치를 높이는 시나리오와 예약
+   예냉 후보를 비교한다. 실제 요금제 연동은 후속 검증 항목이다.
+3. Small-Data Design: 1차 RC 구조의 소수 파라미터만 현장별로 식별한다.
+   소량 데이터가 정확도나 안정성을 자동으로 보장하지는 않는다.
 """
 
 from __future__ import annotations
@@ -44,7 +47,7 @@ class MPCOutput:
     target_temp_c: float
     current_pmv: float
     predicted_pmv_60min: float
-    expected_energy_saving_pct: float
+    simulated_energy_reduction_pct: float
     objective_cost: float
     reasons: List[str]
     trajectory_temp: List[Tuple[float, float]] # (분, 예측온도)
@@ -58,7 +61,7 @@ class ModelPredictiveController:
         dt_minutes: float = 2.0,
         w_energy: float = 0.45,         # 에너지 비용 가중치
         w_comfort: float = 14.0,        # 재실 시 쾌적도 가중치
-        w_switch: float = 1.2,          # 제어 빈도 억제 가중치 (압축기 보호)
+        w_switch: float = 1.2,          # 제어 빈도 억제 가중치
     ):
         self.horizon_minutes = horizon_minutes
         self.dt_minutes = dt_minutes
@@ -66,6 +69,28 @@ class ModelPredictiveController:
         self.w_energy = w_energy
         self.w_comfort = w_comfort
         self.w_switch = w_switch
+
+    def _fixed_setpoint_baseline(
+        self, current_temp_c: float, target_temp_c: float,
+        a: float, b: float, d: float,
+    ) -> List[int]:
+        """동일 RC 모델에서 비교할 단순 thermostat 기준정책.
+
+        ±0.5℃ hysteresis를 둔다. 실측 baseline이 아니라 [SIM] 비교군이며,
+        발표에서 실제 에너지 절감률로 사용하면 안 된다.
+        """
+        temp = current_temp_c
+        on = temp > target_temp_c + 0.5
+        sequence: List[int] = []
+        for _ in range(self.steps):
+            if temp > target_temp_c + 0.5:
+                on = True
+            elif temp < target_temp_c - 0.5:
+                on = False
+            u = int(on)
+            sequence.append(u)
+            temp += (-a * temp + d + b * u) * self.dt_minutes
+        return sequence
 
     def solve(
         self,
@@ -77,6 +102,7 @@ class ModelPredictiveController:
         schedule_in_minutes: Optional[float] = None, # 다음 예약까지 남은 시간 (분)
         current_cooling_on: bool = False,
         headcount_estimate: float = 0.0,             # 물리 기반 추정 인원수 (명)
+        heat_drift_c_per_min_per_person: float = 0.0,
         peak_hour: bool = False,                     # TOU 피크 요금 시간대 여부
     ) -> MPCOutput:
         """MPC 롤링 호라이즌 최적화를 수행하여 파레토 최적 제어 결정을 도출한다."""
@@ -86,12 +112,15 @@ class ModelPredictiveController:
         a = thermal_model.a
         b = thermal_model.b
         
-        # 인체 발열 외란 보상: 1인당 약 100W, 목업/오피스 체적 비례 보정치
-        internal_heat_drift = headcount_estimate * 0.008
+        # 인체/합성 열부하 feedforward. 계수는 공간 열용량과 열원 스케일에
+        # 따라 달라지므로 코드에 대표값을 박지 않고 실험으로 식별해 주입한다.
+        internal_heat_drift = (
+            headcount_estimate * heat_drift_c_per_min_per_person
+        )
         d = thermal_model.d + internal_heat_drift
         dt = self.dt_minutes
 
-        # TOU 전기요금 단가 가중치: 피크 시간대(14~17시) 1.5배, 일반 1.0배
+        # 목업 시나리오 가중치다. 실제 요금 단가라고 주장하지 않는다.
         tariff_weight = 1.5 if peak_hour else 1.0
         eff_energy_weight = self.w_energy * tariff_weight
 
@@ -124,7 +153,6 @@ class ModelPredictiveController:
 
         # 4. 각 정책의 목적함수 J 계산
         best_cost = float("inf")
-        best_policy_name = "ALL_OFF"
         best_u_seq = [0] * self.steps
         best_temp_traj = []
 
@@ -158,7 +186,6 @@ class ModelPredictiveController:
 
             if cost < best_cost:
                 best_cost = cost
-                best_policy_name = name
                 best_u_seq = u_seq
                 best_temp_traj = traj
 
@@ -170,11 +197,33 @@ class ModelPredictiveController:
         reasons = []
         duty_cycle = sum(best_u_seq) / len(best_u_seq)
         
-        # 전통 On/Off 제어 대비 절감 지표 (Baseline 대비 Pareto Improvement)
-        baseline_duty = 0.85 if p_occupied > 0.5 else 0.0
-        energy_saving_pct = round(max(0.0, (baseline_duty - duty_cycle) / max(0.01, baseline_duty) * 100.0), 1) if baseline_duty > 0 else 0.0
-        if energy_saving_pct == 0.0 and duty_cycle < 1.0 and p_occupied > 0.5:
-            energy_saving_pct = round((1.0 - duty_cycle) * 32.0, 1)
+        baseline_u = self._fixed_setpoint_baseline(
+            current_temp_c, target_temp_setting, a, b, d,
+        )
+        baseline_runtime = sum(baseline_u) * dt
+        optimized_runtime = sum(best_u_seq) * dt
+        simulated_reduction_pct = (
+            round(100.0 * (baseline_runtime - optimized_runtime) / baseline_runtime, 1)
+            if baseline_runtime > 0 else 0.0
+        )
+        # 음수도 숨기지 않는다. 해당 시나리오에서 쾌적도를 위해 더 사용했다는 뜻이다.
+
+        def switch_count(sequence: List[int], initial: int) -> int:
+            count = 0
+            previous = initial
+            for value in sequence:
+                if value != previous:
+                    count += 1
+                previous = value
+            return count
+
+        initial_u = int(current_cooling_on)
+        baseline_switches = switch_count(baseline_u, initial_u)
+        optimized_switches = switch_count(best_u_seq, initial_u)
+        switch_reduction_pct = (
+            round(100.0 * (baseline_switches - optimized_switches) / baseline_switches, 1)
+            if baseline_switches > 0 else 0.0
+        )
 
         if next_action_u == 1:
             if schedule_in_minutes is not None and schedule_in_minutes > 0:
@@ -193,23 +242,42 @@ class ModelPredictiveController:
             if current_comfort.comfort_score >= 80 and p_occupied > 0.4:
                 decision_type = "setback"
                 target_c = current_comfort.setback_temp_c
-                action = f"COOL_{int(round(target_c))}_AUTO"
                 reasons.append(f"MPC 최적화: 쾌적 밴드(PMV {current_comfort.pmv:+.2f}) 유지 중")
-                reasons.append(f"설정온도 {target_c:.1f}℃로 완화(Setback)하여 전력 {energy_saving_pct:.1f}% 절감 최적화")
+                action = "POWER_OFF"
+                reasons.append(f"쾌적 허용대역 안에서 설정 기준을 {target_c:.1f}℃로 완화")
+                reasons.append(
+                    f"[SIM] 고정 설정온도 기준정책 대비 가동시간 변화 "
+                    f"{simulated_reduction_pct:+.1f}%"
+                )
             else:
                 decision_type = "off"
                 target_c = target_temp_setting
                 action = "POWER_OFF"
                 reasons.append(f"MPC 최적화: 공실(재실확률 {p_occupied:.2f}) 또는 자연 냉각 구간")
-                reasons.append("불필요한 압축기 가동 차단으로 대기전력 최소화")
+                reasons.append("불필요한 펠티어 가동을 피해 전력 사용을 억제")
 
+        pmv_values = [calculate_pmv(t, humidity_pct).pmv for _, t in best_temp_traj[1:]]
+        comfort_violation_rate = (
+            round(100.0 * sum(abs(v) > 0.5 for v in pmv_values) / len(pmv_values), 1)
+            if pmv_values else 0.0
+        )
         pareto_metrics = {
-            "baseline_power_kwh": round(baseline_duty * 2.2 * 1.0, 2),
-            "mpc_power_kwh": round(duty_cycle * 2.2 * 1.0, 2),
-            "energy_reduction_pct": energy_saving_pct,
-            "comfort_violation_rate_pct": 0.0 if abs(final_pmv) <= 0.5 else round((abs(final_pmv) - 0.5) * 40, 1),
-            "compressor_switch_reduction_pct": 62.5, # 스위칭 횟수 감소율
-            "internal_heat_load_w": round(headcount_estimate * 100.0, 1),
+            "scope": "SIMULATION_ESTIMATE",
+            "baseline_policy": "fixed_setpoint_hysteresis_0.5C",
+            "baseline_runtime_min": round(baseline_runtime, 1),
+            "optimized_runtime_min": round(optimized_runtime, 1),
+            "runtime_reduction_pct": simulated_reduction_pct,
+            "comfort_violation_rate_pct": comfort_violation_rate,
+            "baseline_switch_count": baseline_switches,
+            "optimized_switch_count": optimized_switches,
+            "actuator_switch_reduction_pct": switch_reduction_pct,
+            "headcount_or_equivalent": round(headcount_estimate, 2),
+            "heat_drift_c_per_min": round(internal_heat_drift, 5),
+            "heat_feedforward_status": (
+                "CALIBRATED_INPUT_REQUIRED"
+                if heat_drift_c_per_min_per_person <= 0
+                else "ENABLED_WITH_CONFIGURED_GAIN"
+            ),
         }
 
         return MPCOutput(
@@ -218,7 +286,7 @@ class ModelPredictiveController:
             target_temp_c=target_c,
             current_pmv=current_comfort.pmv,
             predicted_pmv_60min=round(final_pmv, 2),
-            expected_energy_saving_pct=energy_saving_pct,
+            simulated_energy_reduction_pct=simulated_reduction_pct,
             objective_cost=round(best_cost, 2),
             reasons=reasons,
             trajectory_temp=best_temp_traj,

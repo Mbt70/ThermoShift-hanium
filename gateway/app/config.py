@@ -1,5 +1,6 @@
+from pathlib import Path
+
 import yaml
-import os
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
@@ -36,6 +37,9 @@ class ControlConfig(BaseModel):
     co2_critical_ppm: float
     env_data_stale_sec: int
     occ_data_stale_sec: int
+    # 인원 상당 1명당 온도 표류(℃/min). 가진 실험으로 식별하기 전에는 0으로
+    # 두어, 근거 없는 인체 발열 feedforward가 실제 제어에 들어가지 않게 한다.
+    internal_heat_drift_c_per_min_per_person: float = Field(default=0.0, ge=0)
 
 class HMMConfig(BaseModel):
     transition_matrix_30s: List[List[float]]
@@ -46,6 +50,8 @@ class IRConfig(BaseModel):
     cooling_topic: str = "thermoshift/ir_01/cooling/cmd"
     # 에어컨 IR 명령 토픽. JSON 을 받는다. IR 프로파일 학습 후 동작한다.
     aircon_topic: str = "esp32/device/ir_01/control"
+    # 테스트/수동 강제 구동용 ("ON", "OFF", None)
+    manual_override: Optional[str] = None
 
 class HeaterConfig(BaseModel):
     """합성 재실자(히팅패드) 설정. app/heater.py 참고.
@@ -58,6 +64,19 @@ class HeaterConfig(BaseModel):
     # 합성 재실자를 실제로 구동할지. False 면 duty 0 만 계속 보낸다.
     # (그래도 보내야 노드 워치독이 게이트웨이가 살아 있음을 안다.)
     enabled: bool = False
+    # 테스트용 수동 고정 duty (0~100, None이면 실험 계획 참조)
+    manual_duty: Optional[int] = None
+
+class OccupancyEstimatorConfig(BaseModel):
+    """실공간 CO₂ 질량보존 기반 인원수 추정 설정.
+
+    목업 히터는 열만 만들고 사람의 CO₂ 발생을 재현하지 않으므로 목업에서는
+    끈다. 실제 공간에서 체적·환기횟수를 측정한 뒤에만 활성화한다.
+    """
+    enabled: bool = False
+    room_volume_m3: float = Field(default=45.0, gt=0)
+    outdoor_co2_ppm: float = Field(default=420.0, ge=250, le=1000)
+    base_ach: float = Field(default=0.35, gt=0)
 
 class Config(BaseModel):
     mqtt: MQTTConfig
@@ -66,18 +85,27 @@ class Config(BaseModel):
     hmm: HMMConfig
     ir: IRConfig
     heater: HeaterConfig = Field(default_factory=HeaterConfig)
+    occupancy_estimator: OccupancyEstimatorConfig = Field(
+        default_factory=OccupancyEstimatorConfig
+    )
 
 def load_config(path: str = "config/config.yaml") -> Config:
-    if not os.path.exists(path):
-        # fallback to example if running tests or manual setup
-        if os.path.exists("config/config.example.yaml"):
-            path = "config/config.example.yaml"
-        elif os.path.exists("../config/config.example.yaml"):
-            path = "../config/config.example.yaml"
-        else:
-            raise FileNotFoundError(f"Config file not found: {path}")
-    
-    with open(path, "r", encoding="utf-8") as f:
+    requested = Path(path)
+    gateway_root = Path(__file__).resolve().parents[1]
+    candidates = [
+        requested,
+        gateway_root / requested,
+        gateway_root / "config" / "config.yaml",
+        gateway_root / "config" / "config.example.yaml",
+    ]
+    resolved = next((candidate for candidate in candidates if candidate.is_file()), None)
+    if resolved is None:
+        raise FileNotFoundError(
+            "Config file not found; checked: "
+            + ", ".join(str(candidate) for candidate in candidates)
+        )
+
+    with resolved.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     return Config(**data)
 

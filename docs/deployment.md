@@ -33,6 +33,8 @@ cp .env.example .env
 vi .env
 #   - DB_HOST=postgres           (localhost 아님 — 컨테이너 서비스명)
 #   - DB_PASSWORD=<새로 생성한 값>  (openssl rand -base64 24, thermoshift1234 금지)
+#   - AUTH_SECRET=<새로 생성한 값>  (openssl rand -base64 32)
+#   - CORS_ORIGINS=<실제 웹/PWA origin만 쉼표로 나열>
 #   - THERMOSHIFT_API_URL 은 이 서버가 아니라 이 API를 "호출하는 쪽"
 #     (web/app)이 쓰는 값이라 여기서는 비워둬도 무방
 #   - GEMINI_API_KEY 는 AI 해설 기능을 쓸 경우에만
@@ -40,6 +42,35 @@ vi .env
 # 3) 빌드 + 기동
 docker compose -f infra/docker-compose.ec2.yml --env-file .env up -d --build
 ```
+
+기존 DB에 시연 계정 기능을 추가할 때는 볼륨을 다시 만들지 말고 마이그레이션을
+한 번 적용한다.
+
+```bash
+docker cp db/007_demo_access.sql thermoshift-postgres:/tmp/007_demo_access.sql
+docker exec thermoshift-postgres \
+  psql -U thermoshift -d thermoshift -f /tmp/007_demo_access.sql
+
+# 전용 시연 계정이 조회할 운영 계정을 연결한다. 이메일은 실제 값으로 바꾼다.
+docker exec thermoshift-postgres psql -U thermoshift -d thermoshift -c \
+  "UPDATE users SET is_demo=true,
+   demo_owner_user_id=(SELECT user_id FROM users WHERE email='owner@example.com')
+   WHERE email='demo@example.com';"
+```
+
+기존 DB에 센서 원문 보존 컬럼을 추가할 때도 볼륨을 지우지 않고 다음을 한 번
+적용한다. 이미 적용된 DB에서 다시 실행해도 안전하다.
+
+```bash
+docker cp db/008_sensor_raw_payload.sql thermoshift-postgres:/tmp/008_sensor_raw_payload.sql
+docker exec thermoshift-postgres \
+  psql -v ON_ERROR_STOP=1 -U thermoshift -d thermoshift \
+  -f /tmp/008_sensor_raw_payload.sql
+```
+
+EC2의 5432·8000 포트는 `127.0.0.1`에만 바인딩한다. 라즈베리파이는
+`thermoshift-ec2-tunnel.service`의 SSH 포워딩(5433→5432, 8001→8000)을
+사용하고, 공개 `/api` 경로는 로컬 8001을 통해 EC2 API로 전달한다.
 
 ## 헬스체크 확인
 
@@ -76,7 +107,7 @@ docker compose -f infra/docker-compose.ec2.yml down -v
 
 **`api` 가 `connection refused` 로 죽어 있음**
 `depends_on: condition: service_healthy` 로 postgres 가 healthy 해질 때까지
-기다리긴 하지만, 최초 기동 시 `db/001~004`, `seed.sql` 초기화 스크립트
+기다리긴 하지만, 최초 기동 시 `db/001~008` 초기화 스크립트
 적용에 몇 초 더 걸릴 수 있다. `docker compose ps` 로 postgres 상태를 먼저
 확인.
 

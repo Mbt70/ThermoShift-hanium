@@ -1,29 +1,30 @@
 import bcrypt
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, EmailStr
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, EmailStr, Field
 
 from api.db import get_conn
+from api.security import create_access_token, get_current_user_id, require_self
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 class RegisterRequest(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=50)
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8, max_length=128)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=128)
 
 
 class UpdateNameRequest(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=50)
 
 
 class UpdatePasswordRequest(BaseModel):
-    password: str
+    password: str = Field(min_length=8, max_length=128)
 
 
 def _user_out(row: dict) -> dict:
@@ -55,7 +56,9 @@ def register(body: RegisterRequest):
         )
         row = cur.fetchone()
         conn.commit()
-    return _user_out(row)
+    user = _user_out(row)
+    user.update({"access_token": create_access_token(row["user_id"]), "token_type": "bearer"})
+    return user
 
 
 def _password_matches(password: str, stored_hash: str) -> bool:
@@ -91,7 +94,33 @@ def login(body: LoginRequest):
         row = cur.fetchone()
     if row is None or not _password_matches(body.password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="invalid email or password")
-    return _user_out(row)
+    user = _user_out(row)
+    user.update({"access_token": create_access_token(row["user_id"]), "token_type": "bearer"})
+    return user
+
+
+@router.post("/demo")
+def demo_login():
+    """입력 없는 심사 시연 세션. DB에서 명시적으로 지정한 계정만 사용한다.
+
+    발급 토큰은 security.py에서 조회 요청만 허용한다.
+    """
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT user_id, name, email, "
+            "COALESCE(demo_owner_user_id, user_id) AS access_user_id FROM users "
+            "WHERE is_demo AND deleted_at IS NULL ORDER BY user_id LIMIT 1"
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(status_code=503, detail="demo account is not configured")
+    user = _user_out(row)
+    user.update({
+        "access_token": create_access_token(row["access_user_id"], scope="demo"),
+        "token_type": "bearer",
+        "is_demo": True,
+    })
+    return user
 
 
 @router.get("/exists")
@@ -110,8 +139,9 @@ def check_email_exists(email: EmailStr):
 
 
 @router.get("/{user_id}")
-def get_user(user_id: int):
+def get_user(user_id: int, current_user_id: int = Depends(get_current_user_id)):
     """GET /auth/{user_id} - Response: {"user_id": int, "name": str, "email": str}"""
+    require_self(user_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT user_id, name, email FROM users WHERE user_id = %s AND deleted_at IS NULL",
@@ -124,8 +154,10 @@ def get_user(user_id: int):
 
 
 @router.patch("/{user_id}/name")
-def update_name(user_id: int, body: UpdateNameRequest):
+def update_name(user_id: int, body: UpdateNameRequest,
+                current_user_id: int = Depends(get_current_user_id)):
     """PATCH /auth/{user_id}/name - Response: {"user_id": int, "name": str, "email": str}"""
+    require_self(user_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE users SET name = %s WHERE user_id = %s AND deleted_at IS NULL "
@@ -140,8 +172,10 @@ def update_name(user_id: int, body: UpdateNameRequest):
 
 
 @router.patch("/{user_id}/password")
-def update_password(user_id: int, body: UpdatePasswordRequest):
+def update_password(user_id: int, body: UpdatePasswordRequest,
+                    current_user_id: int = Depends(get_current_user_id)):
     """PATCH /auth/{user_id}/password - Response: {"status": "ok"}"""
+    require_self(user_id, current_user_id)
     password_hash = bcrypt.hashpw(body.password.encode("utf-8"), bcrypt.gensalt()).decode("ascii")
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
@@ -157,8 +191,9 @@ def update_password(user_id: int, body: UpdatePasswordRequest):
 
 
 @router.delete("/{user_id}")
-def delete_user(user_id: int):
+def delete_user(user_id: int, current_user_id: int = Depends(get_current_user_id)):
     """DELETE /auth/{user_id} - soft delete. Response: {"status": "ok"}"""
+    require_self(user_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE users SET deleted_at = now() WHERE user_id = %s RETURNING user_id",

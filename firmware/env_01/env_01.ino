@@ -18,11 +18,17 @@
 #include <Wire.h>
 #include <SensirionI2cScd4x.h>
 
+#if __has_include("../secrets.h")
+#include "../secrets.h"
+#else
+#error "Copy firmware/secrets.example.h to firmware/secrets.h and configure Wi-Fi credentials"
+#endif
+
 // ===================== User Config =====================
 
 // Wi-Fi: Raspberry Pi와 같은 네트워크여야 함
-const char* WIFI_SSID = "ThermoShift-Local";
-const char* WIFI_PASSWORD = "thermoshift1234";  // 실제 비밀번호로 변경
+const char* WIFI_SSID = THERMOSHIFT_WIFI_SSID;
+const char* WIFI_PASSWORD = THERMOSHIFT_WIFI_PASSWORD;
 
 // Static IP configuration
 #define USE_STATIC_IP false  // Set to true to enable the static ESP32 IP below.

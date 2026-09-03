@@ -37,6 +37,9 @@ control:
   co2_critical_ppm: 1500
   env_data_stale_sec: 120
   occ_data_stale_sec: 180
+  # [TARGET] 합성 열원 가진 실험/실공간 데이터로 식별한 뒤에만 설정한다.
+  # 0이면 MPC의 재실 발열 feedforward를 비활성화한다.
+  internal_heat_drift_c_per_min_per_person: 0.0
 
 hmm:
   transition_matrix_30s:
@@ -71,3 +74,12 @@ heater:
   #     결과가 '잘 맞는 것처럼 보이는 무의미한 숫자' 가 된다)
   #   - 펠티어 방열면이 상자 밖인가
   enabled: false
+
+# CO2 질량보존 기반 '실제 인원수' 추정. 목업의 10W 히터는 열만 만들고
+# 사람의 CO2를 만들지 않으므로 목업 실험에서는 반드시 false다. 실제 공간에
+# 설치한 뒤 공간 체적과 환기횟수(ACH)를 현장값으로 교정하고 활성화한다.
+occupancy_estimator:
+  enabled: false
+  room_volume_m3: 45.0
+  outdoor_co2_ppm: 420.0
+  base_ach: 0.35

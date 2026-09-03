@@ -1,16 +1,20 @@
-"""물리-통계 융합 베이지안 재실 인원 추정기 (Physics-Informed Bayesian Occupancy Estimator).
+"""CO₂ 질량보존 관측치를 이용한 Kalman 센서 융합 프로토타입.
 
 산업공학적 배경 (IE Background):
 ------------------------------
 기존 PIR(적외선 모션) 센서는 재실자가 가만히 앉아 공부하거나 업무를 볼 때
 '공실'로 오판하는 치명적인 정적 감지 한계(Static Blind Spot)를 가집니다.
 또한 기존 HMM은 재실 여부(Binary/3-state)만 알 수 있을 뿐, '몇 명이 있는가?'를
-알지 못해 인체 발열 부하(Q_int = N * 100W)를 정확히 반영하지 못합니다.
+알지 못해 인체 발열 부하를 제어 외란으로 연결하기 어렵습니다.
 
-본 알고리즘은 **CO₂ 질량 보존 방정식(Mass Balance Dynamics)**과
-**베이지안 칼만 필터(Extended Kalman Filter)**를 결합하여:
+본 알고리즘은 **CO₂ 질량 보존 방정식(Mass Balance Dynamics)**으로 순간
+인원수 관측치를 만들고, 1차원 선형 Kalman update와 PIR 규칙을 결합하여:
 1. 방 안의 재실 인원수 N(t)를 연속적(Continuous)으로 추정하고,
-2. 인체 내부 발열량(Q_internal)과 ASHRAE 62.1 최소 환기량을 동적으로 산출합니다.
+2. 대표 발열량 가정으로 내부 열부하의 제어 입력값을 산출합니다.
+
+이 구현은 상태 [CO₂, 인원수]에 비선형 전이·관측 Jacobian을 적용하는 EKF가
+아니다. 또한 환기량(ACH)과 공간 체적을 현장에서 교정하기 전에는 연구용
+추정치이며, 성능 검증값으로 사용하지 않는다.
 
 지배 방정식 (Governing Equation):
 --------------------------------
@@ -37,8 +41,8 @@ class PhysicsOccupancyEstimate:
     rounded_headcount: int          # 반올림 인원수 (e.g. 2명)
     occupancy_state: str            # "EMPTY" | "SINGLE" | "MULTI"
     confidence: float               # 신뢰도 (0.0 ~ 1.0)
-    internal_heat_gain_w: float     # 인체 발열 부하 (W) = N * 100W
-    min_ventilation_rate_m3h: float # ASHRAE 62.1 권장 외기 환기량 (m³/h)
+    internal_heat_gain_w: float     # 대표 발열량 가정에 따른 인체 발열 부하(W)
+    min_ventilation_rate_m3h: float # 설계용 간이 환기 시나리오값 (m³/h)
     co2_generation_rate_ppm_min: float # CO2 발생률 (ppm/min)
 
 
@@ -49,11 +53,16 @@ class PhysicsInformedOccupancyEstimator:
         outdoor_co2_ppm: float = 420.0,      # 외기 CO2 농도
         base_ach: float = 0.35,              # 기본 자연 환기 횟수 (1/h)
         co2_gen_per_person_l_h: float = 18.72, # 1인당 호흡 CO2 (L/h)
+        heat_gain_per_person_w: float = 100.0, # 활동량에 따라 교정할 대표값
     ):
+        if (room_volume_m3 <= 0 or base_ach <= 0
+                or co2_gen_per_person_l_h <= 0 or heat_gain_per_person_w <= 0):
+            raise ValueError("room volume, ACH, CO2 generation, and heat gain must be positive")
         self.volume_m3 = room_volume_m3
         self.c_out = outdoor_co2_ppm
         self.ach = base_ach
         self.g_co2 = co2_gen_per_person_l_h
+        self.heat_gain_per_person_w = heat_gain_per_person_w
         
         # 1ppm CO2 in room volume = V * 1e-6 m³ = V * 1e-3 L
         # 1인당 호흡 발생 농도 변화율: (G / V_L) * 1e6 = G / (V_m3 * 1e3) * 1e6 = (G * 1000) / V ppm/h
@@ -123,10 +132,11 @@ class PhysicsInformedOccupancyEstimator:
         else:
             state = "MULTI"
 
-        # 성인 1인당 현열 발열량 약 100W
-        internal_heat_w = round(est_n * 100.0, 1)
+        # 100 W는 기본 대표값일 뿐이며 활동량에 맞춰 생성자에서 바꿀 수 있다.
+        internal_heat_w = round(est_n * self.heat_gain_per_person_w, 1)
 
-        # ASHRAE 62.1 표준 환기량: Rp * N + Ra * Area (간이 환산)
+        # 간이 설계 시나리오. 바닥면적·공간용도 없이 ASHRAE 62.1 준수값을
+        # 계산할 수 없으므로 표준 준수 환기량으로 표시하지 않는다.
         min_vent_m3h = round(max(20.0, est_n * 27.0 + 15.0), 1)
 
         # 신뢰도 지표 (추정 오차 분산의 역수 함수)

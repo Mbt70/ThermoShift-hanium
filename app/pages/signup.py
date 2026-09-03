@@ -28,7 +28,7 @@ with st.container(key="signup_fields", border=False):
     password = st.text_input(
         "비밀번호",
         type="password",
-        placeholder="6자 이상 입력해주세요",
+        placeholder="8자 이상 입력해주세요",
         icon=":material/lock:",
         autocomplete="new-password",
     )
@@ -50,7 +50,7 @@ with st.container(key="signup_fields", border=False):
 
 email_format_ok = bool(email) and "@" in email and "." in email.rsplit("@", 1)[-1]
 email_taken = email_format_ok and is_registered(email)
-password_length_ok = len(password) >= 6
+password_length_ok = len(password) >= 8
 password_match_ok = password == password_confirm
 
 if (email or submitted) and not email_format_ok:
@@ -62,7 +62,7 @@ elif (email or submitted) and email_taken:
 
 if (password or submitted) and not password_length_ok:
     with password_length_error:
-        inline_error("비밀번호는 6자 이상이어야 합니다")
+        inline_error("비밀번호는 8자 이상이어야 합니다")
 
 if (password_confirm or submitted) and not password_match_ok:
     with password_match_error:

@@ -5,6 +5,7 @@ from components.auth_store import (
     is_registered,
     register_user,
     set_current_user,
+    start_demo_session,
 )
 from components.mobile_ui import ICONS_DIR, apply_mobile_styles, icon_data_uri, inline_error
 
@@ -140,11 +141,21 @@ with right_col:
                     set_current_user(email)
                     st.switch_page("pages/home.py")
 
-            st.markdown("<div style='text-align:center; margin:10px 0 6px 0; color:#94a3b8; font-size:12px;'>또는</div>", unsafe_allow_html=True)
-            if st.button("🚀 로그인 없이 바로 체험하기 (심사위원 시연)", key="demo_guest_login", type="primary", use_container_width=True):
-                check_credentials("thermoshift@thermo.kr", "thermo123!")
-                set_current_user("thermoshift@thermo.kr")
-                st.switch_page("pages/home.py")
+            st.markdown(
+                "<div style='text-align:center; margin:10px 0 6px 0; "
+                "color:#94a3b8; font-size:12px;'>또는</div>",
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "🚀 심사위원 시연 화면으로 이동",
+                key="demo_guest_login",
+                type="primary",
+                use_container_width=True,
+            ):
+                if start_demo_session():
+                    st.switch_page("pages/home.py")
+                else:
+                    inline_error("DB에 시연 계정이 지정되지 않았습니다")
 
         else:
             with st.container(key="signup_fields", border=False):
@@ -164,7 +175,7 @@ with right_col:
                 password = st.text_input(
                     "비밀번호",
                     type="password",
-                    placeholder="6자 이상 입력해주세요",
+                    placeholder="8자 이상 입력해주세요",
                     icon=":material/lock:",
                     autocomplete="new-password",
                 )
@@ -185,7 +196,7 @@ with right_col:
                 bool(email) and "@" in email and "." in email.rsplit("@", 1)[-1]
             )
             email_taken = email_format_ok and is_registered(email)
-            password_length_ok = len(password) >= 6
+            password_length_ok = len(password) >= 8
             password_match_ok = password == password_confirm
 
             if (email or signup_submitted) and not email_format_ok:
@@ -197,7 +208,7 @@ with right_col:
 
             if (password or signup_submitted) and not password_length_ok:
                 with password_length_error:
-                    inline_error("비밀번호는 6자 이상이어야 합니다")
+                    inline_error("비밀번호는 8자 이상이어야 합니다")
 
             if (password_confirm or signup_submitted) and not password_match_ok:
                 with password_match_error:

@@ -19,8 +19,14 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-const char* WIFI_SSID = "ThermoShift-Local";
-const char* WIFI_PASSWORD = "thermoshift1234";
+#if __has_include("../secrets.h")
+#include "../secrets.h"
+#else
+#error "Copy firmware/secrets.example.h to firmware/secrets.h and configure Wi-Fi credentials"
+#endif
+
+const char* WIFI_SSID = THERMOSHIFT_WIFI_SSID;
+const char* WIFI_PASSWORD = THERMOSHIFT_WIFI_PASSWORD;
 
 const char* MQTT_SERVER = "10.42.0.1";
 const int MQTT_PORT = 1883;

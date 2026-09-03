@@ -88,17 +88,30 @@ class EdgeNode:
                        reason_code, getattr(reason_code, "getName", lambda: "?")())
 
     def on_message(self, client, userdata, msg):
-        payload_str = msg.payload.decode('utf-8')
-        self.mqtt_adapter.process_message(msg.topic, payload_str)
+        # Paho는 on_message 예외를 네트워크 스레드 밖으로 전달한다. 그러면
+        # 프로세스와 제어 루프는 살아 있어도 구독/수집만 영구히 멈춘다.
+        # 실제로 EC2 PostgreSQL 재시작 중 발생한 AdminShutdown 한 번 때문에
+        # 이 스레드가 종료되어 이후 정상 MQTT 패킷도 DB에 기록되지 않았다.
+        # 메시지 하나의 파싱·저장 실패는 여기서 격리하고 다음 패킷을 받는다.
+        try:
+            payload_str = msg.payload.decode("utf-8")
+            self.mqtt_adapter.process_message(msg.topic, payload_str)
+        except Exception:
+            logger.exception(
+                "MQTT 메시지 처리 실패 - 다음 메시지부터 계속 수집합니다 "
+                "(topic=%s, payload=%.160r)",
+                msg.topic,
+                msg.payload,
+            )
 
     def _route_data(self, data):
         from app.models import EnvData, OccData, IrData
         if isinstance(data, EnvData):
-            self.dq.process_env(data)
+            self.dq.process_env(data, data.raw_payload)
         elif isinstance(data, OccData):
-            self.dq.process_occ(data)
+            self.dq.process_occ(data, data.raw_payload)
         elif isinstance(data, IrData):
-            self.dq.process_ir(data)
+            self.dq.process_ir(data, data.raw_payload)
             self.ir.handle_rx(data.code_hash, data.protocol or "unknown")
 
     def _drain_command_queue(self):

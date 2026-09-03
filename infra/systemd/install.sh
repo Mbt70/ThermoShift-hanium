@@ -3,7 +3,7 @@
 #
 #   bash infra/systemd/install.sh
 #
-# 전제: PostgreSQL 이 떠 있고 db/001~004 가 적용돼 있어야 한다.
+# 전제: PostgreSQL 이 떠 있고 db/001~008 이 적용돼 있어야 한다.
 #   docker compose -f infra/docker-compose.yml up -d   # 컨테이너로 띄우는 경우
 # 컨테이너는 db/ 를 initdb 디렉터리로 마운트하므로 최초 기동 때 스키마가
 # 자동 적용된다. 네이티브 설치라면 psql 로 직접 넣어야 한다.
@@ -12,10 +12,22 @@ set -e
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="/etc/thermoshift.env"
 
+if [ ! -f "$ENV_FILE" ]; then
+  sudo install -o thermo -g thermo -m 600 /dev/null "$ENV_FILE"
+  echo "$ENV_FILE 생성 — DB_PASSWORD, AUTH_SECRET, CORS_ORIGINS를 입력하세요"
+  echo "입력 후 DB_PASSWORD를 현재 셸에도 export하고 다시 실행하세요"
+  exit 1
+fi
+
 export DB_HOST="${DB_HOST:-localhost}"
 export DB_PORT="${DB_PORT:-5432}"
 export DB_USER="${DB_USER:-thermoshift}"
 export DB_NAME="${DB_NAME:-thermoshift}"
+
+if [ -z "${DB_PASSWORD:-}" ]; then
+  echo "DB_PASSWORD 환경변수가 필요합니다. 공개된 기본 비밀번호는 사용하지 않습니다."
+  exit 1
+fi
 
 echo "1) 구 시스템 정지"
 # 통합 전 저장소들이 같은 MQTT 토픽을 구독하면 제어 명령이 중복 발생하고,
@@ -41,7 +53,7 @@ try:
     psycopg.connect(
         host=os.environ["DB_HOST"], port=os.environ["DB_PORT"],
         user=os.environ["DB_USER"], dbname=os.environ["DB_NAME"],
-        password=os.environ.get("DB_PASSWORD", "thermoshift1234"),
+        password=os.environ["DB_PASSWORD"],
         connect_timeout=5,
     ).close()
 except Exception as exc:
@@ -61,14 +73,7 @@ if [ ! -f "$REPO/gateway/config/config.yaml" ]; then
   echo "   config.yaml 생성 (shadow 모드)"
 fi
 
-echo "4) 비밀 설정 파일"
-if [ ! -f "$ENV_FILE" ]; then
-  sudo install -o thermo -g thermo -m 600 /dev/null "$ENV_FILE"
-  echo "DB_PASSWORD=thermoshift1234" | sudo tee "$ENV_FILE" >/dev/null
-  echo "   $ENV_FILE 생성 — 비밀번호와 GEMINI_API_KEY 를 여기에 넣으세요"
-fi
-
-echo "5) 서비스 등록"
+echo "4) 서비스 등록"
 sudo cp "$REPO"/infra/systemd/thermoshift-{gateway,api,web}.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now thermoshift-gateway thermoshift-api thermoshift-web

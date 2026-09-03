@@ -7,6 +7,7 @@ Type=simple
 User=thermo
 WorkingDirectory=/home/thermo/ThermoShift-hanium
 Environment="THERMOSHIFT_API_URL=http://127.0.0.1:8000"
+EnvironmentFile=-/etc/thermoshift.env
 ExecStart=/home/thermo/ThermoShift-hanium/.venv/bin/python -m streamlit run web/main.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
 Restart=always
 RestartSec=5

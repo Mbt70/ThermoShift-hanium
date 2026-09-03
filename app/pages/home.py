@@ -182,7 +182,7 @@ with st.container(key="ts_comfort_link"):
     st.markdown(
         f"""
         <div class="ts-comfort">
-          <p class="ts-comfort-title">쾌적도 지수</p>
+          <p class="ts-comfort-title">운영 참고 지수</p>
           <div class="ts-gauge-wrap">
             <svg viewBox="0 0 120 120" class="ts-gauge-ring">
               <circle cx="60" cy="60" r="52" stroke="var(--border)" stroke-width="14" fill="none" />
@@ -193,13 +193,13 @@ with st.container(key="ts_comfort_link"):
             <div class="ts-gauge-center"><span class="ts-gauge-score">{score}</span></div>
           </div>
           <p class="ts-gauge-label">{label}</p>
-          <p class="ts-comfort-hint">환경 데이터 보기 ›</p>
+          <p class="ts-comfort-hint">온도·CO₂ 휴리스틱 · 환경 데이터 보기 ›</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
     comfort_clicked = st.button(
-        "쾌적도 지수 상세 보기", key="ts_comfort_open", use_container_width=True
+        "운영 참고 지수 상세 보기", key="ts_comfort_open", use_container_width=True
     )
 
 if comfort_clicked:
@@ -209,7 +209,7 @@ headline, subline = system_judgment(room)
 with st.container(key="ts_judgment_card", border=True):
     st.markdown(
         f"""
-        <p class="ts-judgment-title">{_CHIP_ICON}시스템 판단 <span class="ts-judgment-badge">LLM</span></p>
+        <p class="ts-judgment-title">{_CHIP_ICON}시스템 판단 <span class="ts-judgment-badge">규칙 기반</span></p>
         <p class="ts-judgment-headline">{headline}</p>
         """,
         unsafe_allow_html=True,

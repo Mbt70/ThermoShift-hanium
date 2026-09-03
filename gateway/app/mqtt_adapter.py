@@ -16,7 +16,7 @@ class MQTTAdapter:
     def __init__(self):
         self.callbacks: List[Callable[[Any], None]] = []
         self.storage = get_storage()
-        self.last_door_state = None
+        self.last_door_state: Dict[str, str] = {}
         self._last_decode_warning: Dict[str, float] = {}
         # device_id -> (수신 시각(monotonic), (temp, hum, co2))
         self._recent_env: Dict[str, tuple] = {}
@@ -137,14 +137,14 @@ class MQTTAdapter:
                 timestamp=now,
                 temperature_c=float(temp) if temp is not None else None,
                 humidity_rh=float(hum) if hum is not None else None,
-                co2_ppm=float(co2) if co2 is not None else None
+                co2_ppm=float(co2) if co2 is not None else None,
+                raw_payload=payload_str,
             )
             for cb in self.callbacks:
                 cb(env_data)
             
-            # Storage is usually called after DataQuality check, but we store raw here too or in data_quality?
-            # Instructions: "다음 범위를 벗어난 값은 invalid 처리하되 원본은 raw log로 남긴다."
-            # So we let data_quality handle quality and storage.
+            # 범위 검사와 DB 저장은 DataQuality가 담당한다. raw_payload도 모델에
+            # 실어 보내므로 저장된 측정행에서 수신 객체를 함께 확인할 수 있다.
 
         # OccData
         #
@@ -185,16 +185,18 @@ class MQTTAdapter:
             has_occ = True
             door_event = False
             if door is not None:
-                if self.last_door_state is not None and self.last_door_state != door:
+                previous_door = self.last_door_state.get(device_id)
+                if previous_door is not None and previous_door != door:
                     door_event = True
-                self.last_door_state = door
+                self.last_door_state[device_id] = door
 
             occ_data = OccData(
                 device_id=device_id,
                 timestamp=now,
                 pir=pir if pir is not None else False,
                 door=door if door is not None else "unknown",
-                door_event=door_event
+                door_event=door_event,
+                raw_payload=payload_str,
             )
             for cb in self.callbacks:
                 cb(occ_data)
@@ -212,7 +214,8 @@ class MQTTAdapter:
                     timestamp=now,
                     protocol=protocol,
                     raw=raw,
-                    code_hash=code_hash
+                    code_hash=code_hash,
+                    raw_payload=payload_str,
                 )
                 for cb in self.callbacks:
                     cb(ir_data)

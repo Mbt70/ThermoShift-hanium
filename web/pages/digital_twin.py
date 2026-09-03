@@ -1,6 +1,5 @@
-import random
 import sys
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 import streamlit as st
@@ -11,7 +10,6 @@ if str(_REPOSITORY_ROOT) not in sys.path:
 
 from app.components.control_log_store import list_logs
 from app.components.room_store import (
-    comfort_index,
     environment_snapshot,
     list_rooms,
     set_control_mode,
@@ -47,14 +45,6 @@ _WARN_ICON = (
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
     'stroke-linecap="round" stroke-linejoin="round">'
     '<path d="M12 4 3 20h18L12 4Z"/><path d="M12 10.5v4M12 17.5v.1"/></svg>'
-)
-_ARROW_DOWN_ICON = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
-    'stroke-linecap="round" stroke-linejoin="round"><path d="M6 8l12 12M18 20H9M18 20v-9"/></svg>'
-)
-_ARROW_UP_ICON = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
-    'stroke-linecap="round" stroke-linejoin="round"><path d="M6 16 18 4M18 4H9M18 4v9"/></svg>'
 )
 _HUMIDITY_ICON = (
     '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '
@@ -140,10 +130,10 @@ with main_col:
             total_power = sum(powers)
             active_count = sum(1 for r in fresh_rooms if r.get("occupied"))
             occupancy_rate = round(active_count / room_count * 100) if room_count else 0
-            occupancy_estimate = sum(
-                random.Random(f"occ-head-{r['id']}").randint(1, 4) for r in fresh_rooms if r.get("occupied")
-            )
-            power_delta_pct = round(random.Random(f"power-yday-{date.today()}").uniform(-9, 6), 1)
+            # 인원 계수기와 전일 기준선이 아직 없는데 임의 숫자를 만들면
+            # 실시간 실측처럼 보인다. 현재 확인 가능한 재실 공간 수와 실제
+            # 전력 센서 합계만 보여준다.
+            measured_power = bool(powers)
 
             co2_ok = avg_co2 < 700
             kpi_items = [
@@ -156,15 +146,15 @@ with main_col:
                     "is-positive" if co2_ok else "is-negative",
                     f"{_CHECK_ICON}기준 이내" if co2_ok else f"{_WARN_ICON}기준 근접",
                 ),
-                ("occupancy", "재실추정", f"{occupancy_estimate}", "명", "", f"재실률 {occupancy_rate}%"),
+                ("occupancy", "재실 공간", f"{active_count}", "실", "", f"재실률 {occupancy_rate}%"),
                 ("humidity", "습도", f"{avg_humidity:.0f}", "%", "is-positive", f"{_CHECK_ICON}적정"),
                 (
                     "power",
                     "총 HVAC 전력",
-                    f"{total_power:.1f}",
+                    f"{total_power:.1f}" if measured_power else "--",
                     "kW",
-                    "is-positive" if power_delta_pct < 0 else "is-negative",
-                    f"{_ARROW_DOWN_ICON if power_delta_pct < 0 else _ARROW_UP_ICON}어제 대비 {power_delta_pct:+.1f}%",
+                    "is-positive" if measured_power else "",
+                    f"{_CHECK_ICON}전력 센서 합계" if measured_power else "전력 센서 미연동",
                 ),
             ]
             kpi_cols = st.columns(5, gap="small")
@@ -223,26 +213,26 @@ with main_col:
                             f"""
                             <div style="background:#f8fafc; border-radius:12px; padding:16px; font-size:13px; color:#334155; line-height:1.6;">
                               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
-                                <strong style="font-size:14px; color:#0f172a;">📐 열역학적 스케일링 (12L 목업 ↔ 45m³ 실제 공간)</strong>
-                                <span style="background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:600;">상사성 이론 적용</span>
+                                <strong style="font-size:14px; color:#0f172a;">📐 제어 아키텍처 확장 계획 (12L 목업 → 실제 공간)</strong>
+                                <span style="background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:600;">현장 재교정 필요</span>
                               </div>
                               <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
                                 <div style="background:#ffffff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
-                                  <div style="color:#64748b; font-size:11px; margin-bottom:2px;">실증 목업 (12L 챔버)</div>
+                                  <div style="color:#64748b; font-size:11px; margin-bottom:2px;">실험 목업 (12L 챔버)</div>
                                   <div style="font-weight:700; color:#0f172a; font-size:14px;">체적 0.012 m³</div>
-                                  <div style="color:#475569; font-size:12px;">열용량 C: 350 J/K | 시정수 {scale_data['tau_mockup_min']}분</div>
-                                  <div style="color:#2563eb; font-size:11px;">펠티어(36W) + 히팅패드(10W)</div>
+                                  <div style="color:#475569; font-size:12px;">교정 전 가정 C: 3.0 kJ/K | 시정수 {scale_data['tau_mockup_min']}분</div>
+                                  <div style="color:#2563eb; font-size:11px;">펠티어 + 10W 합성 열원</div>
                                 </div>
                                 <div style="background:#ffffff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
-                                  <div style="color:#64748b; font-size:11px; margin-bottom:2px;">실제 오피스 (확장 대상)</div>
+                                  <div style="color:#64748b; font-size:11px; margin-bottom:2px;">실제 오피스 (설계 가정)</div>
                                   <div style="font-weight:700; color:#0f172a; font-size:14px;">체적 45.0 m³ ({scale_data['vol_ratio']:,.0f}x)</div>
                                   <div style="color:#475569; font-size:12px;">열용량 C: 1.2 MJ/K | 시정수 {scale_data['tau_real_min']}분</div>
                                   <div style="color:#16a34a; font-size:11px;">에어컨(2.5kW) + 재실발열(350W)</div>
                                 </div>
                               </div>
                               <div style="background:#f1f5f9; padding:10px 12px; border-radius:8px; font-size:12px; color:#334155;">
-                                💡 <strong>심사위원 어필 포인트:</strong> 지배방정식 <code>dT/dt = -a·T + d + b·u</code>의 무차원 상사성이 보존되므로,
-                                목업에서 검증된 MPC 쾌적·전력 최적화 알고리즘은 <strong>C, R 파라미터만 교체하면 즉시 실제 빌딩 BEMS로 1:1 확장</strong>됩니다.
+                                💡 목업에서 확인하는 범위는 센서→추정→예측→제어의 폐루프 구조입니다.
+                                실제 공간에서는 동일한 RC·MPC 코드 구조를 재사용하되 <strong>R, C, 환기량, 내부발열과 액추에이터 효율을 현장 데이터로 다시 식별·검증</strong>합니다.
                               </div>
                             </div>
                             """,
@@ -252,14 +242,14 @@ with main_col:
                         st.markdown(
                             f"""
                             <div style="background:#f8fafc; border-radius:12px; padding:16px; font-size:13px; color:#334155;">
-                              <strong style="font-size:14px; color:#0f172a;">💨 실내 기류 및 온도장 CFD 예측</strong>
+                              <strong style="font-size:14px; color:#0f172a;">💨 기류·온도장 검증 계획</strong>
                               <div style="display:flex; gap:12px; margin-top:12px; align-items:center;">
                                 <div style="flex:1; background:linear-gradient(90deg, #3b82f6 0%, #10b981 50%, #ef4444 100%); height:18px; border-radius:4px;"></div>
                                 <span style="font-size:11px; color:#64748b;">23.0℃ ~ 26.5℃</span>
                               </div>
                               <p style="margin-top:10px; font-size:12px; color:#64748b; line-height:1.5;">
-                                교반팬 및 펠티어 흡입구 유동 해석을 통해 실내 단일 존(Well-mixed assumption) 가정을 검증했습니다.
-                                현재 실내 기류 속도 0.1m/s 기준 PMV 쾌적도 산출 중.
+                                아래 색상 막대는 화면 구성을 위한 개념도이며 CFD 계산 결과가 아닙니다.
+                                향후 다점 온도 측정과 기류 해석으로 단일 존(Well-mixed) 가정의 타당성을 검증할 예정입니다.
                               </p>
                             </div>
                             """,
@@ -292,7 +282,7 @@ with main_col:
             with side_col:
                 with st.container(key="ts_dash_twin_ai_card", border=True):
                     st.markdown(
-                        f'<p class="ts-dash-card-title">{_CHIP_ICON}AI 운영 설명 <span class="ts-dash-badge">LLM</span></p>',
+                        f'<p class="ts-dash-card-title">{_CHIP_ICON}운영 설명 <span class="ts-dash-badge">규칙 기반</span></p>',
                         unsafe_allow_html=True,
                     )
                     headline, subline = system_judgment(current_r)
@@ -362,18 +352,21 @@ with main_col:
                             set_control_mode(current_r["id"], clicked_mode)
                             st.rerun()
 
-            comfort_avg = round(sum(comfort_index(r) for r in fresh_rooms) / room_count) if room_count else 0
-            hours_elapsed = datetime.now().hour + datetime.now().minute / 60
-            kwh_today = total_power * hours_elapsed
+            pmv_values = [
+                calculate_pmv(float(s["temperature"]), float(s["humidity"])).pmv
+                for s in snapshots.values()
+                if s["temperature"] is not None and s["humidity"] is not None
+            ]
+            average_pmv = sum(pmv_values) / len(pmv_values) if pmv_values else None
 
             with st.container(key="ts_dash_summary_card", border=True):
-                st.markdown('<p class="ts-dash-card-title">KPI 요약 (오늘)</p>', unsafe_allow_html=True)
+                st.markdown('<p class="ts-dash-card-title">현재 상태 요약</p>', unsafe_allow_html=True)
                 summary_items = [
-                    ("power", "HVAC 전력 사용량", f"{kwh_today:.0f}kWh"),
-                    ("temp", "평균 온도", f"{avg_temp:.1f}°C"),
-                    ("co2", "평균 CO₂", f"{avg_co2:.0f}ppm"),
-                    ("occupancy", "공간 사용률", f"{occupancy_rate}%"),
-                    (None, "종합 쾌적도 지수", f"{comfort_avg}/100"),
+                    ("power", "순간 HVAC 전력", f"{total_power:.1f}kW" if measured_power else "--"),
+                    ("temp", "현재 평균 온도", f"{avg_temp:.1f}°C" if temps else "--"),
+                    ("co2", "현재 평균 CO₂", f"{avg_co2:.0f}ppm" if co2s else "--"),
+                    ("occupancy", "현재 공간 사용률", f"{occupancy_rate}%"),
+                    (None, "현재 평균 PMV", f"{average_pmv:+.2f}" if average_pmv is not None else "--"),
                 ]
                 items_html = "".join(
                     f'<div class="ts-dash-summary-item">'

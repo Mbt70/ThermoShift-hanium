@@ -1,6 +1,5 @@
-import random
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import altair as alt
@@ -14,7 +13,6 @@ if str(_REPOSITORY_ROOT) not in sys.path:
 from app.components.alert_store import alert_severity_counts
 from app.components.room_store import (
     ai_judgment,
-    comfort_index,
     environment_snapshot,
     list_rooms,
     room_status,
@@ -24,6 +22,7 @@ from app.components.schedule_store import list_today_schedules
 from components.auth_store import current_user_id, is_logged_in
 from components.dash_shell import render_sidebar, render_topbar
 from components.mobile_ui import apply_mobile_styles, icon_data_uri, recolored_icon_data_uri
+from shared.api_client import api_get
 
 # Pre-colored icon badges the user dropped into assets/icons for the KPI
 # row/room cards/summary footer - used as-is (no recoloring) per their request.
@@ -55,14 +54,6 @@ _BAR_ICON = (
     'stroke-linecap="round" stroke-linejoin="round">'
     '<path d="M5 19V11M12 19V5M19 19v-7"/></svg>'
 )
-_ARROW_DOWN_ICON = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
-    'stroke-linecap="round" stroke-linejoin="round"><path d="M6 8l12 12M18 20H9M18 20v-9"/></svg>'
-)
-_ARROW_UP_ICON = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
-    'stroke-linecap="round" stroke-linejoin="round"><path d="M6 16 18 4M18 4H9M18 4v9"/></svg>'
-)
 _WARN_ICON = (
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
     'stroke-linecap="round" stroke-linejoin="round">'
@@ -76,11 +67,11 @@ _OFFLINE_ICON = (
 
 _STATUS_CLASS = {"정상": "ok", "주의": "warn", "오류": "err"}
 _METRICS = {"온도": "temperature", "CO2": "co2"}
-# (unit kind, point count, axis date format)
+# (lookback minutes, maximum point count, axis date format)
 _PERIODS = {
-    "1일": ("hour", 24, "%H:%M"),
-    "7일": ("day", 7, "%m/%d"),
-    "30일": ("day", 30, "%m/%d"),
+    "1일": (24 * 60, 120, "%H:%M"),
+    "7일": (7 * 24 * 60, 168, "%m/%d"),
+    "30일": (30 * 24 * 60, 180, "%m/%d"),
 }
 _SERIES_COLORS = {
     "평균 온도": "#3457be",
@@ -125,56 +116,24 @@ def _heat_thumb_style(room_id: str, temp: float | None) -> str:
     )
 
 
-def _occupancy_rate(room: dict) -> int:
-    # room_store only tracks a boolean "occupied" flag, no real utilization
-    # metric - synthesize a plausible percentage for occupied rooms, seeded
-    # by room id so it stays stable across reruns (same approach room_store
-    # itself uses for its live-value mocks).
-    if not room.get("occupied"):
-        return 0
-    return random.Random(f"occ-{room['id']}").randint(55, 92)
-
-
-def _period_points(period_key: str) -> list[datetime]:
-    unit, n, _fmt = _PERIODS[period_key]
-    if unit == "hour":
-        now = datetime.now().replace(minute=0, second=0, microsecond=0)
-        return [now - timedelta(hours=n - i) for i in range(n + 1)]
-    anchor = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
-    return [anchor - timedelta(days=n - 1 - i) for i in range(n)]
-
-
-def _history_series(rooms: list[dict], snapshots: dict, metric: str, n_points: int, seed_suffix: str) -> list[float]:
-    # No real historical store exists (room_store only ever holds the
-    # room's *current* live values), so this synthesizes a plausible walk
-    # that ends at today's real average - same deterministic-seed approach
-    # room_store.trend_series already uses for its single-room 30-point chart.
-    values = [snapshots[r["id"]][metric] for r in rooms if snapshots[r["id"]][metric] is not None]
-    base = sum(values) / len(values) if values else (24.0 if metric == "temperature" else 700.0)
-    step = 0.3 if metric == "temperature" else 18
-    rnd = random.Random(f"history-{metric}-{seed_suffix}-{len(rooms)}")
-    value = base + rnd.uniform(-step * 3, step * 3)
-    series = []
-    for _ in range(n_points):
-        value += rnd.uniform(-step, step)
-        series.append(value)
-    series[-1] = base
-    return series
-
-
-def _outdoor_series(main_series: list[float], seed_suffix: str) -> list[float]:
-    # Outdoor temperature has no sensor/data source in this app - synthesized
-    # as a cooler, more volatile walk loosely tracking the indoor average,
-    # same synthesis approach as _history_series above.
-    rnd = random.Random(f"outdoor-{seed_suffix}-{len(main_series)}")
-    offset = rnd.uniform(-4.5, -1.5)
-    series = []
-    value = main_series[0] + offset + rnd.uniform(-1.0, 1.0)
-    for indoor in main_series:
-        value += rnd.uniform(-0.6, 0.6)
-        value = value * 0.7 + (indoor + offset) * 0.3
-        series.append(value)
-    return series
+def _real_history(room_id: int, metric: str, minutes: int,
+                  max_points: int) -> tuple[list[datetime], list[float]]:
+    rows = api_get(
+        f"/rooms/{room_id}/trend",
+        params={"minutes": minutes, "points": max_points},
+    ) or []
+    pairs = [
+        (datetime.fromisoformat(row["measured_at"]), float(row[metric]))
+        for row in rows
+        if row.get(metric) is not None
+    ]
+    if len(pairs) > max_points:
+        last_pair = pairs[-1]
+        step = max(1, len(pairs) // max_points)
+        pairs = pairs[::step]
+        if pairs[-1] != last_pair:
+            pairs.append(last_pair)
+    return [pair[0] for pair in pairs], [pair[1] for pair in pairs]
 
 
 def _timeline_chart(
@@ -253,7 +212,7 @@ with main_col:
         occupancy_rate = round(active_count / room_count * 100) if room_count else 0
         severity = alert_severity_counts([r["id"] for r in rooms])
         alert_total = severity["critical"] + severity["warning"]
-        power_delta_pct = round(random.Random(f"power-yday-{datetime.now().date()}").uniform(-9, 6), 1)
+        measured_power = bool(powers)
 
         render_topbar("대시보드", alert_count=alert_total)
 
@@ -263,23 +222,24 @@ with main_col:
 
         temp_diff = avg_temp - 24
         temp_state = "근접" if abs(temp_diff) <= 1 else ("초과" if temp_diff > 0 else "미달")
-        co2_ok = avg_co2 < 1000
+        co2_ok = bool(co2s) and avg_co2 < 1000
         kpi_items = [
             (
                 "temp",
                 "평균 온도",
-                f"{avg_temp:.1f}",
+                f"{avg_temp:.1f}" if temps else "--",
                 "°C",
-                "is-positive" if temp_state == "근접" else "is-negative",
-                f"{_CHECK_ICON}목표 24°C {temp_state}",
+                "is-positive" if temps and temp_state == "근접" else "is-negative" if temps else "",
+                f"{_CHECK_ICON}목표 24°C {temp_state}" if temps else "환경 센서 데이터 없음",
             ),
             (
                 "co2",
                 "평균 CO₂",
-                f"{avg_co2:.0f}",
+                f"{avg_co2:.0f}" if co2s else "--",
                 "ppm",
-                "is-positive" if co2_ok else "is-negative",
-                f"{_CHECK_ICON}목표 <1000ppm " + ("충족" if co2_ok else "초과"),
+                "is-positive" if co2_ok else "is-negative" if co2s else "",
+                (f"{_CHECK_ICON}목표 <1000ppm " + ("충족" if co2_ok else "초과"))
+                if co2s else "환경 센서 데이터 없음",
             ),
             (
                 "active",
@@ -292,10 +252,10 @@ with main_col:
             (
                 "power",
                 "총 HVAC 전력",
-                f"{total_power:.1f}",
+                f"{total_power:.1f}" if measured_power else "--",
                 "kW",
-                "is-positive" if power_delta_pct < 0 else "is-negative",
-                f"{_ARROW_DOWN_ICON if power_delta_pct < 0 else _ARROW_UP_ICON}어제 대비 {power_delta_pct:+.1f}%",
+                "is-positive" if measured_power else "",
+                f"{_CHECK_ICON}전력 센서 합계" if measured_power else "전력 센서 미연동",
             ),
             (
                 "alert",
@@ -334,11 +294,9 @@ with main_col:
                         snap = snapshots[r["id"]]
                         status = room_status(r)
                         status_class = _STATUS_CLASS.get(status, "ok")
-                        usage_pct = _occupancy_rate(r)
                         door_label = "문 열림" if snap.get("door_state") == "open" else ("문 닫힘" if snap.get("door_state") == "closed" else "문 --")
                         door_class = "ts-dash-status-warn" if snap.get("door_state") == "open" else "ts-dash-status-ok"
                         motion_label = "움직임 감지" if snap.get("motion") is True else "움직임 없음"
-                        motion_class = "ts-dash-status-ok" if snap.get("motion") is True else ""
 
                         with col:
                             with st.container(key=f"ts_dash_room_card_{r['id']}"):
@@ -392,30 +350,24 @@ with main_col:
                         "기간", list(_PERIODS.keys()), index=1, key="dash_timeline_period", label_visibility="collapsed"
                     )
                 metric_key = _METRICS[metric_choice]
-                _unit_kind, n_points, date_format = _PERIODS[period_choice]
-                points = _period_points(period_choice)
-                main_series = _history_series(rooms, snapshots, metric_key, len(points), period_choice)
-                if metric_key == "temperature":
-                    outdoor_series = _outdoor_series(main_series, period_choice)
+                minutes, n_points, date_format = _PERIODS[period_choice]
+                points, main_series = _real_history(
+                    rooms[0]["id"], metric_key, minutes, n_points
+                )
+                if main_series:
+                    series_label = f"{rooms[0]['name']} {metric_choice}"
                     chart = _timeline_chart(
                         points,
-                        {"평균 온도": main_series, "외기 온도": outdoor_series},
-                        target=("목표 온도", 24),
-                        metric_label="평균 온도",
-                        unit="°C",
+                        {series_label: main_series},
+                        target=("목표 온도", 24) if metric_key == "temperature" else ("목표 CO₂", 1000),
+                        metric_label=metric_choice,
+                        unit="°C" if metric_key == "temperature" else "ppm",
                         date_format=date_format,
-                        y_domain=(18, 30),
+                        y_domain=(18, 30) if metric_key == "temperature" else None,
                     )
+                    st.altair_chart(chart, width="stretch")
                 else:
-                    chart = _timeline_chart(
-                        points,
-                        {"평균 CO₂": main_series},
-                        target=("목표 CO₂", 1000),
-                        metric_label="평균 CO₂",
-                        unit="ppm",
-                        date_format=date_format,
-                    )
-                st.altair_chart(chart, width="stretch")
+                    st.info("선택한 기간에 실측 데이터가 없습니다.")
 
         with side_col:
             today_schedules = sorted(
@@ -512,18 +464,16 @@ with main_col:
                 unsafe_allow_html=True,
             )
 
-        comfort_avg = round(sum(comfort_index(r) for r in rooms) / room_count) if room_count else 0
-        hours_elapsed = datetime.now().hour + datetime.now().minute / 60
-        kwh_today = total_power * hours_elapsed
+        connected_count = sum(1 for room_item in rooms if room_item.get("sensor_connected"))
 
         with st.container(key="ts_dash_summary_card", border=True):
-            st.markdown('<p class="ts-dash-card-title">KPI 요약 (오늘)</p>', unsafe_allow_html=True)
+            st.markdown('<p class="ts-dash-card-title">현재 상태 요약</p>', unsafe_allow_html=True)
             summary_items = [
-                ("power", "HVAC 전력 사용량", f"{kwh_today:.0f}kWh"),
-                ("temp", "평균 온도", f"{avg_temp:.1f}°C"),
-                ("co2", "평균 CO₂", f"{avg_co2:.0f}ppm"),
-                ("active", "공간 사용률", f"{occupancy_rate}%"),
-                (None, "종합 쾌적도 지수", f"{comfort_avg}/100"),
+                ("power", "순간 HVAC 전력", f"{total_power:.1f}kW" if measured_power else "--"),
+                ("temp", "현재 평균 온도", f"{avg_temp:.1f}°C" if temps else "--"),
+                ("co2", "현재 평균 CO₂", f"{avg_co2:.0f}ppm" if co2s else "--"),
+                ("active", "현재 공간 사용률", f"{occupancy_rate}%"),
+                (None, "환경 센서 연결", f"{connected_count}/{room_count}"),
             ]
             items_html = "".join(
                 f'<div class="ts-dash-summary-item">'

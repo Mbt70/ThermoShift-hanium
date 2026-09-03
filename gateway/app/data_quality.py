@@ -16,18 +16,24 @@ class DataQuality:
         self.latest_occ: Dict[str, OccData] = {}
 
     def process_env(self, data: EnvData, raw_payload: str = "{}"):
-        quality = "OK"
+        invalid_metrics = []
         if data.temperature_c is not None and not (-10 <= data.temperature_c <= 60):
-            quality = "INVALID"
+            invalid_metrics.append("temperature")
             data.temperature_c = None
             
         if data.humidity_rh is not None and not (0 <= data.humidity_rh <= 100):
-            quality = "INVALID"
+            invalid_metrics.append("humidity")
             data.humidity_rh = None
             
         if data.co2_ppm is not None and not (350 <= data.co2_ppm <= 10000):
-            quality = "INVALID"
+            invalid_metrics.append("co2")
             data.co2_ppm = None
+
+        if invalid_metrics:
+            logger.warning(
+                "범위 밖 환경값 제외 device=%s metrics=%s payload=%.200s",
+                data.device_id, ",".join(invalid_metrics), raw_payload,
+            )
 
         now = datetime.now(timezone.utc)
         self.last_seen["env"] = now
@@ -38,11 +44,11 @@ class DataQuality:
         self.storage.register_device(data.device_id, "env", iso_now)
 
         if data.temperature_c is not None:
-            self.storage.insert_sensor_reading(iso_now, data.device_id, "temperature", data.temperature_c, quality, raw_payload)
+            self.storage.insert_sensor_reading(iso_now, data.device_id, "temperature", data.temperature_c, "OK", raw_payload)
         if data.humidity_rh is not None:
-            self.storage.insert_sensor_reading(iso_now, data.device_id, "humidity", data.humidity_rh, quality, raw_payload)
+            self.storage.insert_sensor_reading(iso_now, data.device_id, "humidity", data.humidity_rh, "OK", raw_payload)
         if data.co2_ppm is not None:
-            self.storage.insert_sensor_reading(iso_now, data.device_id, "co2", data.co2_ppm, quality, raw_payload)
+            self.storage.insert_sensor_reading(iso_now, data.device_id, "co2", data.co2_ppm, "OK", raw_payload)
 
     def process_occ(self, data: OccData, raw_payload: str = "{}"):
         now = datetime.now(timezone.utc)

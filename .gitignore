@@ -41,6 +41,7 @@ gateway/data/
 artifacts/
 outputs/
 gateway/config/config.yaml
+firmware/secrets.h
 
 # tailscale cert 가 현재 디렉터리에 떨구는 인증서·개인키.
 # 저장소에 절대 들어가면 안 된다 (Funnel 은 자체적으로 인증서를 관리하므로

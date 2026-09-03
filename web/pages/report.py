@@ -1,85 +1,22 @@
-import random
 import sys
-from datetime import date
 from pathlib import Path
 
-import altair as alt
-import pandas as pd
 import streamlit as st
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
-from app.components.room_store import comfort_index, list_rooms
+from app.components.room_store import list_rooms
 from components.auth_store import current_user_id, is_logged_in
 from components.dash_shell import render_sidebar
-from components.mobile_ui import apply_mobile_styles, icon_data_uri
+from components.mobile_ui import apply_mobile_styles
+from shared.api_client import api_get
 
 _CHECK_ICON = (
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" '
     'stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17 19 7"/></svg>'
 )
-_WARN_ICON = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
-    'stroke-linecap="round" stroke-linejoin="round">'
-    '<path d="M12 4 3 20h18L12 4Z"/><path d="M12 10.5v4M12 17.5v.1"/></svg>'
-)
-_ARROW_UP_ICON = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
-    'stroke-linecap="round" stroke-linejoin="round"><path d="M6 16 18 4M18 4H9M18 4v9"/></svg>'
-)
-_SIGNAL_ICON = (
-    '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '
-    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
-    '<path d="M4 15v5M9 11v9M14 7v13M19 3v17"/></svg>'
-)
-_CHART_ICON = (
-    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" '
-    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-    '<path d="M3 17.5 9 11l4 4 8-9"/></svg>'
-)
-
-_KPI_ROWS = (
-    ("temp", "온도 범위 이탈 시간 감소", "temperture.svg", 20),
-    ("co2", "CO₂ 초과 시간 감소", "co2.svg", 20),
-    ("ir", "IR 명령 성공률", None, 95),
-    ("power", "전력 절감", "web_bolt.svg", 5),
-)
-
-
-def _trend_chart(days: list[str], scores: list[float], target: float) -> alt.LayerChart:
-    df = pd.DataFrame({"day": days, "값": scores, "구분": "쾌적도 지수"})
-    target_df = pd.DataFrame({"day": days, "값": [target] * len(days), "구분": "목표 80점"})
-    color_scale = alt.Scale(domain=["쾌적도 지수", "목표 80점"], range=["#4a8f6d", "#c65b4e"])
-
-    line = (
-        alt.Chart(df)
-        .mark_line(strokeWidth=2.4)
-        .encode(
-            x=alt.X("day:O", title=None, axis=alt.Axis(grid=False, labels=False, ticks=False)),
-            y=alt.Y("값:Q", title=None, scale=alt.Scale(zero=False)),
-            color=alt.Color("구분:N", scale=color_scale, legend=alt.Legend(title=None, orient="bottom")),
-        )
-    )
-    target_line = (
-        alt.Chart(target_df)
-        .mark_line(strokeWidth=1.6, strokeDash=[5, 4])
-        .encode(
-            x=alt.X("day:O"),
-            y=alt.Y("값:Q"),
-            color=alt.Color("구분:N", scale=color_scale, legend=alt.Legend(title=None, orient="bottom")),
-        )
-    )
-    return (
-        alt.layer(line, target_line)
-        .properties(height=150)
-        .configure_axis(labelFont="Inter", titleFont="Inter", grid=True, gridColor="#eef2f4", labelFontSize=9)
-        .configure_view(strokeWidth=0)
-        .configure_legend(labelFont="Inter", symbolType="stroke", labelFontSize=10, padding=2)
-    )
-
-
 apply_mobile_styles("report", shared=("dash_shell", "home"))
 
 if not is_logged_in():
@@ -119,167 +56,58 @@ with main_col:
                 st.session_state["_web_selected_room"] = picked_room["id"]
                 st.rerun()
 
-        # No historical performance store exists yet - synthesize plausible,
-        # internally-consistent weekly figures seeded on room+ISO-week so
-        # they stay stable all week instead of reshuffling on every rerun.
-        week_seed = f"report-{room['id']}-{date.today().isocalendar()[1]}"
-        power_saving = round(random.Random(f"{week_seed}-power").uniform(12, 22), 1)
-        temp_dev_reduction = round(random.Random(f"{week_seed}-temp").uniform(22, 32))
-        co2_reduction = round(random.Random(f"{week_seed}-co2").uniform(8, 18))
-        ir_success = round(random.Random(f"{week_seed}-ir").uniform(90, 99))
+        stats = api_get(f"/ai/rooms/{room['id']}/stats")
 
-        comfort_score = comfort_index(room)
+        def metric(value, suffix=""):
+            return "--" if value is None else f"{value}{suffix}"
 
         st.markdown(
             f"""
             <div class="ts-report-insight">
               <span class="ts-report-insight-icon">{_CHECK_ICON}</span>
-              <p>이번주 predictive 제어로 baseline대비 전력 {power_saving:g}%절감, 온도 이탈 시간
-              {temp_dev_reduction}%감소, IR 명령 성공률 {ir_success}%로 목표에 도달했습니다</p>
+              <p><strong>[MEASURED]</strong> {stats['start']}~{stats['end']} 원본 환경 측정
+              {stats['reading_count']}건을 집계했습니다. 전력 절감률은 스마트플러그와 반복 A/B 실험이
+              완료될 때까지 표시하지 않습니다.</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        kpi_values = {"temp": temp_dev_reduction, "co2": co2_reduction, "ir": ir_success, "power": power_saving}
-        kpi_ok = {
-            "temp": temp_dev_reduction >= 20,
-            "co2": co2_reduction >= 20,
-            "ir": ir_success >= 84,
-            "power": power_saving >= 5,
-        }
-        kpi_sub = {
-            "temp": f"목표 20% 이상 {'달성' if kpi_ok['temp'] else '미달'}",
-            "co2": f"목표 20% 이상 {'달성' if kpi_ok['co2'] else '미달'}",
-            "ir": f"목표 84% {'달성' if kpi_ok['ir'] else '미달'}",
-            "power": f"목표 대비 {power_saving - 11:.1f}% 초과달성"
-            if kpi_ok["power"]
-            else "목표 미달",
-        }
+        kpi_values = [
+            ("환경 측정", metric(stats["reading_count"]), "건", "DB 실측 레코드"),
+            ("평균 온도", metric(stats["temp_avg"]), "°C", f"범위 {metric(stats['temp_min'])}~{metric(stats['temp_max'])}°C"),
+            ("평균 CO₂", metric(stats["co2_avg"]), "ppm", f"최대 {metric(stats['co2_max'])}ppm"),
+            ("품질 오류율", metric(stats["invalid_pct"]), "%", "항목별 품질 플래그 기준"),
+        ]
         kpi_cols = st.columns(4, gap="small")
-        for col, (slug, label, icon_file, _goal) in zip(kpi_cols, _KPI_ROWS):
+        for index, (col, (label, value, unit, note)) in enumerate(zip(kpi_cols, kpi_values)):
             with col:
-                with st.container(key=f"ts_dash_kpi_card_{slug}", border=True):
-                    icon_html = (
-                        f'<span class="ts-dash-kpi-icon ts-report-signal-icon">{_SIGNAL_ICON}</span>'
-                        if icon_file is None
-                        else f'<img class="ts-dash-kpi-icon" src="{icon_data_uri(icon_file)}" alt="" />'
-                    )
-                    ok = kpi_ok[slug]
-                    sub_icon = _CHECK_ICON if ok else _WARN_ICON
-                    sub_class = "is-positive" if ok else "is-negative"
+                with st.container(key=f"ts_dash_kpi_card_measured_{index}", border=True):
                     st.markdown(
                         f"""
                         <div class="ts-dash-kpi-head">
                           <span class="ts-dash-kpi-label">{label}</span>
-                          {icon_html}
                         </div>
-                        <p class="ts-dash-kpi-value">{kpi_values[slug]}<span class="ts-dash-kpi-unit">%</span></p>
-                        <p class="ts-dash-kpi-sub {sub_class}">{sub_icon}{kpi_sub[slug]}</p>
+                        <p class="ts-dash-kpi-value">{value}<span class="ts-dash-kpi-unit">{unit}</span></p>
+                        <p class="ts-dash-kpi-sub">{note}</p>
                         """,
                         unsafe_allow_html=True,
                     )
 
-        table_col, bar_col = st.columns([1.6, 1], gap="small")
-
-        with table_col:
-            with st.container(key="ts_dash_report_table_card", border=True):
-                rows = [
-                    ("전력 사용량 개선", "목표 5% 이상", power_saving, kpi_ok["power"]),
-                    ("온도 이탈 시간 감소", "목표 20% 이상", temp_dev_reduction, kpi_ok["temp"]),
-                    ("CO₂ 초과 시간 감소", "목표 20% 이상", co2_reduction, kpi_ok["co2"]),
-                    ("IR 명령 성공률", "목표 95% 이상", ir_success, kpi_ok["ir"]),
-                ]
-                rows_html = "".join(
-                    f'<div class="ts-report-row">'
-                    f'<div class="ts-report-row-label">'
-                    f'<span class="ts-report-row-title">{title}</span>'
-                    f'<span class="ts-report-row-goal">{goal}</span>'
-                    f"</div>"
-                    f'<span class="ts-report-row-value">{value}%</span>'
-                    f'<span class="ts-report-row-target">&gt;{value}%</span>'
-                    f'<span class="ts-report-status {"is-ok" if ok else "is-warn"}">'
-                    f'<span class="ts-report-status-dot"></span>{"달성" if ok else "미달"}'
-                    f"</span>"
-                    f"</div>"
-                    for title, goal, value, ok in rows
-                )
-                st.markdown(
-                    '<div class="ts-report-table">'
-                    '<div class="ts-report-row ts-report-row-head">'
-                    "<span>KPI 달성</span><span>측정값</span><span>목표</span><span>달성여부</span>"
-                    "</div>"
-                    f"{rows_html}"
-                    "</div>",
-                    unsafe_allow_html=True,
-                )
-
-        with bar_col:
-            with st.container(key="ts_dash_report_bar_card", border=True):
-                st.markdown(
-                    '<p class="ts-dash-card-title">전력 사용량 비교'
-                    '<span class="ts-report-bar-unit">kWh</span></p>',
-                    unsafe_allow_html=True,
-                )
-                baseline_kwh = round(random.Random(f"{week_seed}-baseline").uniform(78, 90))
-                rule_kwh = round(baseline_kwh * random.Random(f"{week_seed}-rule").uniform(0.88, 0.95))
-                predictive_kwh = round(baseline_kwh * (1 - power_saving / 100))
-                bars = [("baseline", baseline_kwh, ""), ("rule", rule_kwh, ""), ("predictive", predictive_kwh, "is-highlight")]
-                max_kwh = max(v for _, v, _ in bars)
-                bars_html = "".join(
-                    f'<div class="ts-report-bar-col">'
-                    f'<span class="ts-report-bar-value">{value}</span>'
-                    f'<div class="ts-report-bar {cls}" style="height:{max(6, round(value / max_kwh * 130))}px"></div>'
-                    f'<span class="ts-report-bar-label">{label}</span>'
-                    f"</div>"
-                    for label, value, cls in bars
-                )
-                st.markdown(f'<div class="ts-report-bars">{bars_html}</div>', unsafe_allow_html=True)
-
-        gauge_col, trend_col = st.columns([1, 2], gap="small")
-
-        with gauge_col:
-            with st.container(key="ts_dash_report_gauge_card", border=True):
-                st.markdown('<p class="ts-dash-card-title">종합 쾌적도 지수</p>', unsafe_allow_html=True)
-                circumference = 326.73
-                dash = circumference * comfort_score / 100
-                gauge_color = "var(--success)" if comfort_score >= 80 else "var(--warning)" if comfort_score >= 60 else "var(--danger)"
-                gauge_label = "우수" if comfort_score >= 80 else "양호" if comfort_score >= 60 else "개선 필요"
-                st.markdown(
-                    f"""
-                    <div class="ts-dash-gauge-wrap">
-                      <svg viewBox="0 0 120 120" class="ts-dash-gauge-ring">
-                        <circle cx="60" cy="60" r="52" stroke="var(--border)" stroke-width="14" fill="none" />
-                        <circle cx="60" cy="60" r="52" stroke="{gauge_color}" stroke-width="14" fill="none"
-                                stroke-linecap="round" stroke-dasharray="{dash:.2f} {circumference:.2f}"
-                                transform="rotate(-90 60 60)" />
-                      </svg>
-                      <div class="ts-dash-gauge-center">
-                        <span class="ts-dash-gauge-score">{comfort_score}</span>
-                      </div>
-                    </div>
-                    <p class="ts-report-gauge-caption">이번주 평균 {gauge_label}</p>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-        with trend_col:
-            with st.container(key="ts_dash_report_trend_card", border=True):
-                st.markdown(
-                    f'<p class="ts-dash-card-title">{_CHART_ICON}일별 쾌적도 지수 추이'
-                    '<span class="ts-report-trend-sub">목표 80점 이상</span></p>',
-                    unsafe_allow_html=True,
-                )
-                rnd = random.Random(f"{week_seed}-trend")
-                n_points = 12
-                value = comfort_score - rnd.uniform(4, 10)
-                scores = []
-                for _ in range(n_points - 1):
-                    value += rnd.uniform(-1.5, 2.2)
-                    scores.append(value)
-                scores.append(float(comfort_score))
-                days = [f"D{i + 1}" for i in range(n_points)]
-                st.altair_chart(_trend_chart(days, scores, 80), width="stretch")
+        with st.container(key="ts_dash_report_measured_scope", border=True):
+            energy_state = "연동됨" if stats["power_measured"] else "미연동 — 절감률 산출 안 함"
+            st.markdown(
+                f"""
+                <p class="ts-dash-card-title">측정 범위와 검증 상태</p>
+                <p>온도 허용범위 이탈 표본: <strong>{metric(stats['temp_out_of_range_pct'], '%')}</strong> ·
+                CO₂ 1000ppm 초과 표본: <strong>{metric(stats['co2_high_pct'], '%')}</strong> ·
+                재실 추정 표본: <strong>{stats['occupancy_samples']}건</strong> ·
+                제어 판단: <strong>{stats['decision_count']}건</strong></p>
+                <p>전력계: <strong>{energy_state}</strong> · 명령 전송: {stats['command_sent']}건 ·
+                실패/시간초과: {stats['command_failed']}건</p>
+                """,
+                unsafe_allow_html=True,
+            )
 
         with st.container(key="ts_dash_report_ie_card", border=True):
             st.markdown(
@@ -287,10 +115,10 @@ with main_col:
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
                   <div>
                     <strong style="font-size:15px; color:#0f172a;">📐 산업공학(IE) 최적화 & 제어공학 성과 분석</strong>
-                    <span style="font-size:12px; color:#64748b; margin-left:8px;">Multi-Objective Economic MPC & Physics-Informed Estimator</span>
+                    <span style="font-size:12px; color:#64748b; margin-left:8px;">Multi-Objective Economic MPC & Physics-Guided Estimation</span>
                   </div>
                   <span style="background:#e0f2fe; color:#0369a1; padding:3px 10px; border-radius:6px; font-size:11px; font-weight:600;">
-                    Small-Data Robustness 검증 완료
+                    검증 프로토콜 준비 단계
                   </span>
                 </div>
                 """,
@@ -303,18 +131,18 @@ with main_col:
                 st.markdown(
                     """
                     <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:12px; font-size:12px; line-height:1.6;">
-                      <strong style="font-size:13px; color:#1e293b;">🔬 1. 물리-통계 융합 재실 인원 추정 (CO₂ 질량보존 칼만필터)</strong>
+                      <strong style="font-size:13px; color:#1e293b;">🔬 1. CO₂ 질량보존 + 1차원 Kalman 융합</strong>
                       <p style="color:#64748b; margin:6px 0;">
-                        정적 감지 한계(PIR 사각지대)를 극복하기 위해 실내 CO₂ 발생률 동역학과 베이지안 칼만 필터를 융합했습니다.
+                        PIR의 빠른 이벤트와 CO₂의 느린 동역학을 결합하는 실공간 확장 모듈입니다. 12 L 목업에서는 사람이 아닌 10 W 히터로 열부하를 재현하므로 기본 비활성화됩니다.
                       </p>
                       <div style="background:#f8fafc; padding:8px 10px; border-radius:6px; font-family:monospace; font-size:11px; color:#334155; margin:6px 0;">
                         V · dC/dt = G_per_person · N_occ - Q_vent · (C - C_out)
                       </div>
                       <table style="width:100%; border-collapse:collapse; margin-top:8px; font-size:11px;">
                         <tr style="border-bottom:1px solid #f1f5f9; color:#64748b;"><th style="text-align:left; padding:4px;">지표</th><th style="text-align:right; padding:4px;">기존 단순 PIR</th><th style="text-align:right; padding:4px; color:#2563eb; font-weight:600;">ThermoShift (물리융합)</th></tr>
-                        <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px;">재실 상태 감지</td><td style="text-align:right; padding:4px;">동작 감지만 가능</td><td style="text-align:right; padding:4px; color:#2563eb; font-weight:600;">연속 인원수 추정 (N명)</td></tr>
-                        <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px;">인체 발열 외란 보상</td><td style="text-align:right; padding:4px;">불가능 (외란 누적)</td><td style="text-align:right; padding:4px; color:#2563eb; font-weight:600;">Q_int = N · 100W 피드포워드</td></tr>
-                        <tr><td style="padding:4px;">정적 활동(독서/코딩)</td><td style="text-align:right; padding:4px; color:#dc2626;">오판(공실로 냉방OFF)</td><td style="text-align:right; padding:4px; color:#16a34a; font-weight:600;">100% 지속 감지</td></tr>
+                        <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px;">빠른 이벤트</td><td style="text-align:right; padding:4px;">PIR 관측</td><td style="text-align:right; padding:4px; color:#2563eb; font-weight:600;">PIR로 즉시 보정</td></tr>
+                        <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px;">정적 재실</td><td style="text-align:right; padding:4px;">관측 한계</td><td style="text-align:right; padding:4px; color:#2563eb; font-weight:600;">CO₂ 추세로 보완</td></tr>
+                        <tr><td style="padding:4px;">검증 상태</td><td style="text-align:right; padding:4px;">—</td><td style="text-align:right; padding:4px; color:#b45309; font-weight:600;">[TARGET] 실제 공간 데이터 필요</td></tr>
                       </table>
                     </div>
                     """,
@@ -325,26 +153,24 @@ with main_col:
                 st.markdown(
                     """
                     <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:12px; font-size:12px; line-height:1.6;">
-                      <strong style="font-size:13px; color:#1e293b;">⚡ 2. 파레토 최적 제어 (전통 On/Off 대비 성과)</strong>
+                      <strong style="font-size:13px; color:#1e293b;">⚡ 2. Occupancy-Aware Economic MPC</strong>
                       <p style="color:#64748b; margin:6px 0;">
-                        ISO 7730 PMV 쾌적 불감대를 만족하면서 전력 소비와 기기 마모를 동시 최소화합니다.
+                        PMV 기반 쾌적 위반, 전력 비용, 제어 변동을 하나의 목적함수에서 절충합니다. 현재 결과는 교정 전 RC 모델의 시뮬레이션 추정치입니다.
                       </p>
                       <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:8px 0;">
                         <div style="background:#eff6ff; border-radius:6px; padding:8px; text-align:center;">
-                          <div style="color:#1d4ed8; font-size:18px; font-weight:700;">-32.9%</div>
-                          <div style="color:#3b82f6; font-size:11px;">HVAC 전력 소비 절감</div>
+                          <div style="color:#1d4ed8; font-size:18px; font-weight:700;">[SIM]</div>
+                          <div style="color:#3b82f6; font-size:11px;">동일 RC 모델에서 기준제어와 비교</div>
                         </div>
                         <div style="background:#ecfdf5; border-radius:6px; padding:8px; text-align:center;">
-                          <div style="color:#047857; font-size:18px; font-weight:700;">-62.5%</div>
-                          <div style="color:#10b981; font-size:11px;">압축기 스위칭 억제 (수명연장)</div>
+                          <div style="color:#047857; font-size:18px; font-weight:700;">[TARGET]</div>
+                          <div style="color:#10b981; font-size:11px;">A/B 반복 실험으로 전력·쾌적 검증</div>
                         </div>
                       </div>
                       <div style="background:#f8fafc; padding:8px 10px; border-radius:6px; font-size:11px; color:#475569; margin-top:6px;">
-                        💡 <strong>Small-Data 강건성:</strong> 수만 장의 빅데이터 없이도 열역학 에너지 보존(RC 모델)과 Fanger PMV 이론이 
-                        상태 궤적의 물리적 경계조건을 규정하여, 적은 데이터로도 첫날부터 <strong>100% 안정적 최적화</strong>를 수행합니다.
+                        💡 <strong>현재 범위:</strong> 물리 구조가 학습 자유도를 줄이는 장점은 있지만 성능을 보장하지는 않습니다. 새 식별 데이터로 R·C·냉각효율을 교정하고, 전압·전류 실측을 포함한 반복 실험 뒤에만 절감률을 표시합니다.
                       </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-

@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""Physics-Informed Neural Network (PINN) 열역학 모델 학습기.
+"""물리 잔차로 정규화한 열 변화율 신경망 실험 코드.
 
-학술적 가치 및 Novelty:
----------------------
-1. 순수 블랙박스 딥러닝(ANN/LSTM)의 고질적 한계인 '비물리적 예측(열역학 법칙 위배)'과
-   '데이터 부족 시 과적합(Overfitting)'을 극복합니다.
-2. 손실 함수에 열역학 제1법칙(에너지 보존) 미분방정식 잔차(Residual)를 페널티로 부여하여,
-   극소량의 실측 데이터로도 일반화 성능과 물리적 정합성을 100% 보장합니다.
+신경망이 예측한 dT/dt가 1차 RC 모델과 크게 어긋나지 않도록 잔차 항을
+추가한다. 엄밀한 의미의 PINN 전체 구현이나 일반화 성능 보장을 뜻하지
+않으며, RC 회귀 대비 성능은 별도 hold-out 실험으로 검증해야 한다.
 
 손실 함수 (Loss Formulation):
 ---------------------------
@@ -19,7 +16,6 @@ L_total = L_data + lambda_phys * L_physics
 from __future__ import annotations
 
 import argparse
-import math
 import os
 import sys
 from pathlib import Path
@@ -38,6 +34,8 @@ def train_pinn_numpy(df: pd.DataFrame, epochs: int = 1500, lr: float = 0.005, la
 
     # 유효 데이터 필터링
     df = df.dropna(subset=["temperature", "dT_dt"]).copy()
+    if len(df) < 2:
+        raise ValueError("학습 가능한 온도 변화율 표본이 2개 이상 필요합니다")
     T = df["temperature"].values
     U = df["cooling_u"].values if "cooling_u" in df else np.zeros_like(T)
     dT_dt = df["dT_dt"].values
@@ -58,8 +56,6 @@ def train_pinn_numpy(df: pd.DataFrame, epochs: int = 1500, lr: float = 0.005, la
     b1 = np.zeros(16)
     W2 = np.random.randn(16, 1) * 0.1
     b2 = np.zeros(1)
-
-    best_loss = float("inf")
 
     X = np.stack([T_norm, U], axis=1) # (N, 2)
     y_true = dT_dt.reshape(-1, 1)     # (N, 1)

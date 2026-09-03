@@ -38,11 +38,19 @@ logger = logging.getLogger(__name__)
 load_dotenv("/etc/thermoshift.env")
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_USER = os.getenv("DB_USER", "thermoshift")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "mxJEssQM8i6HutY5jbkzAYIO")
-DB_NAME = os.getenv("DB_NAME", "thermoshift")
+_REQUIRED_ENV = ("DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME")
+_missing = [name for name in _REQUIRED_ENV if not os.getenv(name)]
+if _missing:
+    raise RuntimeError(
+        "DB 접속 정보 환경변수가 없습니다: " + ", ".join(_missing) + ". "
+        "저장소 루트의 .env 또는 /etc/thermoshift.env를 설정하세요."
+    )
+
+DB_HOST = os.environ["DB_HOST"]
+DB_PORT = os.environ["DB_PORT"]
+DB_USER = os.environ["DB_USER"]
+DB_PASSWORD = os.environ["DB_PASSWORD"]
+DB_NAME = os.environ["DB_NAME"]
 
 _CONNINFO = psycopg.conninfo.make_conninfo(
     host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, dbname=DB_NAME
@@ -312,24 +320,29 @@ class Storage:
                     flag_col = "temp_flag" if column == "temperature" else f"{column}_flag"
                     cur.execute(
                         f"INSERT INTO sensor_env (device_id, {column}, {flag_col},"
-                        " measured_at, received_at) VALUES (%s, %s, %s, %s, now())"
+                        " measured_at, received_at, raw_payload)"
+                        " VALUES (%s, %s, %s, %s, now(), %s::jsonb)"
                         " ON CONFLICT (device_id, measured_at) DO UPDATE"
-                        f" SET {column} = EXCLUDED.{column}, {flag_col} = EXCLUDED.{flag_col}",
-                        (device_id, value, flag, timestamp),
+                        f" SET {column} = EXCLUDED.{column}, {flag_col} = EXCLUDED.{flag_col},"
+                        " raw_payload = EXCLUDED.raw_payload",
+                        (device_id, value, flag, timestamp, raw_payload),
                     )
                 elif metric == "pir":
                     cur.execute(
-                        "INSERT INTO sensor_pir (device_id, motion, flag, measured_at, received_at)"
-                        " VALUES (%s, %s, %s, %s, now())"
+                        "INSERT INTO sensor_pir"
+                        " (device_id, motion, flag, measured_at, received_at, raw_payload)"
+                        " VALUES (%s, %s, %s, %s, now(), %s::jsonb)"
                         " ON CONFLICT (device_id, measured_at) DO NOTHING",
-                        (device_id, value > 0, flag, timestamp),
+                        (device_id, value > 0, flag, timestamp, raw_payload),
                     )
                 elif metric == "door":
                     cur.execute(
-                        "INSERT INTO sensor_door (device_id, door_state, flag, measured_at, received_at)"
-                        " VALUES (%s, %s, %s, %s, now())"
+                        "INSERT INTO sensor_door"
+                        " (device_id, door_state, flag, measured_at, received_at, raw_payload)"
+                        " VALUES (%s, %s, %s, %s, now(), %s::jsonb)"
                         " ON CONFLICT (device_id, measured_at) DO NOTHING",
-                        (device_id, "open" if value > 0 else "closed", flag, timestamp),
+                        (device_id, "open" if value > 0 else "closed", flag, timestamp,
+                         raw_payload),
                     )
 
         self._write_or_buffer("insert_sensor_reading", kwargs, _write)

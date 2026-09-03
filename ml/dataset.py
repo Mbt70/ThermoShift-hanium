@@ -122,7 +122,7 @@ def load_postgres(room_id: int | None = None
         host=os.getenv("DB_HOST", "localhost"),
         port=os.getenv("DB_PORT", "5432"),
         user=os.getenv("DB_USER", "thermoshift"),
-        password=os.getenv("DB_PASSWORD", "thermoshift1234"),
+        password=os.environ["DB_PASSWORD"],
         dbname=os.getenv("DB_NAME", "thermoshift"),
     )
     with psycopg.connect(conninfo) as conn, conn.cursor() as cur:

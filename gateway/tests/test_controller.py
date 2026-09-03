@@ -75,9 +75,8 @@ class MockStorage:
 def controller(monkeypatch):
     storage = MockStorage()
     monkeypatch.setattr("app.controller.get_storage", lambda: storage)
-    # 열모델은 일부러 진짜를 쓴다. ml/params/thermal.json 이 없으면
-    # _load_thermal_model() 이 미교정 기본값을 돌려주는데, 선냉방 시험이
-    # 바로 그 기본값의 리드타임(27→24℃ 약 57분)을 기준으로 쓴다.
+    # 정책 경로 시험용 모델은 교정 완료로 표시한다. 실제 운전에서는
+    # ml/params/thermal.json의 calibrated=true가 없으면 MPC·예냉을 막는다.
 
     class MockDataQuality:
         class FakeEnv:
@@ -103,6 +102,11 @@ def controller(monkeypatch):
 
     c = HVACController(MockIRAdapter())
     c.storage = storage
+    c.thermal.calibrated = True
+    # 무시되는 로컬 config.yaml 값이 테스트 결과를 바꾸면 안 된다.
+    c.config.ir.manual_override = None
+    c.config.heater.enabled = False
+    c.config.heater.manual_duty = None
     return c
 
 
@@ -120,6 +124,25 @@ def test_shadow_mode_never_transmits(controller):
     assert d["executed"] is False
     assert controller.ir.sent_commands == []
     assert d["blocked_by"] == "MONITORING_MODE"
+
+
+def test_manual_override_cannot_bypass_shadow_mode(controller):
+    controller.config.app.control_mode = "shadow"
+    controller.config.ir.manual_override = "ON"
+    d = controller.decide(FRESH, "OCCUPIED", OCCUPIED)
+    assert d["executed"] is False
+    assert controller.ir.sent_commands == []
+
+
+def test_manual_override_cannot_bypass_stale_sensor(controller):
+    controller.config.app.control_mode = "active"
+    controller.config.ir.manual_override = "ON"
+    d = controller.decide(
+        {"env_fresh": False, "occ_fresh": True}, "OCCUPIED", OCCUPIED
+    )
+    assert d["blocked_by"] == "ENV_STALE"
+    assert d["executed"] is False
+    assert controller.ir.sent_commands == []
 
 
 def test_active_mode_transmits(controller):
@@ -155,13 +178,13 @@ def test_manual_mode_does_not_run_automatic_control(controller):
     assert d["executed"] is False
 
 
-def test_mpc_mode_notes_it_is_not_implemented(controller):
-    """화면의 '예측 제어' 는 아직 없다. 규칙 제어로 돌되 기록에 남긴다."""
+def test_mpc_mode_runs_optimizer_and_records_provenance(controller):
+    """MPC 판단은 실행 여부와 무관하게 근거와 모드를 기록한다."""
     controller.config.app.control_mode = "active"
     controller.storage.room["control_mode"] = "mpc"
     d = controller.decide(FRESH, "OCCUPIED", OCCUPIED)
-    assert d["executed"] is True
     assert any("MPC" in r for r in d["reason_codes"])
+    assert d["room_mode"] == "mpc"
 
 
 # ---------------------------------------------------------------- 안전
@@ -261,7 +284,7 @@ class MockStorageWithSchedule(MockStorage):
 
 
 def test_예약이_리드타임_안으로_들어오면_미리_켠다(controller):
-    """미교정 열모델 기준 27→24℃ 는 약 57분 걸린다. 예약이 40분 뒤면 지금
+    """시험용 교정 모델 기준 27→24℃ 는 약 57분 걸린다. 예약이 40분 뒤면 지금
     켜야 한다 — 이것이 '예측 제어'의 최소 형태다."""
     controller.config.app.control_mode = "active"
     controller.storage = MockStorageWithSchedule(

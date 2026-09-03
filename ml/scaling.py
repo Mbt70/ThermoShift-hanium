@@ -1,18 +1,18 @@
-"""목업 시스템(12L 챔버)과 실제 공간(사무실/강의실) 간의 열역학적 스케일링(Scaling Theory).
+"""12 L 목업과 실제 공간 사이의 배포 경계와 초기 가정.
 
 심사위원 핵심 질문 대응:
 Q: "12L 아크릴 상자에서 실험한 결과가 왜 실제 30~50m³ 방에서도 유효한가?"
-A: "열역학적 상사성(Thermal Similitude)에 의해, 지배 미분방정식(RC 모델)은
-   스케일에 관계없이 동일한 무차원 형태를 유지합니다.
-   목업의 [열용량 C, 열저항 R, 발열 Q_int, 냉각 Q_cool] 파라미터를
-   공간 체적비(Volume ratio)와 재질 물성비로 스케일링 변환하면,
-   목업에서 검증된 MPC 최적화 알고리즘이 실제 건물 BEMS에 100% 동일하게 적용됩니다."
+A: "목업에서 검증하는 것은 센서→추정→예측→제어의 아키텍처와 실험
+   절차입니다. 실제 공간에서는 같은 RC 모델 구조와 MPC 코드를 재사용하되,
+   R, C, 내부발열, 환기량, 액추에이터 효율은 현장 데이터로 다시 식별합니다."
+
+목업과 45m³ 공간은 표면적/부피비, 자연대류, 혼합, 열용량이 달라 목업의
+파라미터나 절감률을 1:1 이전할 수 없다.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-import math
 
 
 @dataclass
@@ -34,9 +34,9 @@ MOCKUP_DOMAIN = ThermalDomainParams(
     name="12L Mockup Chamber (실증 목업)",
     volume_m3=0.012,            # 20cm x 20cm x 30cm = 0.012 m³
     floor_area_m2=0.04,         # 0.2m x 0.2m
-    air_heat_capacity_j_k=350.0, # 공기 + 내부 구조체 유효 열용량
-    thermal_resistance_k_w=15.0, # 아크릴 3mm 단열 특성
-    time_constant_min=(350.0 * 15.0) / 60.0,  # 약 87.5분
+    air_heat_capacity_j_k=3000.0, # 교정 전: 공기 + 벽체 유효 열용량
+    thermal_resistance_k_w=1.0 / 0.7, # 교정 전 UA=0.7 W/K의 역수
+    time_constant_min=(3000.0 / 0.7) / 60.0,  # 교정 전 약 71분
     cooling_capacity_w=25.0,    # 펠티어 유효 냉각 열량
     internal_heat_gain_w=10.0,  # 합성 재실자(히팅패드 100% 가동 시)
     cooling_power_w=36.0,       # 12V * 3A = 36W
@@ -65,7 +65,11 @@ def scale_parameters(
     from_domain: ThermalDomainParams = MOCKUP_DOMAIN,
     to_domain: ThermalDomainParams = REAL_OFFICE_DOMAIN,
 ) -> dict:
-    """목업 RC 파라미터를 실제 공간 물리 파라미터로 스케일링 변환한다."""
+    """대상 공간의 독립 가정으로 초기값을 만들고 재교정 필요성을 표시한다.
+
+    source_model_*은 추적 가능성을 위해 반환할 뿐 대상 파라미터 산출에는
+    사용하지 않는다. 이 함수의 결과는 실공간 제어·성과 주장에 사용할 수 없다.
+    """
     # 체적비
     vol_ratio = to_domain.volume_m3 / from_domain.volume_m3
     # 열용량비
@@ -95,10 +99,14 @@ def scale_parameters(
         "scaled_d": round(d_scaled, 5),
         "source_cop": round(from_domain.cop, 2),
         "target_cop": round(to_domain.cop, 2),
-        "energy_saving_factor_kwh": round((to_domain.cooling_power_w / 1000.0) * 0.15, 3), # 1℃ 완화 시 시간당 절감량
+        "requires_site_recalibration": True,
+        "transfer_scope": "CONTROL_ARCHITECTURE_ONLY",
+        "source_model": {
+            "a": source_model_a, "b": source_model_b, "d": source_model_d,
+        },
         "scientific_rationale": (
-            f"체적 {from_domain.volume_m3:.3f}m³(목업) 대비 {to_domain.volume_m3:.1f}m³(실공간)로 "
-            f"{vol_ratio:.0f}배 확장 시, 지배방정식 dT/dt = -a·T + d + b·u의 선형성이 보존되며 "
-            f"시정수 {tau_scaled_min:.0f}분에 맞춰 최적 MPC 제어가 동일한 알고리즘으로 동작합니다."
+            f"체적은 {from_domain.volume_m3:.3f}m³와 {to_domain.volume_m3:.1f}m³로 "
+            f"약 {vol_ratio:.0f}배 다릅니다. RC 모델의 구조와 MPC 절차만 재사용하고, "
+            "R·C·외란·액추에이터 효율은 대상 공간에서 다시 식별해야 합니다."
         ),
     }

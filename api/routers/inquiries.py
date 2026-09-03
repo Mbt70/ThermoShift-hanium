@@ -1,7 +1,8 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from api.db import get_conn
+from api.security import get_current_user_id, require_room_owner
 
 router = APIRouter(tags=["inquiries"])
 
@@ -15,7 +16,8 @@ class CreateInquiryRequest(BaseModel):
 
 
 @router.get("/rooms/{room_id}/inquiries")
-def list_inquiries(room_id: int):
+def list_inquiries(room_id: int,
+                   current_user_id: int = Depends(get_current_user_id)):
     """GET /rooms/{room_id}/inquiries
 
     Response: list of inquiries for the room, newest first.
@@ -27,6 +29,7 @@ def list_inquiries(room_id: int):
       ...
     ]
     """
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             f"SELECT {_COLUMNS} FROM inquiries WHERE room_id = %s ORDER BY created_at DESC",
@@ -36,8 +39,10 @@ def list_inquiries(room_id: int):
 
 
 @router.post("/rooms/{room_id}/inquiries")
-def create_inquiry(room_id: int, body: CreateInquiryRequest):
+def create_inquiry(room_id: int, body: CreateInquiryRequest,
+                   current_user_id: int = Depends(get_current_user_id)):
     """POST /rooms/{room_id}/inquiries - Response: same shape as one list_inquiries() entry."""
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             f"""

@@ -1,8 +1,9 @@
 from datetime import date
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from api.db import get_conn
+from api.security import get_current_user_id, require_owned_resource, require_room_owner
 
 router = APIRouter(tags=["events"])
 
@@ -13,7 +14,8 @@ _COLUMNS = (
 
 
 @router.get("/rooms/{room_id}/events")
-def list_events(room_id: int, day: date | None = None):
+def list_events(room_id: int, day: date | None = None,
+                current_user_id: int = Depends(get_current_user_id)):
     """GET /rooms/{room_id}/events?day=2026-08-19
 
     Response: list of alert/event entries for the room, oldest first. If
@@ -32,6 +34,7 @@ def list_events(room_id: int, day: date | None = None):
       ...
     ]
     """
+    require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         if day is None:
             cur.execute(
@@ -51,8 +54,10 @@ def list_events(room_id: int, day: date | None = None):
 
 
 @router.get("/events/{event_id}")
-def get_event(event_id: int):
+def get_event(event_id: int,
+              current_user_id: int = Depends(get_current_user_id)):
     """GET /events/{event_id} - Response: same shape as one list_events() entry."""
+    require_owned_resource("event_logs", "event_id", event_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(f"SELECT {_COLUMNS} FROM event_logs WHERE event_id = %s", (event_id,))
         row = cur.fetchone()
@@ -62,11 +67,13 @@ def get_event(event_id: int):
 
 
 @router.patch("/events/{event_id}/read")
-def mark_read(event_id: int):
+def mark_read(event_id: int,
+              current_user_id: int = Depends(get_current_user_id)):
     """PATCH /events/{event_id}/read - marks the event read (open -> read only;
     already-read/resolved events are left as-is). Response: same shape as one
     list_events() entry.
     """
+    require_owned_resource("event_logs", "event_id", event_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             f"""

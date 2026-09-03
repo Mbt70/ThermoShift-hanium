@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 # 기본 모델. 필요하면 THERMOSHIFT_AI_MODEL 로 바꾼다.
-MODEL = os.environ.get("THERMOSHIFT_AI_MODEL", "gemini-3.5-flash")
+MODEL = os.environ.get("THERMOSHIFT_AI_MODEL", "gemini-flash-lite-latest")
 
 # effort 단계별 thinking 토큰 예산. "low"는 지연시간이 중요한 즉시 설명용,
 # "high"는 주간 리포트처럼 한 번에 길게 종합하는 작업용.
@@ -119,7 +119,7 @@ gateway의 policy.py가 우선순위대로 판단하며, 판단할 때마다 근
 decision_type 의미
 - precool: 재실 예정 시각 전에 미리 냉방
 - maintain: 목표 온도를 유지
-- setback: 공실이라 설정을 완화
+- setback: 쾌적 허용대역 안이어서 냉방을 쉬거나, 공실이라 설정을 완화
 - ventilate: CO2가 높아 환기
 - off: 냉방 정지
 

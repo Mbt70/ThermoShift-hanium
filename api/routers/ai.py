@@ -10,10 +10,11 @@ API 키가 없으면 503 을 준다. 프론트는 이 상태에서도 원래 화
 
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from api.db import get_conn
 from api.services import ai
+from api.security import get_current_user_id, require_owned_resource, require_room_owner
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -36,12 +37,16 @@ def ai_status():
 
 
 @router.post("/decisions/{decision_id}/explain")
-def explain_decision(decision_id: int):
+def explain_decision(decision_id: int,
+                     current_user_id: int = Depends(get_current_user_id)):
     """POST /ai/decisions/{decision_id}/explain
 
     Response: {"headline": str, "detail": str, "recommendation": str | null}
     """
     _require_ai()
+    require_owned_resource(
+        "control_decisions", "decision_id", decision_id, current_user_id
+    )
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT d.decision_id, d.control_mode, d.decision_type, d.target_temp,"
@@ -83,12 +88,14 @@ def explain_decision(decision_id: int):
 
 
 @router.post("/events/{event_id}/diagnose")
-def diagnose_event(event_id: int):
+def diagnose_event(event_id: int,
+                   current_user_id: int = Depends(get_current_user_id)):
     """POST /ai/events/{event_id}/diagnose
 
     Response: {"failure_reason": str, "cause_guess": str, "checklist": [str]}
     """
     _require_ai()
+    require_owned_resource("event_logs", "event_id", event_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT event_id, room_id, device_id, event_category, event_severity,"
@@ -146,23 +153,27 @@ def diagnose_event(event_id: int):
 
 
 @router.get("/rooms/{room_id}/stats")
-def room_stats(room_id: int, start: date | None = None, end: date | None = None):
+def room_stats(room_id: int, start: date | None = None, end: date | None = None,
+               current_user_id: int = Depends(get_current_user_id)):
     """GET /ai/rooms/{room_id}/stats?start=&end=
 
     기간 집계. AI 없이도 그대로 쓸 수 있는 순수 수치다.
     전력 실측 장비가 없으므로 에너지 항목은 만들어 내지 않는다.
     """
+    require_room_owner(room_id, current_user_id)
     return _collect_stats(room_id, start, end)
 
 
 @router.post("/rooms/{room_id}/report")
-def weekly_report(room_id: int, start: date | None = None, end: date | None = None):
+def weekly_report(room_id: int, start: date | None = None, end: date | None = None,
+                  current_user_id: int = Depends(get_current_user_id)):
     """POST /ai/rooms/{room_id}/report?start=&end=
 
     Response: {"summary": str, "highlights": [str], "concerns": [str],
                "recommendations": [str], "stats": {...}}
     """
     _require_ai()
+    require_room_owner(room_id, current_user_id)
     stats = _collect_stats(room_id, start, end)
     result = ai.weekly_report(stats)
     if result is None:

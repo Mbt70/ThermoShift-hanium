@@ -1,6 +1,8 @@
 import streamlit as st
 
-from shared.api_client import ApiError, api_delete, api_get, api_patch, api_post
+from shared.api_client import (
+    ApiError, api_delete, api_get, api_patch, api_post, set_access_token,
+)
 
 _CURRENT_USER_KEY = "_ts_current_user"  # {"user_id": int, "name": str, "email": str}
 _PENDING_LOGIN_KEY = "_ts_pending_login_result"
@@ -27,10 +29,22 @@ def check_credentials(email: str, password: str) -> bool:
     return True
 
 
+def start_demo_session() -> bool:
+    """DB에 지정된 조회 전용 시연 계정으로 세션을 시작한다."""
+    try:
+        user = api_post("/auth/demo")
+    except ApiError:
+        return False
+    st.session_state[_PENDING_LOGIN_KEY] = user
+    set_current_user(user["email"])
+    return is_logged_in()
+
+
 def set_current_user(email: str) -> None:
     pending = st.session_state.pop(_PENDING_LOGIN_KEY, None)
     if pending and pending["email"] == email:
         st.session_state[_CURRENT_USER_KEY] = pending
+        set_access_token(pending.get("access_token"))
 
 
 def is_logged_in() -> bool:
@@ -77,3 +91,4 @@ def delete_user(email: str) -> None:
 
 def log_out() -> None:
     st.session_state.pop(_CURRENT_USER_KEY, None)
+    set_access_token(None)

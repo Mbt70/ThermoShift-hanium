@@ -16,7 +16,7 @@ app/policy.py 의 순수 함수가 정하고, 여기서는 그 결과를 실제�
     rooms.control_mode   monitoring  판단만 기록, 송신 안 함
                          manual      자동 제어 없음, 수동 명령만 실행
                          rule        규칙 기반 자동 제어
-                         mpc         (미구현) 현재는 rule 과 동일하게 동작
+                         mpc         RC 모델 기반 예측 최적화
 
 config.yaml 의 control_mode 는 **안전 상한**으로만 쓴다. shadow 로 두면
 DB 가 무엇이든 절대 송신하지 않는다. 실증 공간에 사람이 있을 때 확실히
@@ -44,8 +44,6 @@ from app.config import get_config
 from app.data_quality import get_data_quality
 from app.feature_engine import get_feature_engine
 from app.ir_adapter import IRAdapter
-from app.heater import HeaterController
-from app.excitation import ExcitationPlan
 from app.occupancy_hmm import get_occupancy_hmm
 from app.policy import PolicyConfig, PolicyInput, ScheduleWindow, decide as policy_decide
 from app.storage import get_storage
@@ -109,13 +107,20 @@ class HVACController:
             topic=self.config.heater.topic,
         )
 
-        # 물리-통계 융합 베이지안 재실 인원 추정기 (CO2 질량보존 칼만 필터)
+        # 실제 공간용 CO2 질량보존 + Kalman 인원 추정기. 목업 히터는 CO2를
+        # 재현하지 않으므로 기본 비활성화다. 체적·ACH 교정 후에만 켠다.
         self.physics_occ = None
-        try:
-            from ml.physics_occupancy import PhysicsInformedOccupancyEstimator
-            self.physics_occ = PhysicsInformedOccupancyEstimator()
-        except ImportError:
-            pass
+        if self.config.occupancy_estimator.enabled:
+            try:
+                from ml.physics_occupancy import PhysicsInformedOccupancyEstimator
+                ecfg = self.config.occupancy_estimator
+                self.physics_occ = PhysicsInformedOccupancyEstimator(
+                    room_volume_m3=ecfg.room_volume_m3,
+                    outdoor_co2_ppm=ecfg.outdoor_co2_ppm,
+                    base_ach=ecfg.base_ach,
+                )
+            except ImportError:
+                logger.warning("실공간 인원 추정 모듈을 불러오지 못했습니다")
 
     # ------------------------------------------------------------------
     @property
@@ -131,7 +136,7 @@ class HVACController:
         """DB 의 공간 설정과 config.yaml 의 기기 보호값을 합친다.
 
         사람이 화면에서 정하는 것(목표 온도·허용폭·CO2 한계)은 DB 를 따르고,
-        압축기 보호처럼 기기에 매인 값은 config.yaml 을 따른다.
+        최소 ON/OFF 시간처럼 액추에이터 보호에 필요한 값은 config.yaml 을 따른다.
         """
         c = self.config.control
         return PolicyConfig(
@@ -148,6 +153,9 @@ class HVACController:
             command_rate_limit_sec=c.command_rate_limit_sec,
             co2_warning_ppm=float(room["co2_limit"]),
             co2_critical_ppm=c.co2_critical_ppm,
+            internal_heat_drift_c_per_min_per_person=(
+                c.internal_heat_drift_c_per_min_per_person
+            ),
         )
 
     def _schedule_window(self, room_id, now) -> Optional[ScheduleWindow]:
@@ -201,7 +209,9 @@ class HVACController:
         if not self.transmit_allowed:
             effective_mode = "monitoring"
 
-        headcount = 0.0
+        # 목업 실험에서는 히터 duty가 곧 알고 있는 합성 열부하 정답이다.
+        # 이 값은 실제 인원 추정치가 아니라 스케일링 계약상의 '명 상당'이다.
+        headcount = self.heater.applied_occupants if self.config.heater.enabled else 0.0
         if self.physics_occ and env and env.co2_ppm is not None:
             co2_slope = getattr(fe, "co2_slope", 0.0) or 0.0
             latest_occ_dict = getattr(dq, "latest_occ", {}) or {}
@@ -239,7 +249,24 @@ class HVACController:
         result = policy_decide(inp, self._policy_config(room))
 
         executed = False
-        if result.execute:
+        # config의 강제 구동도 최상위 안전조건을 우회할 수 없다. 예전에는
+        # manual_override=ON 한 줄이 shadow/monitoring, 센서 stale, lockout까지
+        # 모두 무시하고 냉각 릴레이를 켰다. 하드웨어 점검용 override는 허용된
+        # 공간 모드이고 정책 차단 사유가 없을 때만 적용한다.
+        override_allowed = (
+            self.config.ir.manual_override
+            and self.manual_allowed(room_mode)
+            and result.blocked_by is None
+        )
+        if override_allowed:
+            action_to_send = "COOL_24_AUTO" if self.config.ir.manual_override.upper() == "ON" else "POWER_OFF"
+            try:
+                self.ir.send_command(action_to_send)
+                executed = True
+                self._note_transmission(action_to_send, now)
+            except Exception:
+                logger.exception("수동 제어 명령 전송 실패")
+        elif result.execute:
             try:
                 self.ir.send_command(result.action)
                 executed = True
@@ -255,9 +282,6 @@ class HVACController:
                 now.isoformat(), "CRITICAL", "CO2_ALERT",
                 f"CO2 reached {inp.co2_ppm} ppm",
             )
-
-        if room_mode == "mpc":
-            result.reasons.append("MPC 예측 제어 최적화 적용")
 
         # 기록에는 **공간의 제어 모드**를 남긴다. 게이트웨이 config 의
         # shadow/active 는 안전 스위치일 뿐이고, "이 판단이 어떤 운전 방식에서
@@ -341,8 +365,11 @@ class HVACController:
 
         run_id = None
         if self.config.heater.enabled:
-            requested, run_id = self._experiment_duty(
-                self.storage.resolve_room_id(), now)
+            if self.config.heater.manual_duty is not None:
+                requested, run_id = self.config.heater.manual_duty, None
+            else:
+                requested, run_id = self._experiment_duty(
+                    self.storage.resolve_room_id(), now)
             self.heater.request_duty(requested)
         else:
             self.heater.request_duty(0)

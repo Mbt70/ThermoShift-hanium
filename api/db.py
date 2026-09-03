@@ -45,7 +45,16 @@ _pool = ConnectionPool(
     kwargs={"row_factory": dict_row},
     open=False,
 )
-_pool.open()
+
+
+def open_pool() -> None:
+    """애플리케이션 시작 시 연결을 만들고 DB 준비 여부를 확인한다."""
+    _pool.open(wait=True)
+
+
+def close_pool() -> None:
+    """애플리케이션 종료 시 worker thread와 연결을 정리한다."""
+    _pool.close()
 
 
 @contextmanager

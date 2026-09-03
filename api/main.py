@@ -1,26 +1,46 @@
-from fastapi import FastAPI
+import os
+from contextlib import asynccontextmanager
+
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.db import get_conn
+from api.db import close_pool, get_conn, open_pool
 from api.routers import ai, auth, control, devices, events, inquiries, rooms, schedules
+from api.security import get_current_user_id
 
-app = FastAPI(title="ThermoShift API")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    open_pool()
+    try:
+        yield
+    finally:
+        close_pool()
+
+
+app = FastAPI(title="ThermoShift API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # dev only
+    allow_origins=[
+        origin.strip()
+        for origin in os.getenv(
+            "CORS_ORIGINS", "http://localhost:8501,http://localhost:8502"
+        ).split(",")
+        if origin.strip()
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(auth.router)
-app.include_router(rooms.router)
-app.include_router(devices.router)
-app.include_router(schedules.router)
-app.include_router(control.router)
-app.include_router(events.router)
-app.include_router(inquiries.router)
+_authenticated = [Depends(get_current_user_id)]
+app.include_router(rooms.router, dependencies=_authenticated)
+app.include_router(devices.router, dependencies=_authenticated)
+app.include_router(schedules.router, dependencies=_authenticated)
+app.include_router(control.router, dependencies=_authenticated)
+app.include_router(events.router, dependencies=_authenticated)
+app.include_router(inquiries.router, dependencies=_authenticated)
 app.include_router(ai.router)
 
 

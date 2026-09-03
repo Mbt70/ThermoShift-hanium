@@ -18,7 +18,7 @@ st.markdown('<p class="ts-settings-field-label">비밀번호</p>', unsafe_allow_
 password = st.text_input(
     "비밀번호",
     type="password",
-    placeholder="6자 이상 입력해주세요",
+    placeholder="8자 이상 입력해주세요",
     icon=":material/lock:",
     key="password_new",
     label_visibility="collapsed",
@@ -38,13 +38,13 @@ error_slot = st.empty()
 with st.container(key="ts_password_submit_wrap"):
     submitted = st.button("변경하기", key="password_submit", use_container_width=True)
 
-password_length_ok = len(password) >= 6
+password_length_ok = len(password) >= 8
 password_match_ok = password == password_confirm
 
 if submitted:
     if not password_length_ok:
         error_slot.markdown(
-            '<p class="ts-settings-error">비밀번호는 6자 이상이어야 합니다</p>',
+            '<p class="ts-settings-error">비밀번호는 8자 이상이어야 합니다</p>',
             unsafe_allow_html=True,
         )
     elif not password_match_ok:

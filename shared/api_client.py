@@ -16,6 +16,33 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 _TIMEOUT = 5
+_access_token: str | None = None
+
+
+def set_access_token(token: str | None) -> None:
+    """로그인 세션을 이후 API 요청의 Authorization header에 연결한다."""
+    global _access_token
+    _access_token = token
+    try:
+        import streamlit as st  # noqa: PLC0415
+        if token:
+            st.session_state["_ts_access_token"] = token
+        else:
+            st.session_state.pop("_ts_access_token", None)
+    except (ImportError, RuntimeError):
+        pass
+
+
+def _current_access_token() -> str | None:
+    """Streamlit 사용자별 세션을 우선해 서버 사용자 간 token 혼선을 막는다."""
+    try:
+        import streamlit as st  # noqa: PLC0415
+        # Streamlit 서버에서는 모듈 전역이 모든 사용자 세션에 공유된다. 토큰이
+        # 없는 세션이 다른 사용자가 마지막으로 설정한 전역 토큰을 물려받으면
+        # 계정 간 데이터가 섞이므로, 이 환경에서는 전역 fallback을 쓰지 않는다.
+        return st.session_state.get("_ts_access_token")
+    except (ImportError, RuntimeError):
+        return _access_token
 
 
 class ApiError(Exception):
@@ -103,8 +130,12 @@ def _build_url(path: str, params: dict | None) -> str:
 
 def _send(method: str, url: str, body: dict | None, timeout: float) -> tuple[int, str]:
     """(상태코드, 본문 문자열). 연결 자체가 실패하면 예외를 그대로 올린다."""
+    token = _current_access_token()
     if _session is not None:
-        response = _session.request(method, url, json=body, timeout=timeout)
+        headers = {"Authorization": f"Bearer {token}"} if token else None
+        response = _session.request(
+            method, url, json=body, headers=headers, timeout=timeout
+        )
         return response.status_code, response.text
 
     if _XHR is not None:
@@ -114,6 +145,8 @@ def _send(method: str, url: str, body: dict | None, timeout: float) -> tuple[int
         if body is not None:
             xhr.setRequestHeader("Content-Type", "application/json")
             payload = jsonlib.dumps(body, ensure_ascii=False)
+        if token:
+            xhr.setRequestHeader("Authorization", f"Bearer {token}")
         xhr.send(payload)
         return int(xhr.status), str(xhr.responseText or "")
 

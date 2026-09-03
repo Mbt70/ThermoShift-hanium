@@ -1,36 +1,50 @@
 # API 구현 현황
 
-DB 스키마(`db/002_tables.sql`, 15개 테이블) 기준으로 어떤 부분이 API로 노출됐고 어떤 부분이 아직 없는지 정리한 문서. 다음 작업자가 API를 이어서 만들 때 여기부터 보면 됨.
+FastAPI 라우터와 게이트웨이의 역할을 구분한 현재 상태다. 엔드포인트 수는
+OpenAPI 문서를 기준으로 확인하며, 발표에서는 개수보다 인증·제어 흐름을 설명한다.
 
-## 구현됨 (`api/routers/`, 총 28개 엔드포인트)
+## 구현됨
 
-| 라우터 | 대응 테이블 | 기능 |
-|---|---|---|
-| `auth.py` | `users` | 회원가입/로그인/조회/이름·비번 수정/탈퇴 |
-| `rooms.py` | `rooms`, `sensor_env`, `power_readings`, `occupancy_estimates` (조회만) | 공간 CRUD, 최신 센서값(`/latest`), 30분 추이(`/trend`) |
-| `devices.py` | `devices` | 공간별 디바이스 목록, 활성화 토글 |
-| `schedules.py` | `schedules` | 예약 냉방 CRUD |
-| `control.py` | `hvac_commands` (조회만) | 제어 로그 조회 |
-| `events.py` | `event_logs` | 알림/이벤트 조회, 읽음 처리 |
-| `inquiries.py` | `inquiries` | 1:1 문의 등록·조회 (앱 제어 로그 상세에서 접수) |
+| 영역 | 기능 |
+|---|---|
+| 인증 | 회원가입·로그인, 서명 토큰 발급·만료 검증, 조회 전용 시연 세션 |
+| 권한 | 인증 사용자 본인 및 본인 소유 공간·장치·일정·로그만 접근 |
+| 공간 | CRUD, 최신 센서값, 30분 추이, 목표 온도·제어 모드 변경 |
+| 장치 | 공간별 목록, 활성화 토글 |
+| 일정 | 예약 CRUD, 입력 범위 검증 |
+| 제어 | 명령·판단 조회, 수동 명령을 `pending` 큐에 등록 |
+| 이벤트·문의 | 조회·처리 및 등록 |
+| AI 해설 | 판단·알림·기간 리포트 해설. API 키가 없으면 비활성화 |
 
-## 미구현
+수동 명령은 API가 액추에이터를 직접 건드리지 않는다. 게이트웨이가 DB 큐를
+가져와 MQTT로 송신하고 실행 결과를 기록한다. 자동 제어 주체와 수동 API가
+동시에 상반된 출력을 내지 않도록 한 구조다.
 
-DB 테이블은 있는데 API 엔드포인트가 없는 부분:
+로그인 화면의 `로그인 없이 둘러보기`는 DB에서 `is_demo=true`인 계정을
+찾아 시연 토큰을 발급한다. `demo_owner_user_id`로 지정된 운영 계정의 공간을
+조회할 수 있지만, demo scope는 서버에서 GET/HEAD/OPTIONS만 허용하므로 제어,
+설정 변경, 일정 등록과 삭제는 403으로 차단된다.
 
-- **센서 데이터 수신(ingestion)** - `sensor_env` / `sensor_pir` / `sensor_door` / `power_readings`에 값을 **넣는** `POST`가 없음. 실증 하드웨어나 시뮬레이터가 쏴야 할 부분. (지금까지 테스트는 DB에 직접 SQL INSERT해서 흉내 냄)
-- **HVAC 명령 발행** - `control.py`는 조회(`GET`)만 있고, 실제로 명령을 내리는 `POST /rooms/{id}/commands` 같은 게 없음. `hvac_commands` INSERT + IR 송신 트리거 + `power_before`/`power_after` 검증 로직 필요.
-- **`occupancy_estimates`(재실 추정)** - `rooms/{id}/latest`에서 조회만 가능, 추정값을 넣는 엔드포인트 없음.
-- **`control_decisions`(제어 판단)** - 관련 엔드포인트 없음.
-- **`simulations`(제어 시뮬레이션)** - 관련 엔드포인트 없음.
-- **`operation_sessions`(운영 세션)** - 관련 엔드포인트 없음.
+## 데이터 수집 경로
 
-## PWA(Vercel) 배포 - 계속 유지하기로 결정됨, 아직 동작 안 함
+센서 노드 → MQTT → 게이트웨이 → PostgreSQL 경로로 수집한다. 따라서 공개
+HTTP 센서 ingestion 엔드포인트는 의도적으로 두지 않았다. 재실 추정과 제어
+판단도 게이트웨이가 계산해 DB에 기록한다.
 
-`app/`(모바일)는 stlite로 브라우저에서 Python을 직접 돌리는 정적 PWA로 Vercel에 배포됨 (`scripts/build-pwa.mjs`, `vercel.json`). 이번 DB 연동으로 `app/`이 실제 백엔드 API를 호출하도록 바뀌었는데, PWA 배포 환경에서는 아직 아래 3가지가 막혀있음:
+## 남은 운영 검증
 
-1. **`shared/api_client.py`가 빌드에 안 실림** - `build-pwa.mjs`가 `app/` 폴더만 훑어서 `pwa/`로 복사함. `api_client.py`가 `shared/`로 옮겨졌으므로(이번 리팩터) 빌드 스크립트가 `shared/`도 훑도록 고쳐야 함.
-2. **`requests`가 브라우저(Pyodide) 환경에서 그대로 안 돌아감** - stlite의 `mount()` 설정에 `requirements: []`로 비어있어서 `requests` 자체가 설치 안 되고, 설치하더라도 Pyodide 샌드박스에선 일반 소켓 통신이 안 돼서 [`pyodide-http`](https://github.com/koenvo/pyodide-http) 같은 패치가 추가로 필요함.
-3. **API가 인터넷에 공개돼 있지 않음** - 지금 API는 로컬 `docker-compose`로만 떠 있음(`127.0.0.1:8000`). Vercel에 배포된 PWA는 방문자 브라우저에서 실행되므로, 방문자 브라우저 기준 `127.0.0.1`이 아니라 **실제로 인터넷에서 접근 가능한 API 주소**가 필요함. → 어디에 배포할지(Railway/Render/Fly.io 등) 팀 결정 필요.
+- 실제 배포 환경에서 `AUTH_SECRET`을 무작위 값으로 고정하고
+  `CORS_ORIGINS`를 실제 프론트 origin으로 제한
+- MQTT 브로커 인증·ACL 및 TLS 적용
+- 명령 송신 후 전력 피드백으로 실제 동작 검증
+- 시크릿 브라우저와 모바일에서 로그인→공간 조회→수동 제어 smoke test
+- 다중 공간 운용 시 게이트웨이의 전역 싱글톤 상태를 공간별로 분리
 
-PWA를 다시 살리려면 이 문서 기준으로 순서대로 처리하면 됨.
+## PWA(Vercel) 배포
+
+`scripts/build-pwa.mjs`는 `app/`과 앱이 import하는 `shared/`를 함께 패키징한다.
+정적 빌드 성공만으로 런타임 성공을 뜻하지 않으므로 다음을 확인한다.
+
+1. `npm run build` 후 `pwa/index.html` manifest에 `shared/api_client.py` 포함 여부
+2. `app/api_config.json`의 API 주소와 API CORS origin 일치 여부
+3. 모바일 브라우저에서 로그인·조회·로그아웃 및 토큰 만료 동작

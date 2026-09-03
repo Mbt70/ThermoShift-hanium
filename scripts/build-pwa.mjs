@@ -16,8 +16,10 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
 const APP_SRC = path.join(REPO_ROOT, "app");
+const SHARED_SRC = path.join(REPO_ROOT, "shared");
 const PWA_OUT = path.join(REPO_ROOT, "pwa");
 const PWA_APP_OUT = path.join(PWA_OUT, "app");
+const PWA_SHARED_OUT = path.join(PWA_OUT, "shared");
 
 // stlite's Pyodide file system only needs to see files the app actually
 // reads at runtime (Python source, stylesheets, icons). Anything else in
@@ -93,30 +95,41 @@ function main() {
 
   writeApiConfig();
 
-  // Rebuild pwa/app/ from scratch each time so removed source files don't
+  // Rebuild runtime sources from scratch each time so removed files don't
   // linger as stale copies in the deployed bundle.
   rmSync(PWA_APP_OUT, { recursive: true, force: true });
+  rmSync(PWA_SHARED_OUT, { recursive: true, force: true });
   mkdirSync(PWA_APP_OUT, { recursive: true });
-
-  const relFiles = [];
-  walk(APP_SRC, "", relFiles);
-  relFiles.sort();
+  mkdirSync(PWA_SHARED_OUT, { recursive: true });
 
   const filesManifest = {};
-  for (const rel of relFiles) {
-    const srcPath = path.join(APP_SRC, rel);
-    const destPath = path.join(PWA_APP_OUT, rel);
-    mkdirSync(path.dirname(destPath), { recursive: true });
-    copyFileSync(srcPath, destPath);
-    // Relative URL loading (files: {"...": {url: "./..."}}) is the
-    // officially documented way to avoid inlining source as JS strings.
-    filesManifest[`app/${rel}`] = { url: `./app/${rel}` };
+  let copied = 0;
+  for (const source of [
+    { src: APP_SRC, out: PWA_APP_OUT, prefix: "app" },
+    { src: SHARED_SRC, out: PWA_SHARED_OUT, prefix: "shared" },
+  ]) {
+    if (!existsSync(source.src)) {
+      throw new Error(`${source.prefix}/ not found at ${source.src}`);
+    }
+    const relFiles = [];
+    walk(source.src, "", relFiles);
+    relFiles.sort();
+    for (const rel of relFiles) {
+      const srcPath = path.join(source.src, rel);
+      const destPath = path.join(source.out, rel);
+      mkdirSync(path.dirname(destPath), { recursive: true });
+      copyFileSync(srcPath, destPath);
+      const mountedPath = `${source.prefix}/${rel}`;
+      // Relative URL loading avoids inlining source as JS strings.
+      filesManifest[mountedPath] = { url: `./${mountedPath}` };
+      copied += 1;
+    }
   }
 
   const indexHtml = renderIndexHtml(filesManifest);
   writeFileSync(path.join(PWA_OUT, "index.html"), indexHtml, "utf8");
 
-  console.log(`[build-pwa] copied ${relFiles.length} files from app/ into pwa/app/`);
+  console.log(`[build-pwa] copied ${copied} runtime files from app/ and shared/`);
   console.log(`[build-pwa] wrote pwa/index.html (stlite @${STLITE_VERSION})`);
 }
 

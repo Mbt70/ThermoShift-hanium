@@ -175,7 +175,7 @@ def test_예약_직전에_더우면_미리_식힌다():
     sched = ScheduleWindow(NOW + timedelta(minutes=30),
                            NOW + timedelta(minutes=120), 24.0)
     d = decide(base(temperature_c=26.0, occupancy_state="EMPTY",
-                    schedule=sched, thermal=ThermalModel()), CFG)
+                    schedule=sched, thermal=ThermalModel(calibrated=True)), CFG)
     assert d.decision_type == "precool"
     assert d.action == "COOL_24_AUTO"
     assert d.execute is True
@@ -185,7 +185,7 @@ def test_예약이_멀면_아직_켜지_않는다():
     sched = ScheduleWindow(NOW + timedelta(minutes=300),
                            NOW + timedelta(minutes=360), 24.0)
     d = decide(base(temperature_c=26.0, occupancy_state="EMPTY",
-                    schedule=sched, thermal=ThermalModel()), CFG)
+                    schedule=sched, thermal=ThermalModel(calibrated=True)), CFG)
     assert d.decision_type == "off"
 
 
@@ -193,7 +193,7 @@ def test_이미_시원하면_예냉하지_않는다():
     sched = ScheduleWindow(NOW + timedelta(minutes=10),
                            NOW + timedelta(minutes=60), 24.0)
     d = decide(base(temperature_c=23.0, occupancy_state="EMPTY",
-                    schedule=sched, thermal=ThermalModel()), CFG)
+                    schedule=sched, thermal=ThermalModel(calibrated=True)), CFG)
     assert d.decision_type != "precool"
 
 
@@ -206,10 +206,26 @@ def test_열모델이_없으면_예냉하지_않는다():
     assert d.decision_type != "precool"
 
 
+def test_미교정_열모델로는_예냉하지_않는다():
+    sched = ScheduleWindow(NOW + timedelta(minutes=30),
+                           NOW + timedelta(minutes=120), 24.0)
+    d = decide(base(temperature_c=26.0, occupancy_state="EMPTY",
+                    schedule=sched, thermal=ThermalModel(calibrated=False)), CFG)
+    assert d.decision_type != "precool"
+
+
+def test_mpc는_미교정_열모델이면_규칙제어로_대체한다():
+    d = decide(base(control_mode="mpc", temperature_c=26.5,
+                    temp_history=history(10, 26.5),
+                    thermal=ThermalModel(calibrated=False)), CFG)
+    assert any("MPC 보류" in reason for reason in d.reasons)
+    assert not any("MPC 최적화" in reason for reason in d.reasons)
+
+
 def test_예냉_리드타임이_상한을_넘으면_상한에서_시작한다():
     # 31℃ 는 계산상 112분이 필요하지만 상한이 90분이다. 그보다 일찍 켜지
     # 않고, 상한 안(85분 전)에 들어오면 그때 시작한다.
-    thermal = ThermalModel()
+    thermal = ThermalModel(calibrated=True)
     assert thermal.lead_time_minutes(31.0, 24.0) > CFG.precool_max_lead_min
 
     early = decide(base(temperature_c=31.0, occupancy_state="EMPTY",
@@ -236,14 +252,15 @@ def test_예약_진행_중에는_예약_목표_온도를_쓴다():
 
 def test_mpc_모드에서_쾌적_상태이면_setback_최적화한다():
     d = decide(base(temperature_c=24.5, humidity_pct=45.0, occupancy_state="OCCUPIED",
-                    p_occupied=0.95, control_mode="mpc"), CFG)
+                    p_occupied=0.95, control_mode="mpc",
+                    thermal=ThermalModel(calibrated=True)), CFG)
     assert d.decision_type == "setback"
     assert any("MPC 최적화" in r for r in d.reasons)
 
 
 def test_mpc_모드에서_덥고_재실중이면_maintain_최적화한다():
     d = decide(base(temperature_c=27.5, humidity_pct=75.0, occupancy_state="OCCUPIED",
-                    p_occupied=0.95, control_mode="mpc"), CFG)
+                    p_occupied=0.95, control_mode="mpc",
+                    thermal=ThermalModel(calibrated=True)), CFG)
     assert d.decision_type == "maintain"
     assert any("MPC 최적화" in r for r in d.reasons)
-
