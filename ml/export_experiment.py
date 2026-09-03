@@ -83,8 +83,8 @@ def _phase_summary(
     }
     phase_bounds = (
         ("baseline", "run_start_all_off_door_closed", "heater_physical_on"),
-        ("heater_on", "heater_physical_on", "heater_relay_off"),
-        ("post_heat", "heater_relay_off", "door_open"),
+        ("heater_on", "heater_physical_on", "heater_physical_off"),
+        ("post_heat", "heater_physical_off", "door_open"),
         ("door_open", "door_open", "door_closed"),
         ("peltier_on", "peltier_on", "peltier_off"),
         ("recovery", "peltier_off", "run_end"),
@@ -217,6 +217,7 @@ def export_run(run_id: int, output_root: Path) -> Path:
             "Peltier events are command timestamps, not electrical feedback acknowledgements.",
             "Outdoor/ambient temperature was not independently measured.",
             "Initial commanded heater-ON rows were corrected to OFF after operator confirmed physical power was off.",
+            "No physical heater-OFF timestamp was confirmed; phases after heater ON may be thermally confounded.",
             "Door-open duration followed sensor truth and differs from the original one-minute plan.",
         ],
     }
