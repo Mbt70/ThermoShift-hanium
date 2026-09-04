@@ -1,0 +1,22 @@
+{
+  "eligible": false,
+  "reasons": [
+    "유효 표본이 39개뿐입니다 (최소 60).",
+    "온도 변화폭이 0.16°C뿐입니다 (최소 0.8°C).",
+    "냉각 ON 표본이 4개입니다 (최소 20).",
+    "냉각 ON 4개 표본에 장치 ACK가 없습니다.",
+    "품질 검토에서 학습 부적합으로 표시된 표본이 포함돼 있습니다."
+  ],
+  "metrics": {
+    "rows": 40,
+    "valid_rows": 39,
+    "temperature_range_c": 0.1567,
+    "cooling_on_rows": 4,
+    "cooling_off_rows": 36,
+    "max_gap_sec": 30.0,
+    "unverified_cooling_on_rows": 4,
+    "run_ids": [
+      "1"
+    ]
+  }
+}

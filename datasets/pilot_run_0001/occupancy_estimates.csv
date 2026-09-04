@@ -1,0 +1,39 @@
+estimate_id,room_id,occupancy_state,estimated_count,probability,evidence_summary,estimated_at
+5168,1,transition,,0.124,p(empty)=0.490 p(transition)=0.124 p(occupied)=0.386 quality=OK | CO2 기준선 대비 +307ppm; 재실 확률 0.39,2026-09-03T14:12:28.829106+00:00
+5169,1,transition,,0.091,p(empty)=0.019 p(transition)=0.091 p(occupied)=0.889 quality=OK | 0초 전 움직임 감지; CO2 기준선 대비 +306ppm; 재실 확률 0.89,2026-09-03T14:13:00.497550+00:00
+5170,1,occupied,,0.960,p(empty)=0.001 p(transition)=0.039 p(occupied)=0.960 quality=OK | 31초 전 움직임 감지; CO2 기준선 대비 +307ppm; 재실 확률 0.96,2026-09-03T14:13:31.992534+00:00
+5171,1,occupied,,0.976,p(empty)=0.000 p(transition)=0.024 p(occupied)=0.976 quality=OK | 63초 전 움직임 감지; CO2 기준선 대비 +303ppm; 재실 확률 0.98,2026-09-03T14:14:03.388105+00:00
+5172,1,occupied,,0.981,p(empty)=0.000 p(transition)=0.019 p(occupied)=0.981 quality=OK | 94초 전 움직임 감지; CO2 기준선 대비 +301ppm; 재실 확률 0.98,2026-09-03T14:14:35.147750+00:00
+5173,1,occupied,,0.957,p(empty)=0.006 p(transition)=0.037 p(occupied)=0.957 quality=OK | CO2 기준선 대비 +305ppm; 재실 확률 0.96,2026-09-03T14:15:06.877811+00:00
+5174,1,occupied,,0.939,p(empty)=0.014 p(transition)=0.047 p(occupied)=0.939 quality=OK | CO2 기준선 대비 +302ppm; 재실 확률 0.94,2026-09-03T14:15:38.678170+00:00
+5175,1,occupied,,0.923,p(empty)=0.025 p(transition)=0.052 p(occupied)=0.923 quality=OK | CO2 기준선 대비 +301ppm; 재실 확률 0.92,2026-09-03T14:16:10.462804+00:00
+5176,1,occupied,,0.908,p(empty)=0.038 p(transition)=0.055 p(occupied)=0.908 quality=OK | CO2 기준선 대비 +298ppm; 재실 확률 0.91,2026-09-03T14:16:42.072474+00:00
+5177,1,occupied,,0.892,p(empty)=0.052 p(transition)=0.056 p(occupied)=0.892 quality=OK | CO2 기준선 대비 +303ppm; 재실 확률 0.89,2026-09-03T14:17:13.402273+00:00
+5178,1,occupied,,0.875,p(empty)=0.069 p(transition)=0.057 p(occupied)=0.875 quality=OK | CO2 기준선 대비 +297ppm; 재실 확률 0.87,2026-09-03T14:17:44.706985+00:00
+5179,1,occupied,,0.857,p(empty)=0.087 p(transition)=0.056 p(occupied)=0.857 quality=OK | CO2 기준선 대비 +295ppm; 재실 확률 0.86,2026-09-03T14:18:15.741564+00:00
+5180,1,occupied,,0.837,p(empty)=0.107 p(transition)=0.056 p(occupied)=0.837 quality=OK | CO2 기준선 대비 +294ppm; 재실 확률 0.84,2026-09-03T14:18:47.161428+00:00
+5181,1,occupied,,0.815,p(empty)=0.130 p(transition)=0.055 p(occupied)=0.815 quality=OK | CO2 기준선 대비 +288ppm; 재실 확률 0.81,2026-09-03T14:19:18.731260+00:00
+5182,1,transition,,0.082,p(empty)=0.380 p(transition)=0.082 p(occupied)=0.538 quality=OK | CO2 하강 -4.0ppm/분; CO2 기준선 대비 +283ppm; 재실 확률 0.54,2026-09-03T14:19:50.436061+00:00
+5183,1,transition,,0.109,p(empty)=0.039 p(transition)=0.109 p(occupied)=0.852 quality=OK | 0초 전 움직임 감지; CO2 하강 -4.3ppm/분; CO2 기준선 대비 +283ppm; 재실 확률 0.85,2026-09-03T14:20:21.730754+00:00
+5184,1,occupied,,0.901,p(empty)=0.004 p(transition)=0.095 p(occupied)=0.901 quality=OK | 31초 전 움직임 감지; CO2 하강 -4.1ppm/분; CO2 기준선 대비 +287ppm; 재실 확률 0.90,2026-09-03T14:20:53.190586+00:00
+5185,1,occupied,,0.915,p(empty)=0.001 p(transition)=0.084 p(occupied)=0.915 quality=OK | 63초 전 움직임 감지; CO2 하강 -3.9ppm/분; CO2 기준선 대비 +285ppm; 재실 확률 0.92,2026-09-03T14:21:24.455273+00:00
+5186,1,occupied,,0.922,p(empty)=0.001 p(transition)=0.077 p(occupied)=0.922 quality=OK | 0초 전 움직임 감지; CO2 하강 -3.6ppm/분; CO2 기준선 대비 +286ppm; 재실 확률 0.92,2026-09-03T14:21:55.755192+00:00
+5187,1,occupied,,0.965,p(empty)=0.000 p(transition)=0.034 p(occupied)=0.965 quality=OK | 31초 전 움직임 감지; CO2 기준선 대비 +287ppm; 재실 확률 0.97,2026-09-03T14:22:26.895067+00:00
+5188,1,occupied,,0.978,p(empty)=0.000 p(transition)=0.022 p(occupied)=0.978 quality=OK | 63초 전 움직임 감지; CO2 기준선 대비 +287ppm; 재실 확률 0.98,2026-09-03T14:22:58.610342+00:00
+5189,1,occupied,,0.981,p(empty)=0.000 p(transition)=0.019 p(occupied)=0.981 quality=OK | 0초 전 움직임 감지; CO2 기준선 대비 +286ppm; 재실 확률 0.98,2026-09-03T14:23:29.919760+00:00
+5190,1,occupied,,0.982,p(empty)=0.000 p(transition)=0.018 p(occupied)=0.982 quality=OK | 31초 전 움직임 감지; CO2 기준선 대비 +283ppm; 재실 확률 0.98,2026-09-03T14:24:00.989560+00:00
+5191,1,occupied,,0.982,p(empty)=0.000 p(transition)=0.018 p(occupied)=0.982 quality=OK | 63초 전 움직임 감지; CO2 기준선 대비 +282ppm; 재실 확률 0.98,2026-09-03T14:24:32.629459+00:00
+5192,1,occupied,,0.982,p(empty)=0.000 p(transition)=0.018 p(occupied)=0.982 quality=OK | 0초 전 움직임 감지; CO2 기준선 대비 +277ppm; 재실 확률 0.98,2026-09-03T14:25:03.749360+00:00
+5193,1,occupied,,0.982,p(empty)=0.000 p(transition)=0.017 p(occupied)=0.982 quality=OK | 31초 전 움직임 감지; CO2 기준선 대비 +275ppm; 재실 확률 0.98,2026-09-03T14:25:34.929287+00:00
+5194,1,occupied,,0.982,p(empty)=0.000 p(transition)=0.017 p(occupied)=0.982 quality=OK | 62초 전 움직임 감지; CO2 기준선 대비 +277ppm; 재실 확률 0.98,2026-09-03T14:26:06.469166+00:00
+5195,1,occupied,,0.982,p(empty)=0.000 p(transition)=0.017 p(occupied)=0.982 quality=OK | 94초 전 움직임 감지; CO2 기준선 대비 +278ppm; 재실 확률 0.98,2026-09-03T14:26:38.119156+00:00
+5196,1,occupied,,0.958,p(empty)=0.006 p(transition)=0.036 p(occupied)=0.958 quality=OK | CO2 기준선 대비 +277ppm; 재실 확률 0.96,2026-09-03T14:27:09.608954+00:00
+5197,1,occupied,,0.861,p(empty)=0.046 p(transition)=0.094 p(occupied)=0.861 quality=OK | CO2 하강 -3.5ppm/분; CO2 기준선 대비 +265ppm; 재실 확률 0.86,2026-09-03T14:27:41.144019+00:00
+5198,1,occupied,,0.677,p(empty)=0.188 p(transition)=0.135 p(occupied)=0.677 quality=OK | CO2 하강 -5.4ppm/분; CO2 기준선 대비 +251ppm; 재실 확률 0.68,2026-09-03T14:28:12.708765+00:00
+5199,1,transition,,0.063,p(empty)=0.783 p(transition)=0.063 p(occupied)=0.154 quality=OK | CO2 하강 -8.7ppm/분; 재실 확률 0.15,2026-09-03T14:28:44.358630+00:00
+5200,1,transition,,0.011,p(empty)=0.978 p(transition)=0.011 p(occupied)=0.012 quality=OK | CO2 하강 -12.8ppm/분; 재실 확률 0.01,2026-09-03T14:29:15.973666+00:00
+5201,1,transition,,0.003,p(empty)=0.996 p(transition)=0.003 p(occupied)=0.001 quality=OK | CO2 하강 -17.3ppm/분; 재실 확률 0.00,2026-09-03T14:29:47.584247+00:00
+5202,1,transition,,0.003,p(empty)=0.997 p(transition)=0.003 p(occupied)=0.000 quality=OK | CO2 하강 -22.2ppm/분; 재실 확률 0.00,2026-09-03T14:30:19.278611+00:00
+5203,1,transition,,0.002,p(empty)=0.997 p(transition)=0.002 p(occupied)=0.000 quality=OK | CO2 하강 -26.3ppm/분; 재실 확률 0.00,2026-09-03T14:30:50.868488+00:00
+5204,1,transition,,0.002,p(empty)=0.997 p(transition)=0.002 p(occupied)=0.000 quality=OK | CO2 하강 -28.7ppm/분; 재실 확률 0.00,2026-09-03T14:31:22.293824+00:00
+5205,1,transition,,0.069,p(empty)=0.924 p(transition)=0.069 p(occupied)=0.006 quality=OK | 0초 전 움직임 감지; CO2 하강 -29.4ppm/분; 재실 확률 0.01,2026-09-03T14:31:53.888267+00:00

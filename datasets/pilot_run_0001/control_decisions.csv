@@ -1,0 +1,39 @@
+decision_id,room_id,estimate_id,schedule_id,control_mode,decision_type,target_temp,reason,decided_at
+5168,1,5168,,monitoring,off,24.0,재실 판단 보류 (TRANSITION) — 현 상태 유지 | temp=24.38C co2=808ppm occupancy=TRANSITION executed=no,2026-09-03T14:12:29.137556+00:00
+5169,1,5169,,monitoring,off,24.0,재실 판단 보류 (TRANSITION) — 현 상태 유지 | temp=24.38C co2=806ppm occupancy=TRANSITION executed=no,2026-09-03T14:13:00.747757+00:00
+5170,1,5170,,monitoring,off,24.0,"재실 중 · 실내 24.4℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.38C co2=807ppm occupancy=OCCUPIED executed=no",2026-09-03T14:13:32.167511+00:00
+5171,1,5171,,monitoring,off,24.0,"재실 중 · 실내 24.4℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.38C co2=803ppm occupancy=OCCUPIED executed=no",2026-09-03T14:14:03.773379+00:00
+5172,1,5172,,monitoring,off,24.0,"재실 중 · 실내 24.4℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.35C co2=803ppm occupancy=OCCUPIED executed=no",2026-09-03T14:14:35.477723+00:00
+5173,1,5173,,monitoring,off,24.0,"재실 중 · 실내 24.4℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.35C co2=805ppm occupancy=OCCUPIED executed=no",2026-09-03T14:15:07.143662+00:00
+5174,1,5174,,monitoring,off,24.0,"재실 중 · 실내 24.4℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.36C co2=802ppm occupancy=OCCUPIED executed=no",2026-09-03T14:15:39.037898+00:00
+5175,1,5175,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.35C co2=800ppm occupancy=OCCUPIED executed=no",2026-09-03T14:16:10.710349+00:00
+5176,1,5176,,monitoring,off,24.0,"재실 중 · 실내 24.4℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.35C co2=798ppm occupancy=OCCUPIED executed=no",2026-09-03T14:16:42.237274+00:00
+5177,1,5177,,monitoring,off,24.0,"재실 중 · 실내 24.4℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.35C co2=803ppm occupancy=OCCUPIED executed=no",2026-09-03T14:17:13.617126+00:00
+5178,1,5178,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.32C co2=797ppm occupancy=OCCUPIED executed=no",2026-09-03T14:17:44.956847+00:00
+5179,1,5179,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.33C co2=795ppm occupancy=OCCUPIED executed=no",2026-09-03T14:18:16.091557+00:00
+5180,1,5180,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.34C co2=794ppm occupancy=OCCUPIED executed=no",2026-09-03T14:18:47.487207+00:00
+5181,1,5181,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.33C co2=788ppm occupancy=OCCUPIED executed=no",2026-09-03T14:19:19.000983+00:00
+5182,1,5182,,monitoring,off,24.0,재실 판단 보류 (TRANSITION) — 현 상태 유지 | temp=24.32C co2=783ppm occupancy=TRANSITION executed=no,2026-09-03T14:19:50.647035+00:00
+5183,1,5183,,monitoring,off,24.0,재실 판단 보류 (TRANSITION) — 현 상태 유지 | temp=24.34C co2=783ppm occupancy=TRANSITION executed=no,2026-09-03T14:20:21.906823+00:00
+5184,1,5184,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.32C co2=787ppm occupancy=OCCUPIED executed=no",2026-09-03T14:20:53.440635+00:00
+5185,1,5185,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.32C co2=785ppm occupancy=OCCUPIED executed=no",2026-09-03T14:21:24.645247+00:00
+5186,1,5186,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.31C co2=786ppm occupancy=OCCUPIED executed=no",2026-09-03T14:21:55.939976+00:00
+5187,1,5187,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.30C co2=787ppm occupancy=OCCUPIED executed=no",2026-09-03T14:22:27.240015+00:00
+5188,1,5188,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.31C co2=784ppm occupancy=OCCUPIED executed=no",2026-09-03T14:22:58.889774+00:00
+5189,1,5189,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.34C co2=786ppm occupancy=OCCUPIED executed=no",2026-09-03T14:23:30.084587+00:00
+5190,1,5190,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.32C co2=783ppm occupancy=OCCUPIED executed=no",2026-09-03T14:24:01.304508+00:00
+5191,1,5191,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.32C co2=782ppm occupancy=OCCUPIED executed=no",2026-09-03T14:24:32.789376+00:00
+5192,1,5192,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.32C co2=777ppm occupancy=OCCUPIED executed=no",2026-09-03T14:25:03.979296+00:00
+5193,1,5193,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.32C co2=775ppm occupancy=OCCUPIED executed=no",2026-09-03T14:25:35.274291+00:00
+5194,1,5194,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.32C co2=777ppm occupancy=OCCUPIED executed=no",2026-09-03T14:26:06.730137+00:00
+5195,1,5195,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.34C co2=778ppm occupancy=OCCUPIED executed=no",2026-09-03T14:26:38.410271+00:00
+5196,1,5196,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.34C co2=777ppm occupancy=OCCUPIED executed=no",2026-09-03T14:27:09.858996+00:00
+5197,1,5197,,monitoring,off,24.0,"재실 중 · 실내 24.3℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.28C co2=765ppm occupancy=OCCUPIED executed=no",2026-09-03T14:27:41.453749+00:00
+5198,1,5198,,monitoring,off,24.0,"재실 중 · 실내 24.2℃ (쾌적 23.0~25.0℃),쾌적 범위 안 · 냉방 정지 유지 | temp=24.22C co2=751ppm occupancy=OCCUPIED executed=no",2026-09-03T14:28:13.013836+00:00
+5199,1,5199,,monitoring,off,24.0,재실 판단 보류 (TRANSITION) — 현 상태 유지 | temp=24.24C co2=729ppm occupancy=TRANSITION executed=no,2026-09-03T14:28:44.674257+00:00
+5200,1,5200,,monitoring,off,24.0,재실 판단 보류 (TRANSITION) — 현 상태 유지 | temp=24.26C co2=711ppm occupancy=TRANSITION executed=no,2026-09-03T14:29:16.194122+00:00
+5201,1,5201,,monitoring,off,24.0,재실 판단 보류 (TRANSITION) — 현 상태 유지 | temp=24.25C co2=695ppm occupancy=TRANSITION executed=no,2026-09-03T14:29:47.863390+00:00
+5202,1,5202,,monitoring,off,24.0,재실 판단 보류 (TRANSITION) — 현 상태 유지 | temp=24.30C co2=679ppm occupancy=TRANSITION executed=no,2026-09-03T14:30:19.614817+00:00
+5203,1,5203,,monitoring,off,24.0,재실 판단 보류 (TRANSITION) — 현 상태 유지 | temp=24.29C co2=666ppm occupancy=TRANSITION executed=no,2026-09-03T14:30:51.144342+00:00
+5204,1,5204,,monitoring,off,24.0,재실 판단 보류 (TRANSITION) — 현 상태 유지 | temp=24.30C co2=654ppm occupancy=TRANSITION executed=no,2026-09-03T14:31:22.628199+00:00
+5205,1,5205,,monitoring,off,24.0,재실 판단 보류 (TRANSITION) — 현 상태 유지 | temp=24.31C co2=644ppm occupancy=TRANSITION executed=no,2026-09-03T14:31:54.038109+00:00

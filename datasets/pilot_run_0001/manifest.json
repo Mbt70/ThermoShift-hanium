@@ -1,0 +1,251 @@
+{
+  "run": {
+    "run_id": 1,
+    "room_id": 1,
+    "plan_name": "pilot_20min",
+    "plan": {
+      "name": "pilot_20min",
+      "segments": [
+        [
+          0,
+          420
+        ],
+        [
+          100,
+          240
+        ],
+        [
+          0,
+          540
+        ]
+      ],
+      "description": "PILOT adjusted: physical heater ON confirmed late; 4min binary heat, door at original +12~13m, peltier +15~18m",
+      "actual_events": [
+        {
+          "at": "2026-09-03T14:12:00.922886+00:00",
+          "event": "run_start_all_off_door_closed",
+          "source": "experiment_clock"
+        },
+        {
+          "at": "2026-09-03T14:19:14.557924+00:00",
+          "event": "heater_physical_on",
+          "source": "operator_confirmation"
+        },
+        {
+          "at": "2026-09-03T14:23:30.000000+00:00",
+          "event": "heater_command_off_unverified",
+          "source": "gateway_heater_log_not_hardware_ack"
+        },
+        {
+          "at": "2026-09-03T14:26:55.950850+00:00",
+          "event": "door_open",
+          "source": "sensor_door"
+        },
+        {
+          "at": "2026-09-03T14:28:48.283329+00:00",
+          "event": "door_closed",
+          "source": "sensor_door"
+        },
+        {
+          "at": "2026-09-03T14:29:11.623639+00:00",
+          "event": "peltier_on",
+          "source": "operator_command"
+        },
+        {
+          "at": "2026-09-03T14:31:16.000000+00:00",
+          "event": "peltier_off",
+          "source": "systemd_timer"
+        },
+        {
+          "at": "2026-09-03T14:32:00.922886+00:00",
+          "event": "run_end",
+          "source": "experiment_clock"
+        }
+      ],
+      "data_quality_scope": "PILOT_PIPELINE_ONLY_NOT_TRAINING_QUALITY"
+    },
+    "started_at": "2026-09-03T14:12:00.922886+00:00",
+    "ends_at": "2026-09-03T14:32:00.922886+00:00",
+    "stopped_at": "2026-09-03T14:32:25.018094+00:00",
+    "note": "PILOT binary heater, manual door 11-12m, peltier 15-18m; not training-quality | physical heater ON confirmed 2026-09-03T14:19:14.557924+00:00, prior commanded-ON rows corrected to actual OFF | manual door OPEN confirmed 2026-09-03T14:27:30.533351+00:00 | manual door CLOSED confirmed; PELTIER ON 2026-09-03T14:29:11.623639+00:00 | no physical heater-OFF confirmation; post-heater phases may be confounded"
+  },
+  "quality_scope": "PILOT_PIPELINE_ONLY_NOT_TRAINING_QUALITY",
+  "duration_sec": 1200.0,
+  "tables": {
+    "sensor_env": {
+      "rows": 240,
+      "first_at": "2026-09-03T14:12:04.224792+00:00",
+      "last_at": "2026-09-03T14:31:57.272273+00:00",
+      "median_interval_sec": 5.04,
+      "max_interval_sec": 6.945
+    },
+    "sensor_pir": {
+      "rows": 1186,
+      "first_at": "2026-09-03T14:12:01.337569+00:00",
+      "last_at": "2026-09-03T14:32:00.563571+00:00",
+      "median_interval_sec": 1.012,
+      "max_interval_sec": 2.326
+    },
+    "sensor_door": {
+      "rows": 1186,
+      "first_at": "2026-09-03T14:12:01.337569+00:00",
+      "last_at": "2026-09-03T14:32:00.563571+00:00",
+      "median_interval_sec": 1.012,
+      "max_interval_sec": 2.326
+    },
+    "power_readings": {
+      "rows": 0,
+      "first_at": null,
+      "last_at": null,
+      "median_interval_sec": null,
+      "max_interval_sec": null
+    },
+    "heater_log": {
+      "rows": 38,
+      "first_at": "2026-09-03T14:12:29.137556+00:00",
+      "last_at": "2026-09-03T14:31:54.038109+00:00",
+      "median_interval_sec": 31.514,
+      "max_interval_sec": 31.894
+    },
+    "control_decisions": {
+      "rows": 38,
+      "first_at": "2026-09-03T14:12:29.137556+00:00",
+      "last_at": "2026-09-03T14:31:54.038109+00:00",
+      "median_interval_sec": 31.514,
+      "max_interval_sec": 31.894
+    },
+    "occupancy_estimates": {
+      "rows": 38,
+      "first_at": "2026-09-03T14:12:28.829106+00:00",
+      "last_at": "2026-09-03T14:31:53.888267+00:00",
+      "median_interval_sec": 31.54,
+      "max_interval_sec": 31.8
+    }
+  },
+  "temperature": {
+    "min_c": 24.22,
+    "max_c": 24.41,
+    "range_c": 0.19
+  },
+  "actual_events": [
+    {
+      "at": "2026-09-03T14:12:00.922886+00:00",
+      "event": "run_start_all_off_door_closed",
+      "source": "experiment_clock"
+    },
+    {
+      "at": "2026-09-03T14:19:14.557924+00:00",
+      "event": "heater_physical_on",
+      "source": "operator_confirmation"
+    },
+    {
+      "at": "2026-09-03T14:23:30.000000+00:00",
+      "event": "heater_command_off_unverified",
+      "source": "gateway_heater_log_not_hardware_ack"
+    },
+    {
+      "at": "2026-09-03T14:26:55.950850+00:00",
+      "event": "door_open",
+      "source": "sensor_door"
+    },
+    {
+      "at": "2026-09-03T14:28:48.283329+00:00",
+      "event": "door_closed",
+      "source": "sensor_door"
+    },
+    {
+      "at": "2026-09-03T14:29:11.623639+00:00",
+      "event": "peltier_on",
+      "source": "operator_command"
+    },
+    {
+      "at": "2026-09-03T14:31:16.000000+00:00",
+      "event": "peltier_off",
+      "source": "systemd_timer"
+    },
+    {
+      "at": "2026-09-03T14:32:00.922886+00:00",
+      "event": "run_end",
+      "source": "experiment_clock"
+    }
+  ],
+  "phase_summary": [
+    {
+      "phase": "baseline",
+      "start_at": "2026-09-03T14:12:00.922886+00:00",
+      "end_at": "2026-09-03T14:19:14.557924+00:00",
+      "duration_sec": 433.635038,
+      "samples": 88,
+      "temperature_start_c": 24.41,
+      "temperature_end_c": 24.33,
+      "temperature_delta_c": -0.08,
+      "temperature_slope_c_per_min": -0.00879,
+      "humidity_start": 70.94,
+      "humidity_end": 72.74,
+      "humidity_delta": 1.8,
+      "co2_start": 809.0,
+      "co2_end": 788.0,
+      "co2_delta": -21.0
+    },
+    {
+      "phase": "door_open",
+      "start_at": "2026-09-03T14:26:55.950850+00:00",
+      "end_at": "2026-09-03T14:28:48.283329+00:00",
+      "duration_sec": 112.332479,
+      "samples": 22,
+      "temperature_start_c": 24.31,
+      "temperature_end_c": 24.25,
+      "temperature_delta_c": -0.06,
+      "temperature_slope_c_per_min": -0.04617,
+      "humidity_start": 73.57,
+      "humidity_end": 68.02,
+      "humidity_delta": -5.55,
+      "co2_start": 777.0,
+      "co2_end": 726.0,
+      "co2_delta": -51.0
+    },
+    {
+      "phase": "peltier_on",
+      "start_at": "2026-09-03T14:29:11.623639+00:00",
+      "end_at": "2026-09-03T14:31:16+00:00",
+      "duration_sec": 124.376361,
+      "samples": 24,
+      "temperature_start_c": 24.26,
+      "temperature_end_c": 24.32,
+      "temperature_delta_c": 0.06,
+      "temperature_slope_c_per_min": 0.03009,
+      "humidity_start": 67.57,
+      "humidity_end": 67.18,
+      "humidity_delta": -0.39,
+      "co2_start": 711.0,
+      "co2_end": 656.0,
+      "co2_delta": -55.0
+    },
+    {
+      "phase": "recovery",
+      "start_at": "2026-09-03T14:31:16+00:00",
+      "end_at": "2026-09-03T14:32:00.922886+00:00",
+      "duration_sec": 44.922886,
+      "samples": 9,
+      "temperature_start_c": 24.29,
+      "temperature_end_c": 24.3,
+      "temperature_delta_c": 0.01,
+      "temperature_slope_c_per_min": 0.01787,
+      "humidity_start": 67.23,
+      "humidity_end": 67.42,
+      "humidity_delta": 0.19,
+      "co2_start": 656.0,
+      "co2_end": 644.0,
+      "co2_delta": -12.0
+    }
+  ],
+  "limitations": [
+    "20-minute pipeline pilot is too short for final RC/PINN identification.",
+    "No electrical power readings were captured; energy optimization cannot be validated.",
+    "Peltier events are command timestamps, not electrical feedback acknowledgements.",
+    "Outdoor/ambient temperature was not independently measured.",
+    "Initial commanded heater-ON rows were corrected to OFF after operator confirmed physical power was off.",
+    "No physical heater-OFF timestamp was confirmed; phases after heater ON may be thermally confounded.",
+    "Door-open duration followed sensor truth and differs from the original one-minute plan."
+  ]
+}
