@@ -5,7 +5,7 @@ import sys
 import time
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import psycopg
@@ -67,6 +67,9 @@ class EdgeNode:
         
         self.ir = IRAdapter(self.publish_mqtt)
         self.controller = HVACController(self.ir)
+        # API 명령 하나를 릴레이 상태 피드백과 연결한다. 여러 명령을 동시에
+        # 보내면 어느 ACK가 어느 명령인지 모호하므로 큐도 한 건씩 처리한다.
+        self._awaiting_relay_ack = None
         
         self.mqtt_adapter.register_callback(self._route_data)
 
@@ -105,7 +108,7 @@ class EdgeNode:
             )
 
     def _route_data(self, data):
-        from app.models import EnvData, OccData, IrData
+        from app.models import ActuatorStateData, EnvData, OccData, IrData
         if isinstance(data, EnvData):
             self.dq.process_env(data, data.raw_payload)
         elif isinstance(data, OccData):
@@ -113,6 +116,33 @@ class EdgeNode:
         elif isinstance(data, IrData):
             self.dq.process_ir(data, data.raw_payload)
             self.ir.handle_rx(data.code_hash, data.protocol or "unknown")
+        elif isinstance(data, ActuatorStateData):
+            state = data.state.upper()
+            self.storage.register_device(
+                data.device_id, "ir", data.timestamp.isoformat()
+            )
+            self.controller.cooling_on = state == "ON"
+            if state == "OFF":
+                self.controller.current_action = "POWER_OFF"
+            waiting = self._awaiting_relay_ack
+            if waiting and waiting["expected_state"] == state:
+                verified_at = data.timestamp.isoformat()
+                if self.storage.acknowledge_command(
+                    waiting["command_id"], state, verified_at
+                ):
+                    logger.info(
+                        "수동 명령 %s 장치 ACK 확인 (%s)",
+                        waiting["command_id"], state,
+                    )
+                self._awaiting_relay_ack = None
+            try:
+                self.storage.insert_ir_event(
+                    data.timestamp.isoformat(), "rx", "relay_state",
+                    f"COOLING_{state}", "device_state_ack",
+                    json.dumps({"actuator": data.actuator, "state": state}),
+                )
+            except Exception:
+                logger.exception("냉각 상태 ACK 감사 로그 저장 실패")
 
     def _drain_command_queue(self):
         """프론트에서 들어온 수동 제어 명령을 처리한다.
@@ -127,6 +157,20 @@ class EdgeNode:
         """
         try:
             room_id = self.storage.resolve_room_id()
+            timed_out = self.storage.timeout_stale_commands(
+                room_id, datetime.now(timezone.utc)
+            )
+            if timed_out:
+                logger.warning("장치 ACK가 없던 명령 %s건을 timeout 처리", timed_out)
+            waiting = self._awaiting_relay_ack
+            if waiting and datetime.now(timezone.utc) >= waiting["deadline"]:
+                self.storage.mark_command(
+                    waiting["command_id"], "timeout", "device_state_ack_timeout",
+                    datetime.now(timezone.utc).isoformat(),
+                )
+                self._awaiting_relay_ack = None
+            if self._awaiting_relay_ack is not None:
+                return
             commands = self.storage.fetch_pending_commands(room_id)
         except psycopg.OperationalError:
             logger.warning("DB 연결 실패 - 수동 명령 큐 확인 건너뜀")
@@ -154,9 +198,20 @@ class EdgeNode:
                 logger.info("수동 조작 lockout 중이라 %s 를 전송하지 않음", action)
                 continue
 
+            expected_state = "OFF" if action == "POWER_OFF" else "ON"
+            sent_at = datetime.now(timezone.utc)
+            # 상태 피드백이 매우 빨리 올 수 있으므로 발행 전에 sent와 대기
+            # 정보를 만든다. 발행 실패 시 아래에서 failed로 되돌린다.
+            self.storage.mark_command(command["id"], "sent", None, sent_at.isoformat())
+            self._awaiting_relay_ack = {
+                "command_id": command["id"],
+                "expected_state": expected_state,
+                "deadline": sent_at + timedelta(seconds=120),
+            }
             try:
                 self.ir.send_command(action)
             except Exception:
+                self._awaiting_relay_ack = None
                 self.storage.mark_command(command["id"], "failed", "command_failed", now)
                 logger.exception("수동 명령 %s 전송 실패", action)
                 continue
@@ -165,8 +220,7 @@ class EdgeNode:
             # 는 것을 안다. 예전에는 current_action 만 바꿔서, 수동으로 켠 뒤
             # 최소 가동시간 같은 기기 보호 조건이 동작하지 않았다.
             self.controller._note_transmission(action, datetime.now(timezone.utc))
-            self.storage.mark_command(command["id"], "sent", None, now)
-            logger.info("수동 명령 %s 전송 완료", action)
+            logger.info("수동 명령 %s 전송 완료, 릴레이 %s ACK 대기", action, expected_state)
 
     def run_loop(self):
         interval = self.config.control.decision_interval_sec

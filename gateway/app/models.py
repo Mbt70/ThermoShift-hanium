@@ -26,6 +26,16 @@ class IrData(BaseModel):
     code_hash: str
     raw_payload: str = "{}"
 
+
+class ActuatorStateData(BaseModel):
+    """액추에이터가 명령 뒤에 되돌려 보낸 물리 상태."""
+
+    device_id: str
+    timestamp: datetime
+    actuator: str
+    state: str
+    raw_payload: str
+
 class OccupancyProbabilities(BaseModel):
     empty: float
     transition: float

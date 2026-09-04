@@ -106,9 +106,58 @@ def issue_command(room_id: int, body: IssueCommandRequest,
     """
     require_room_owner(room_id, current_user_id)
     with get_conn() as conn, conn.cursor() as cur:
+        proposal_id = str((body.payload or {}).get("proposal_id") or "").strip()
+        if proposal_id:
+            # Streamlit 재실행이나 네트워크 재시도로 같은 승인 요청이 두 번
+            # 도착해도 실제 장치 명령은 하나만 만든다.
+            cur.execute(
+                f"SELECT {_COLUMNS} FROM hvac_commands"
+                " WHERE room_id=%s AND payload->>'proposal_id'=%s"
+                " ORDER BY issued_at DESC LIMIT 1",
+                (room_id, proposal_id),
+            )
+            existing = cur.fetchone()
+            if existing:
+                return existing
+
+        cur.execute(
+            "SELECT control_mode FROM rooms WHERE room_id=%s",
+            (room_id,),
+        )
+        room = cur.fetchone()
+        if body.command_type != "power_off" and (
+            not room or room["control_mode"] not in {"manual", "rule", "mpc"}
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="모니터링 모드에서는 장치를 켤 수 없습니다. 제어 모드를 먼저 변경해 주세요.",
+            )
+
+        cur.execute(
+            "SELECT command_id FROM hvac_commands WHERE room_id=%s"
+            " AND command_status IN ('pending','sent') ORDER BY issued_at LIMIT 1",
+            (room_id,),
+        )
+        outstanding = cur.fetchone()
+        if outstanding and body.command_type != "power_off":
+            raise HTTPException(
+                status_code=409,
+                detail=f"명령 #{outstanding['command_id']}의 장치 확인이 끝날 때까지 기다려 주세요.",
+            )
+        if outstanding and body.command_type == "power_off":
+            # OFF는 안전 동작이므로 오래된 ON/온도 명령 뒤에서 기다리게 하지
+            # 않는다. 기존 미완료 작업을 명시적으로 종결하고 OFF를 새로 큐잉한다.
+            cur.execute(
+                "UPDATE hvac_commands SET command_status='failed',"
+                " verify_result='failed', verified_at=now(),"
+                " result_message='superseded_by_power_off'"
+                " WHERE room_id=%s AND command_status IN ('pending','sent')",
+                (room_id,),
+            )
+
         # 이 공간의 IR 송신기를 찾는다. 냉방 명령이 나갈 통로다.
         cur.execute(
-            "SELECT device_id FROM devices"
+            "SELECT device_id, comm_status, last_seen_at FROM devices"
             " WHERE room_id = %s AND device_type = 'ir' AND is_enabled"
             " ORDER BY device_id LIMIT 1",
             (room_id,),
@@ -119,6 +168,37 @@ def issue_command(room_id: int, body: IssueCommandRequest,
                 status_code=409,
                 detail="이 공간에 사용 가능한 IR 송신기가 없습니다",
             )
+        if body.command_type != "power_off":
+            cur.execute(
+                "SELECT MAX(e.measured_at) AS measured_at FROM sensor_env e"
+                " JOIN devices d USING (device_id) WHERE d.room_id=%s",
+                (room_id,),
+            )
+            latest_env = cur.fetchone()
+            if not latest_env or latest_env["measured_at"] is None:
+                raise HTTPException(
+                    status_code=409, detail="환경 센서값이 없어 장치를 켤 수 없습니다"
+                )
+            cur.execute(
+                "SELECT EXTRACT(EPOCH FROM (now() - %s)) AS age_sec",
+                (latest_env["measured_at"],),
+            )
+            if float(cur.fetchone()["age_sec"]) > 120:
+                raise HTTPException(
+                    status_code=409, detail="환경 센서값이 120초 이상 오래되어 장치를 켤 수 없습니다"
+                )
+            if device["comm_status"] != "normal":
+                raise HTTPException(
+                    status_code=409, detail="제어 장치가 정상 연결 상태가 아닙니다"
+                )
+            cur.execute(
+                "SELECT EXTRACT(EPOCH FROM (now() - %s)) AS age_sec",
+                (device["last_seen_at"],),
+            )
+            if device["last_seen_at"] is None or float(cur.fetchone()["age_sec"]) > 120:
+                raise HTTPException(
+                    status_code=409, detail="제어 장치 상태가 120초 이상 수신되지 않았습니다"
+                )
 
         # set_temp 인데 목표 온도가 없으면 게이트웨이가 무엇을 쏴야 할지
         # 알 수 없다. 큐에 넣기 전에 막는다.

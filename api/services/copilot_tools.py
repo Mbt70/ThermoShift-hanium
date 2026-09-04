@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from ml.mpc_controller import ModelPredictiveController
 from ml.thermal_model import ThermalModel
@@ -161,6 +162,7 @@ def propose_control_action(room_id: int, arguments: dict[str, Any]) -> dict[str,
         target = None
 
     reason = str(arguments.get("reason") or "운영 코파일럿 제안")[:300]
+    proposal_id = str(uuid4())
     return {
         "scope": "PROPOSAL_ONLY",
         "proposal_type": "hvac_command",
@@ -172,8 +174,13 @@ def propose_control_action(room_id: int, arguments: dict[str, Any]) -> dict[str,
             "command_type": command_type,
             "target_temp": target,
             "control_mode": "manual",
-            "payload": {"source": "copilot_approved_proposal", "reason": reason},
+            "payload": {
+                "source": "copilot_approved_proposal",
+                "proposal_id": proposal_id,
+                "reason": reason,
+            },
         },
+        "proposal_id": proposal_id,
         "approval_endpoint": f"/rooms/{room_id}/commands",
         "safety_contract": [
             "demo session cannot approve",

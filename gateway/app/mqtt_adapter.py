@@ -3,7 +3,7 @@ import logging
 import time
 from datetime import datetime, timezone
 from typing import Callable, Any, Dict, List
-from app.models import EnvData, OccData, IrData
+from app.models import ActuatorStateData, EnvData, OccData, IrData
 from app.storage import get_storage
 
 logger = logging.getLogger(__name__)
@@ -68,6 +68,27 @@ class MQTTAdapter:
         return True
 
     def process_message(self, topic: str, payload_str: str):
+        if topic.endswith("/cooling/state"):
+            state = payload_str.strip().upper()
+            if state not in {"ON", "OFF"}:
+                logger.warning("알 수 없는 냉각 상태 payload=%r", payload_str[:80])
+                return
+            parts = topic.split("/")
+            device_id = parts[1] if len(parts) >= 3 else "unknown"
+            event = ActuatorStateData(
+                device_id=device_id,
+                timestamp=datetime.now(timezone.utc),
+                actuator="cooling",
+                state=state,
+                raw_payload=payload_str,
+            )
+            for cb in self.callbacks:
+                cb(event)
+            return
+        if topic.endswith("/heater/state"):
+            # 히터 상태는 실험 로그에서 별도로 다룬다. 냉방 명령 ACK로
+            # 오인하지 않도록 여기서는 일반 JSON 파싱만 건너뛴다.
+            return
         if topic in self.PLAINTEXT_TOPICS:
             return
 
@@ -107,6 +128,18 @@ class MQTTAdapter:
                 device_id = parts[1]
             else:
                 device_id = "unknown"
+
+        cooling_state = str(payload.get("cooling_relay") or "").upper()
+        if cooling_state in {"ON", "OFF"}:
+            event = ActuatorStateData(
+                device_id=device_id,
+                timestamp=now,
+                actuator="cooling",
+                state=cooling_state,
+                raw_payload=payload_str,
+            )
+            for cb in self.callbacks:
+                cb(event)
 
         has_env = False
         has_occ = False

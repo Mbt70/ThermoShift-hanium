@@ -629,7 +629,7 @@ class Storage:
             cur.execute(
                 "SELECT command_id, command_type, control_mode, target_temp, payload"
                 " FROM hvac_commands WHERE room_id = %s AND command_status = 'pending'"
-                " ORDER BY issued_at",
+                " ORDER BY issued_at LIMIT 1",
                 (room_id,),
             )
             rows = cur.fetchall()
@@ -668,6 +668,35 @@ class Storage:
                 (status, error_code, verify_result,
                  resolved_at if verify_result else None, command_id),
             )
+
+    def acknowledge_command(self, command_id: int, actuator_state: str,
+                            verified_at: str) -> bool:
+        """릴레이 상태 피드백과 일치한 방금 전송 명령을 ACK로 종결한다."""
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE hvac_commands SET command_status='acked',"
+                " verify_result='success', verified_at=%s, result_message=%s"
+                " WHERE command_id=%s AND command_status='sent'"
+                " RETURNING command_id",
+                (verified_at, f"cooling_relay_state={actuator_state}", command_id),
+            )
+            return cur.fetchone() is not None
+
+    def timeout_stale_commands(self, room_id: Optional[int], now: datetime,
+                               timeout_sec: int = 120) -> int:
+        """ACK 없이 오래 남은 sent를 timeout으로 닫아 영구 대기를 막는다."""
+        if room_id is None:
+            return 0
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE hvac_commands SET command_status='timeout',"
+                " result_message='device_state_ack_timeout'"
+                " WHERE room_id=%s AND command_status='sent'"
+                " AND issued_at < %s - (%s * interval '1 second')"
+                " RETURNING command_id",
+                (room_id, now, timeout_sec),
+            )
+            return len(cur.fetchall())
 
     # ------------------------------------------------------------------
     # 이벤트

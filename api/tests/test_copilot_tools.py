@@ -22,6 +22,7 @@ def test_제어도구는_명령을_실행하지_않고_승인카드만_만든다
     assert proposal["command"]["target_temp"] == 25.0
     assert proposal["approval_endpoint"] == "/rooms/1/commands"
     assert proposal["proposal_type"] == "hvac_command"
+    assert proposal["command"]["payload"]["proposal_id"] == proposal["proposal_id"]
 
 
 def test_제어제안도_허용범위를_벗어나면_거절한다():

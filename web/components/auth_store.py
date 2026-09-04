@@ -73,6 +73,11 @@ def current_user_id() -> int | None:
     return user["user_id"] if user else None
 
 
+def is_demo_session() -> bool:
+    user = st.session_state.get(_CURRENT_USER_KEY)
+    return bool(user and user.get("is_demo"))
+
+
 def update_user_name(email: str, name: str) -> None:
     user_id = current_user_id()
     if user_id is None:

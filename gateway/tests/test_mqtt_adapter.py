@@ -1,4 +1,4 @@
-from app.models import EnvData, OccData
+from app.models import ActuatorStateData, EnvData, OccData
 from app.mqtt_adapter import MQTTAdapter
 
 
@@ -38,3 +38,36 @@ def test_door_transition_state_is_isolated_per_device():
 
     events = [item for item in captured if isinstance(item, OccData)]
     assert [item.door_event for item in events] == [False, False, True]
+
+
+def test_cooling_state_plaintext_becomes_actuator_ack_event():
+    adapter, captured = adapter_with_capture()
+
+    adapter.process_message("thermoshift/ir_01/cooling/state", " on \n")
+
+    assert len(captured) == 1
+    assert isinstance(captured[0], ActuatorStateData)
+    assert captured[0].device_id == "ir_01"
+    assert captured[0].actuator == "cooling"
+    assert captured[0].state == "ON"
+
+
+def test_invalid_cooling_state_is_not_acknowledged():
+    adapter, captured = adapter_with_capture()
+
+    adapter.process_message("thermoshift/ir_01/cooling/state", "UNKNOWN")
+
+    assert captured == []
+
+
+def test_heartbeat_cooling_state_becomes_actuator_event():
+    adapter, captured = adapter_with_capture()
+
+    adapter.process_message(
+        "thermoshift/system/heartbeat",
+        '{"node":"ir_01","status":"online","cooling_relay":"OFF"}',
+    )
+
+    events = [item for item in captured if isinstance(item, ActuatorStateData)]
+    assert len(events) == 1
+    assert events[0].state == "OFF"
