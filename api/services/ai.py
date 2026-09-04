@@ -93,6 +93,7 @@ class CopilotToolPlan(BaseModel):
     tool_name: str = Field(description="허용된 도구 이름 하나")
     arguments: dict = Field(default_factory=dict, description="도구에 전달할 구조화 인자")
     reason: str = Field(description="이 도구를 고른 이유 한 문장")
+    attempts: int = Field(default=1, ge=1, description="Gemini 계획 호출 시도 횟수")
 
 
 class _GeminiCopilotToolPlan(BaseModel):
@@ -325,13 +326,36 @@ get_experiment_readiness, 특정 run의 학습 적합성은 get_data_quality를 
 
 사용자 요청:
 {message[:1000]}"""
-    raw_plan = _call(prompt, _GeminiCopilotToolPlan, effort="instant", max_tokens=500)
-    if raw_plan is None:
-        return None
-    values = raw_plan.model_dump(exclude_none=True)
-    tool_name = str(values.pop("tool_name"))
-    reason = str(values.pop("selection_reason"))
-    # 제안 근거는 모델이 별도로 생성하지 않고 사용자의 원문을 감사 로그용으로 쓴다.
-    if tool_name.startswith("propose_"):
-        values["reason"] = message[:300]
-    return CopilotToolPlan(tool_name=tool_name, arguments=values, reason=reason)
+    allowed_names = {str(tool["name"]) for tool in tool_definitions}
+    for attempt in range(1, 3):
+        attempt_prompt = prompt
+        if attempt > 1:
+            attempt_prompt += (
+                "\n\n이전 응답을 사용할 수 없었습니다. 다른 설명은 생략하고, "
+                "허용 도구 이름과 필요한 인자만 스키마에 맞춰 다시 선택하세요."
+            )
+        raw_plan = _call(
+            attempt_prompt, _GeminiCopilotToolPlan, effort="instant", max_tokens=500
+        )
+        if raw_plan is None:
+            continue
+        values = raw_plan.model_dump(exclude_none=True)
+        tool_name = str(values.pop("tool_name"))
+        reason = str(values.pop("selection_reason"))
+        if tool_name not in allowed_names:
+            logger.warning(
+                "Gemini가 허용되지 않은 코파일럿 도구를 선택했습니다: %s (시도 %d)",
+                tool_name,
+                attempt,
+            )
+            continue
+        # 제안 근거는 모델이 별도로 생성하지 않고 사용자의 원문을 감사 로그용으로 쓴다.
+        if tool_name.startswith("propose_"):
+            values["reason"] = message[:300]
+        return CopilotToolPlan(
+            tool_name=tool_name,
+            arguments=values,
+            reason=reason,
+            attempts=attempt,
+        )
+    return None

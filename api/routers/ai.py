@@ -233,6 +233,8 @@ def copilot_chat(
     return {
         "message": _copilot_summary(tool_name, result),
         "planner": planner,
+        "planner_model": ai.MODEL if planner == "gemini" else None,
+        "planner_attempts": plan.attempts if planner == "gemini" and plan else None,
         "tools_used": tools_used,
         "result": result,
         "action_proposal": (

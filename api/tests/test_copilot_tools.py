@@ -138,6 +138,48 @@ def test_Gemini_고정_응답을_내부_도구_인자로_변환한다(monkeypatc
     assert plan is not None
     assert plan.tool_name == "get_data_quality"
     assert plan.arguments == {"run_id": 7}
+    assert plan.attempts == 1
+
+
+def test_Gemini_첫_호출이_실패하면_한번_재시도한다(monkeypatch):
+    calls = []
+    raw = ai._GeminiCopilotToolPlan(
+        tool_name="get_live_snapshot",
+        selection_reason="현재 상태 확인",
+    )
+
+    def fake_call(*args, **kwargs):
+        calls.append((args, kwargs))
+        return None if len(calls) == 1 else raw
+
+    monkeypatch.setattr(ai, "_call", fake_call)
+    plan = ai.plan_copilot_tool("현재 상태 알려줘", copilot_tools.TOOL_DEFINITIONS)
+
+    assert plan is not None
+    assert plan.tool_name == "get_live_snapshot"
+    assert plan.attempts == 2
+    assert len(calls) == 2
+
+
+def test_Gemini가_허용되지_않은_도구를_고르면_재시도한다(monkeypatch):
+    invalid = ai._GeminiCopilotToolPlan(
+        tool_name="turn_relay_on_directly",
+        selection_reason="잘못된 직접 실행",
+    )
+    valid = ai._GeminiCopilotToolPlan(
+        tool_name="propose_control_action",
+        selection_reason="승인 가능한 제어 제안",
+        command_type="power_on",
+    )
+    responses = iter((invalid, valid))
+    monkeypatch.setattr(ai, "_call", lambda *_args, **_kwargs: next(responses))
+
+    plan = ai.plan_copilot_tool("냉각 켜줘", copilot_tools.TOOL_DEFINITIONS)
+
+    assert plan is not None
+    assert plan.tool_name == "propose_control_action"
+    assert plan.arguments["command_type"] == "power_on"
+    assert plan.attempts == 2
 
 
 def test_Gemini_JSON은_API_스키마_기능없이_서버에서_검증한다(monkeypatch):

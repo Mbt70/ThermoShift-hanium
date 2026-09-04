@@ -34,7 +34,16 @@ if not rooms or room is None:
 history_key = f"_copilot_history_{selected_id}"
 proposal_key = f"_copilot_proposal_{selected_id}"
 tracking_key = f"_copilot_command_tracking_{selected_id}"
-st.session_state.setdefault(history_key, [])
+history_version_key = f"_copilot_history_version_{selected_id}"
+_HISTORY_VERSION = 2
+if st.session_state.get(history_version_key) != _HISTORY_VERSION:
+    # 배포 전 실패 응답이 서버 세션에 남아 새 요청도 폴백처럼 보이지 않게
+    # 응답 메타데이터 계약이 바뀔 때 한 번만 대화 기록을 초기화한다.
+    st.session_state[history_key] = []
+    st.session_state.pop(proposal_key, None)
+    st.session_state[history_version_key] = _HISTORY_VERSION
+else:
+    st.session_state.setdefault(history_key, [])
 
 
 def _friendly_error(exc: ApiError) -> str:
@@ -71,6 +80,8 @@ def ask(message: str) -> None:
         "content": response["message"],
         "tools_used": response.get("tools_used", []),
         "planner": response.get("planner"),
+        "planner_model": response.get("planner_model"),
+        "planner_attempts": response.get("planner_attempts"),
         "result": response.get("result"),
     })
     if response.get("action_proposal"):
@@ -361,7 +372,14 @@ with main_col:
                 with st.chat_message(item["role"], avatar=avatar):
                     st.markdown(item["content"])
                     if item.get("tools_used"):
-                        planner = "Gemini" if item.get("planner") == "gemini" else "안전 폴백"
+                        if item.get("planner") == "gemini":
+                            model = item.get("planner_model") or "Gemini"
+                            retried = " · 재시도 성공" if item.get("planner_attempts", 1) > 1 else ""
+                            planner = f"{model}{retried}"
+                        elif item.get("planner") == "deterministic_fallback":
+                            planner = "Gemini 연결 실패 · 안전 규칙으로 복구"
+                        else:
+                            planner = "이전 응답"
                         st.caption(f"{planner} · {' → '.join(item['tools_used'])}")
                     if item.get("result"):
                         with st.expander("근거 데이터 확인"):
