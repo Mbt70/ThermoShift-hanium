@@ -1,7 +1,7 @@
 import pytest
 
 from api.routers.ai import _fallback_copilot_plan
-from api.services import copilot_tools
+from api.services import ai, copilot_tools
 
 
 def test_도구_이름은_고정된_허용목록이다():
@@ -110,3 +110,29 @@ def test_실험_중단도_제안만_만든다():
     assert proposal["proposal_type"] == "experiment_stop"
     assert proposal["executed"] is False
     assert proposal["experiment"]["run_id"] == 9
+
+
+def test_Gemini_계획_스키마는_Developer_API가_거절하는_자유_dict가_없다():
+    def keys(value):
+        if isinstance(value, dict):
+            return set(value) | set().union(*(keys(item) for item in value.values()))
+        if isinstance(value, list):
+            return set().union(*(keys(item) for item in value), set())
+        return set()
+
+    assert "additionalProperties" not in keys(
+        ai._GeminiCopilotToolPlan.model_json_schema()
+    )
+
+
+def test_Gemini_고정_응답을_내부_도구_인자로_변환한다(monkeypatch):
+    raw = ai._GeminiCopilotToolPlan(
+        tool_name="get_data_quality",
+        selection_reason="최근 run의 학습 적합성 확인",
+        run_id=7,
+    )
+    monkeypatch.setattr(ai, "_call", lambda *_args, **_kwargs: raw)
+    plan = ai.plan_copilot_tool("run 7 품질 확인", copilot_tools.TOOL_DEFINITIONS)
+    assert plan is not None
+    assert plan.tool_name == "get_data_quality"
+    assert plan.arguments == {"run_id": 7}

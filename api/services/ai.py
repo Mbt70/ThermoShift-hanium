@@ -86,6 +86,27 @@ class CopilotToolPlan(BaseModel):
     reason: str = Field(description="이 도구를 고른 이유 한 문장")
 
 
+class _GeminiCopilotToolPlan(BaseModel):
+    """Gemini Developer API가 지원하는 고정 속성 응답 스키마.
+
+    자유 형식 dict는 JSON Schema의 additionalProperties를 만들고 Developer
+    API가 이를 거절한다. 모델에는 가능한 인자를 명시적으로 펼친 스키마를
+    주고, 받은 뒤 내부 CopilotToolPlan.arguments로 다시 묶는다.
+    """
+
+    tool_name: str = Field(description="허용된 도구 이름 하나")
+    selection_reason: str = Field(description="이 도구를 고른 이유 한 문장")
+    limit: Optional[int] = None
+    run_id: Optional[int] = None
+    temperature_c: Optional[float] = None
+    humidity_pct: Optional[float] = None
+    p_occupied: Optional[float] = None
+    current_cooling_on: Optional[bool] = None
+    command_type: Optional[str] = None
+    target_temp: Optional[float] = None
+    plan_key: Optional[str] = None
+
+
 # --------------------------------------------------------------------------
 # 공통 프롬프트
 # --------------------------------------------------------------------------
@@ -275,4 +296,13 @@ get_experiment_readiness, 특정 run의 학습 적합성은 get_data_quality를 
 
 사용자 요청:
 {message[:1000]}"""
-    return _call(prompt, CopilotToolPlan, effort="low", max_tokens=1500)
+    raw_plan = _call(prompt, _GeminiCopilotToolPlan, effort="low", max_tokens=1500)
+    if raw_plan is None:
+        return None
+    values = raw_plan.model_dump(exclude_none=True)
+    tool_name = str(values.pop("tool_name"))
+    reason = str(values.pop("selection_reason"))
+    # 제안 근거는 모델이 별도로 생성하지 않고 사용자의 원문을 감사 로그용으로 쓴다.
+    if tool_name.startswith("propose_"):
+        values["reason"] = message[:300]
+    return CopilotToolPlan(tool_name=tool_name, arguments=values, reason=reason)
