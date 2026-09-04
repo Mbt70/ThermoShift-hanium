@@ -44,6 +44,18 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "arguments": {},
     },
     {
+        "name": "get_data_quality",
+        "scope": "READ_ONLY",
+        "description": "실험 run의 표본 수·간격·온도 변화·입력 검증 상태와 학습 적합성 조회",
+        "arguments": {"run_id": "양의 정수, 생략하면 해당 공간의 최근 run"},
+    },
+    {
+        "name": "get_experiment_readiness",
+        "scope": "READ_ONLY",
+        "description": "실험 전 센서 최신성·장치 연결·중복 run·명령 큐 점검",
+        "arguments": {},
+    },
+    {
         "name": "simulate_mpc",
         "scope": "SIMULATION_ONLY",
         "description": "장치를 작동시키지 않고 쾌적도·에너지 목적함수 계산",
@@ -63,6 +75,18 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
             "target_temp": "set_temp일 때 16~30",
             "reason": "제안 근거",
         },
+    },
+    {
+        "name": "propose_experiment_start",
+        "scope": "PROPOSAL_ONLY",
+        "description": "실험을 시작하지 않고 계획·수동 작업·사전점검 승인 카드 생성",
+        "arguments": {"plan_key": "pilot20|calib|prbs, 기본 pilot20", "reason": "제안 근거"},
+    },
+    {
+        "name": "propose_experiment_stop",
+        "scope": "PROPOSAL_ONLY",
+        "description": "진행 중인 실험을 중단하지 않고 중단 제안 카드 생성",
+        "arguments": {"reason": "중단 제안 근거"},
     },
 )
 
@@ -139,6 +163,8 @@ def propose_control_action(room_id: int, arguments: dict[str, Any]) -> dict[str,
     reason = str(arguments.get("reason") or "운영 코파일럿 제안")[:300]
     return {
         "scope": "PROPOSAL_ONLY",
+        "proposal_type": "hvac_command",
+        "approval_supported": True,
         "requires_explicit_user_approval": True,
         "executed": False,
         "room_id": room_id,
@@ -155,5 +181,94 @@ def propose_control_action(room_id: int, arguments: dict[str, Any]) -> dict[str,
             "gateway active/manual mode check required",
             "gateway lockout and command rate limit remain authoritative",
             "result is not ACK until device feedback verifies it",
+        ],
+    }
+
+
+_EXPERIMENT_PLANS: dict[str, dict[str, Any]] = {
+    "pilot20": {
+        "plan_name": "pilot_20min",
+        "duration_min": 20,
+        "purpose": "센서·문·히터·냉각 이벤트의 타임스탬프와 데이터 경로 점검",
+        "manual_actions": [
+            "+3분 히터 ON, +8분 히터 OFF",
+            "+11분 문 열기, +12분 문 닫기",
+            "+15분 펠티어 ON, +18분 펠티어 OFF",
+        ],
+    },
+    "calib": {
+        "plan_name": "compact_calibration",
+        "duration_min": 45,
+        "purpose": "RC 모델의 히터 감도·표류·감쇠 파라미터 식별",
+        "manual_actions": [
+            "+10분 히터 ON, +25분 히터 OFF",
+            "45분 동안 문을 닫고 다른 열 입력을 만들지 않기",
+        ],
+    },
+    "prbs": {
+        "plan_name": "prbs",
+        "duration_min": 310,
+        "purpose": "교정 이후 동특성 식별을 위한 장시간 다중 입력 데이터 수집",
+        "manual_actions": [
+            "PRBS는 단순 수동 ON/OFF 히터로 정확히 재현하기 어려우므로 자동 duty 제어 준비 필요",
+        ],
+    },
+}
+
+
+def propose_experiment_start(
+    room_id: int,
+    arguments: dict[str, Any],
+    readiness: dict[str, Any],
+) -> dict[str, Any]:
+    plan_key = str(arguments.get("plan_key") or "pilot20").strip().lower()
+    if plan_key not in _EXPERIMENT_PLANS:
+        raise ValueError("plan_key must be one of pilot20, calib, prbs")
+    plan = _EXPERIMENT_PLANS[plan_key]
+    return {
+        "scope": "PROPOSAL_ONLY",
+        "proposal_type": "experiment_start",
+        "approval_supported": False,
+        "requires_explicit_user_approval": True,
+        "executed": False,
+        "room_id": room_id,
+        "experiment": {"plan_key": plan_key, **plan},
+        "readiness": readiness,
+        "reason": str(arguments.get("reason") or "운영 코파일럿 실험 제안")[:300],
+        "blocked_from_execution": True,
+        "blocked_reason": (
+            "장치 상태와 수동 히터 동작을 사람이 확인해야 하므로 코파일럿 실행은 아직 연결하지 않았습니다."
+        ),
+        "safety_contract": [
+            "this response does not create an experiment run",
+            "this response does not publish MQTT",
+            "manual heater and door events require timestamped operator confirmation",
+            "readiness must be rechecked immediately before a real run",
+        ],
+    }
+
+
+def propose_experiment_stop(
+    room_id: int,
+    arguments: dict[str, Any],
+    active_experiment: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return {
+        "scope": "PROPOSAL_ONLY",
+        "proposal_type": "experiment_stop",
+        "approval_supported": False,
+        "requires_explicit_user_approval": True,
+        "executed": False,
+        "room_id": room_id,
+        "experiment": active_experiment,
+        "reason": str(arguments.get("reason") or "운영 코파일럿 실험 중단 제안")[:300],
+        "blocked_from_execution": True,
+        "blocked_reason": (
+            "중단 시 안전한 출력 OFF와 실제 장치 확인이 필요하므로 코파일럿 실행은 아직 연결하지 않았습니다."
+        ),
+        "safety_contract": [
+            "this response does not update experiment_runs",
+            "this response does not publish heater or cooling OFF",
+            "operator must verify physical outputs after a real stop",
         ],
     }

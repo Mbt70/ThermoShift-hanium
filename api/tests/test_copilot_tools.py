@@ -21,6 +21,7 @@ def test_제어도구는_명령을_실행하지_않고_승인카드만_만든다
     assert proposal["requires_explicit_user_approval"] is True
     assert proposal["command"]["target_temp"] == 25.0
     assert proposal["approval_endpoint"] == "/rooms/1/commands"
+    assert proposal["proposal_type"] == "hvac_command"
 
 
 def test_제어제안도_허용범위를_벗어나면_거절한다():
@@ -57,6 +58,11 @@ def test_MPC도구는_비현실적_입력을_거절한다():
         ("현재 모델 학습 상태 알려줘", "get_model_status"),
         ("지금 값으로 MPC 시뮬레이션해줘", "simulate_mpc"),
         ("실험 run 상태 알려줘", "get_experiment_status"),
+        ("최근 실험 데이터 품질 알려줘", "get_data_quality"),
+        ("run 7 품질 확인해줘", "get_data_quality"),
+        ("내일 실험 가능한지 준비 상태 알려줘", "get_experiment_readiness"),
+        ("pilot 실험 시작해줘", "propose_experiment_start"),
+        ("실험 중단해줘", "propose_experiment_stop"),
         ("현재 상태 어때?", "get_live_snapshot"),
     ],
 )
@@ -70,3 +76,37 @@ def test_자연어_제어요청도_실행이_아닌_제안으로_변환한다():
     assert tool == "propose_control_action"
     assert arguments["command_type"] == "set_temp"
     assert arguments["target_temp"] == 25.0
+
+
+def test_run_번호를_데이터_품질_도구_인자로_추출한다():
+    tool, arguments = _fallback_copilot_plan("run #42 데이터 품질 확인해줘")
+    assert tool == "get_data_quality"
+    assert arguments == {"run_id": 42}
+
+
+def test_실험_시작_제안은_run이나_MQTT를_만들지_않는다():
+    readiness = {"ready": True, "checks": []}
+    proposal = copilot_tools.propose_experiment_start(
+        1, {"plan_key": "pilot20", "reason": "내일 파일럿"}, readiness
+    )
+    assert proposal["scope"] == "PROPOSAL_ONLY"
+    assert proposal["proposal_type"] == "experiment_start"
+    assert proposal["executed"] is False
+    assert proposal["approval_supported"] is False
+    assert proposal["experiment"]["duration_min"] == 20
+
+
+def test_지원하지_않는_실험_계획은_거절한다():
+    with pytest.raises(ValueError, match="plan_key"):
+        copilot_tools.propose_experiment_start(
+            1, {"plan_key": "overnight"}, {"ready": True}
+        )
+
+
+def test_실험_중단도_제안만_만든다():
+    proposal = copilot_tools.propose_experiment_stop(
+        1, {"reason": "온도 확인"}, {"run_id": 9, "plan_name": "pilot_20min"}
+    )
+    assert proposal["proposal_type"] == "experiment_stop"
+    assert proposal["executed"] is False
+    assert proposal["experiment"]["run_id"] == 9

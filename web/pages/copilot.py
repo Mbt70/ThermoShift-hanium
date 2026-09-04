@@ -86,9 +86,9 @@ with main_col:
 
     quick_prompts = (
         "현재 센서 상태 알려줘",
-        "최근 제어 판단은 왜 내려졌어?",
         "현재 모델 학습 상태 알려줘",
-        "최근 실험 run 상태 알려줘",
+        "최근 실험 데이터 품질 알려줘",
+        "내일 실험 준비됐는지 확인해줘",
         "지금 값으로 MPC 시뮬레이션해줘",
     )
     quick_cols = st.columns(len(quick_prompts))
@@ -111,40 +111,63 @@ with main_col:
 
     pending = st.session_state.get(proposal_key)
     if pending:
-        command = pending["command"]
+        proposal_type = pending.get("proposal_type", "hvac_command")
         with st.container(border=True):
-            st.subheader("승인이 필요한 제어 제안")
-            target = (
-                f" · 목표 {command['target_temp']}°C"
-                if command.get("target_temp") is not None else ""
-            )
-            st.write(f"명령: `{command['command_type']}`{target}")
-            st.warning("아직 실행되지 않았습니다. 승인하면 pending 큐에 들어가며 sent는 장치 ACK와 다릅니다.")
-            confirmed = st.checkbox(
-                "대상 공간과 명령을 확인했습니다.", key=f"copilot_confirm_{room['id']}"
-            )
-            approve_col, cancel_col = st.columns(2)
-            with approve_col:
-                if st.button(
-                    "승인하고 명령 큐에 넣기",
-                    type="primary",
-                    disabled=not confirmed,
-                    width="stretch",
-                ):
-                    try:
-                        queued = api_post(pending["approval_endpoint"], json=command)
-                        st.success(
-                            f"명령 #{queued['command_id']}이 {queued['command_status']} 상태로 등록됐습니다."
-                        )
+            if proposal_type == "hvac_command":
+                command = pending["command"]
+                st.subheader("승인이 필요한 제어 제안")
+                target = (
+                    f" · 목표 {command['target_temp']}°C"
+                    if command.get("target_temp") is not None else ""
+                )
+                st.write(f"명령: `{command['command_type']}`{target}")
+                st.warning("아직 실행되지 않았습니다. 승인하면 pending 큐에 들어가며 sent는 장치 ACK와 다릅니다.")
+                confirmed = st.checkbox(
+                    "대상 공간과 명령을 확인했습니다.", key=f"copilot_confirm_{room['id']}"
+                )
+                approve_col, cancel_col = st.columns(2)
+                with approve_col:
+                    if st.button(
+                        "승인하고 명령 큐에 넣기",
+                        type="primary",
+                        disabled=not confirmed,
+                        width="stretch",
+                    ):
+                        try:
+                            queued = api_post(pending["approval_endpoint"], json=command)
+                            st.success(
+                                f"명령 #{queued['command_id']}이 {queued['command_status']} 상태로 등록됐습니다."
+                            )
+                            st.session_state.pop(proposal_key, None)
+                        except ApiError as exc:
+                            st.error(f"승인되지 않았습니다: {exc.message or exc}")
+                with cancel_col:
+                    if st.button("제안 취소", width="stretch"):
                         st.session_state.pop(proposal_key, None)
-                    except ApiError as exc:
-                        st.error(f"승인되지 않았습니다: {exc.message or exc}")
-            with cancel_col:
-                if st.button("제안 취소", width="stretch"):
+                        st.rerun()
+            else:
+                experiment = pending.get("experiment") or {}
+                title = "실험 시작 제안" if proposal_type == "experiment_start" else "실험 중단 제안"
+                st.subheader(title)
+                if proposal_type == "experiment_start":
+                    st.write(
+                        f"계획: `{experiment.get('plan_key')}` · 약 "
+                        f"{experiment.get('duration_min')}분"
+                    )
+                    for action in experiment.get("manual_actions", []):
+                        st.write(f"- {action}")
+                    readiness = pending.get("readiness") or {}
+                    st.write(f"자동 사전점검: `{'READY' if readiness.get('ready') else 'BLOCKED'}`")
+                else:
+                    st.write(f"대상 Run: `{experiment.get('run_id', '진행 중인 run 없음')}`")
+                st.warning(
+                    "안전을 위해 이 카드는 제안 전용입니다. 실험 run 생성·중단 또는 MQTT 출력은 수행하지 않습니다."
+                )
+                if st.button("제안 닫기", width="stretch"):
                     st.session_state.pop(proposal_key, None)
                     st.rerun()
 
-    typed_message = st.chat_input("예: 지금 값으로 MPC를 돌려봐 / 왜 냉방을 껐어? / 25도로 설정해줘")
+    typed_message = st.chat_input("예: 내일 실험 준비됐어? / 최근 run은 학습에 쓸 수 있어? / 25도로 설정해줘")
     message = typed_message or quick_message
     if message:
         ask(message)

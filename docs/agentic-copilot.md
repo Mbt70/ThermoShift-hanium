@@ -28,9 +28,12 @@ API 진입점은 `POST /ai/copilot/chat`과
 4. `get_model_status()` — 가정값/교정값 여부와 물리 파라미터
 5. `simulate_mpc(scenario)` — 장치를 건드리지 않는 what-if 비교
 6. `propose_control_action(room_id, action)` — 실행하지 않는 승인 카드
+7. `get_data_quality(run_id)` — 표본 연속성·입력 검증·학습 후보 판정
+8. `get_experiment_readiness()` — 센서 최신성·중복 run·명령 큐 사전점검
+9. `propose_experiment_start(plan_key)` — 시작하지 않는 계획/수동 작업 카드
+10. `propose_experiment_stop()` — 중단하지 않는 안전 확인 카드
 
-후속 도구는 `get_data_quality(run_id)`와
-`get_experiment_readiness()`다. Gemini가 사용 가능하면 자연어를 구조화된 도구
+Gemini가 사용 가능하면 자연어를 구조화된 도구
 인자로 계획하고, 사용할 수 없으면 결정론적 한국어 라우터로 폴백한다.
 인자 없는 MPC 요청은 최신 센서 조회와 시뮬레이션을 연쇄 실행한다.
 
@@ -48,9 +51,10 @@ API 진입점은 `POST /ai/copilot/chat`과
 4. 로그인한 운영자가 화면 확인 체크와 승인 버튼으로 기존 제어 API에 요청한다.
 5. gateway가 실행하고 명령/ACK/실패/복구를 감사 로그에 남긴다.
 
-허용 가능한 첫 변경은 `shadow 실험 시작`, `실험 중단`, `강제 OFF`처럼
-복구가 명확한 것부터 시작한다. 자동 모델 승격, 안전 임계값 변경, 무인 히터
-ON, 장시간 액추에이터 ON은 허용하지 않는다. 데모 세션은 항상 읽기 전용이다.
+현재 실제 실행 승인은 기존 HVAC 명령에만 연결한다. 실험 시작·중단은 수동
+히터의 물리 상태와 OFF 확인을 API가 검증할 수 없으므로 제안 카드까지만
+제공한다. 자동 모델 승격, 안전 임계값 변경, 무인 히터 ON, 장시간 액추에이터
+ON은 허용하지 않는다. 데모 세션은 항상 읽기 전용이다.
 
 대시보드의 `AI 코파일럿` 화면은 조회 결과의 원본 근거와 사용한 도구를 함께
 표시한다. 제어 요청은 즉시 실행되지 않고 승인 카드가 되며, 승인 후에도 API의

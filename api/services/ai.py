@@ -263,10 +263,12 @@ def plan_copilot_tool(
     """사용자 요청을 허용 도구 하나로 계획한다. 실제 도구 실행은 하지 않는다."""
     tools_json = json.dumps(tool_definitions, ensure_ascii=False)
     prompt = f"""사용자의 ThermoShift 운영 요청을 처리할 도구 하나를 고르세요.
-허용 목록 밖의 이름은 절대 만들지 말고, 장치 제어 요청은 실행 도구가 아니라
-propose_control_action만 선택하세요. '왜 껐어?'처럼 과거 이유를 묻는 질문은
-제어 제안이 아니라 get_recent_decisions입니다. 정보가 부족한 일반 질문은
-get_live_snapshot을 선택하세요.
+허용 목록 밖의 이름은 절대 만들지 마세요. 냉난방 제어 요청은 실행 도구가 아니라
+propose_control_action, 실험 시작·중단 요청은 각각 propose_experiment_start와
+propose_experiment_stop을 선택하세요. '왜 껐어?'처럼 과거 이유를 묻는 질문은
+제어 제안이 아니라 get_recent_decisions입니다. 실험 가능 여부는
+get_experiment_readiness, 특정 run의 학습 적합성은 get_data_quality를 고르세요.
+정보가 부족한 일반 질문은 get_live_snapshot을 선택하세요.
 
 허용 도구:
 {tools_json}

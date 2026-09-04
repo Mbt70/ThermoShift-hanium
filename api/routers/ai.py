@@ -73,6 +73,23 @@ def _fallback_copilot_plan(message: str) -> tuple[str, dict]:
         return "get_recent_decisions", {"limit": 5}
     if "시뮬" in text or "what-if" in text or "mpc" in text:
         return "simulate_mpc", {}
+    run_match = re.search(r"(?:run|런)\s*#?\s*(\d+)", text)
+    if ("품질" in text or "학습에 써" in text) and ("데이터" in text or run_match):
+        return "get_data_quality", (
+            {"run_id": int(run_match.group(1))} if run_match else {}
+        )
+    if "실험" in text and any(word in text for word in ("중단", "정지", "멈춰")):
+        return "propose_experiment_stop", {"reason": message}
+    if "실험" in text and any(word in text for word in ("시작", "실행", "돌려")):
+        if "prbs" in text:
+            plan_key = "prbs"
+        elif "교정" in text or "calib" in text:
+            plan_key = "calib"
+        else:
+            plan_key = "pilot20"
+        return "propose_experiment_start", {"plan_key": plan_key, "reason": message}
+    if "실험" in text and any(word in text for word in ("준비", "가능", "해도")):
+        return "get_experiment_readiness", {}
     if "실험" in text or "run" in text:
         return "get_experiment_status", {}
     if "모델" in text or "학습" in text or "pinn" in text or "rc" in text:
@@ -120,6 +137,24 @@ def _copilot_summary(tool_name: str, result: dict) -> str:
     if tool_name == "get_model_status":
         state = "실측 교정" if result.get("calibrated") else "가정값"
         return f"현재 열모델은 {state}이며 제어 사용 범위는 {result.get('control_use')}입니다."
+    if tool_name == "get_data_quality":
+        run_id = result.get("run_id")
+        verdict = result.get("verdict")
+        reasons = result.get("reasons") or []
+        reason_text = f" 이유: {'; '.join(reasons[:2])}" if reasons else ""
+        return (
+            f"Run {run_id} 데이터 판정은 {verdict}입니다. "
+            f"열모델 학습 후보={result.get('thermal_training_candidate')}, "
+            f"에너지 검증 후보={result.get('energy_validation_candidate')}.{reason_text}"
+        )
+    if tool_name == "get_experiment_readiness":
+        blockers = [
+            check.get("detail") for check in result.get("checks", [])
+            if check.get("status") == "BLOCK"
+        ]
+        if result.get("ready"):
+            return "현재 DB·센서 사전점검은 통과했습니다. 실제 시작 직전에 수동 히터와 문 상태를 다시 확인해야 합니다."
+        return f"현재 실험 준비 상태는 BLOCKED입니다. 주요 차단 사유: {'; '.join(blockers[:3])}"
     if tool_name == "simulate_mpc":
         return (
             f"[SIM] MPC 권장 동작은 {result.get('optimal_action')}이고, 현재 PMV는 "
@@ -130,6 +165,19 @@ def _copilot_summary(tool_name: str, result: dict) -> str:
         return (
             f"{command.get('command_type')} 제안 카드를 만들었습니다. 아직 실행하지 않았으며, "
             "로그인한 운영자의 명시적 승인이 필요합니다."
+        )
+    if tool_name == "propose_experiment_start":
+        experiment = result.get("experiment") or {}
+        ready = (result.get("readiness") or {}).get("ready")
+        return (
+            f"{experiment.get('plan_key')} 실험 시작 제안을 만들었습니다. 사전점검 ready={ready}이며 "
+            "실험 run이나 장치 명령은 생성하지 않았습니다."
+        )
+    if tool_name == "propose_experiment_stop":
+        experiment = result.get("experiment") or {}
+        return (
+            f"Run {experiment.get('run_id', '없음')} 중단 제안을 만들었습니다. "
+            "DB와 실제 장치는 변경하지 않았습니다."
         )
     return "도구 실행이 완료됐습니다."
 
@@ -176,7 +224,300 @@ def copilot_chat(
         "planner": planner,
         "tools_used": tools_used,
         "result": result,
-        "action_proposal": result if tool_name == "propose_control_action" else None,
+        "action_proposal": (
+            result if tool_name in {
+                "propose_control_action", "propose_experiment_start", "propose_experiment_stop"
+            } else None
+        ),
+    }
+
+
+def _seconds_old(measured_at: datetime | None, now: datetime) -> float | None:
+    if measured_at is None:
+        return None
+    if measured_at.tzinfo is None:
+        measured_at = measured_at.replace(tzinfo=timezone.utc)
+    return max(0.0, round((now - measured_at).total_seconds(), 1))
+
+
+def _experiment_readiness(cur, room_id: int) -> dict:
+    """DB와 수신 시각만으로 판단하는 보수적 실험 사전점검."""
+    now = datetime.now(timezone.utc)
+    checks: list[dict] = []
+
+    cur.execute(
+        "SELECT name, control_mode FROM rooms WHERE room_id=%s",
+        (room_id,),
+    )
+    room = cur.fetchone()
+    if not room:
+        raise ValueError("room not found")
+    checks.append({
+        "name": "control_mode",
+        "status": "PASS" if room["control_mode"] in {"monitoring", "manual"} else "BLOCK",
+        "detail": f"현재 제어 모드는 {room['control_mode']}입니다.",
+    })
+
+    cur.execute(
+        "SELECT device_code, device_type, comm_status, is_enabled, last_seen_at"
+        " FROM devices WHERE room_id=%s ORDER BY device_type, device_code",
+        (room_id,),
+    )
+    devices = [dict(row) for row in cur.fetchall()]
+    enabled = [device for device in devices if device["is_enabled"]]
+    env_devices = [device for device in enabled if device["device_type"] == "env"]
+    if not env_devices:
+        checks.append({"name": "environment_device", "status": "BLOCK", "detail": "활성 환경 센서가 없습니다."})
+    else:
+        unhealthy = [
+            device["device_code"] for device in env_devices
+            if device["comm_status"] != "normal" or _seconds_old(device["last_seen_at"], now) is None
+            or _seconds_old(device["last_seen_at"], now) > 120
+        ]
+        checks.append({
+            "name": "environment_device",
+            "status": "BLOCK" if unhealthy else "PASS",
+            "detail": (
+                f"환경 센서 연결/수신 지연 확인 필요: {', '.join(unhealthy)}"
+                if unhealthy else "활성 환경 센서가 120초 이내 수신 중입니다."
+            ),
+        })
+
+    latest_specs = (
+        ("sensor_env", "environment_stream", True),
+        ("sensor_pir", "pir_stream", False),
+        ("sensor_door", "door_stream", False),
+        ("power_readings", "power_stream", False),
+    )
+    latest_ages: dict[str, float | None] = {}
+    for table, name, required in latest_specs:
+        cur.execute(
+            f"SELECT MAX(s.measured_at) AS measured_at FROM {table} s"
+            " JOIN devices d USING (device_id) WHERE d.room_id=%s",
+            (room_id,),
+        )
+        row = cur.fetchone()
+        measured_at = row["measured_at"] if row else None
+        age = _seconds_old(measured_at, now)
+        latest_ages[name] = age
+        if age is None:
+            status = "BLOCK" if required else "WARN"
+            detail = "측정 데이터가 없습니다."
+        elif age > 120:
+            status = "BLOCK" if required else "WARN"
+            detail = f"마지막 측정이 {age:.0f}초 전입니다."
+        else:
+            status = "PASS"
+            detail = f"마지막 측정이 {age:.0f}초 전입니다."
+        checks.append({"name": name, "status": status, "detail": detail, "measured_at": measured_at})
+
+    cur.execute(
+        "SELECT run_id, plan_name, started_at, ends_at FROM experiment_runs"
+        " WHERE room_id=%s AND stopped_at IS NULL ORDER BY started_at DESC LIMIT 1",
+        (room_id,),
+    )
+    open_run = cur.fetchone()
+    if open_run:
+        stale = open_run["ends_at"] <= now
+        detail = (
+            f"종료시각이 지났지만 닫히지 않은 Run {open_run['run_id']}이 있어 새 run 생성이 차단됩니다."
+            if stale else f"Run {open_run['run_id']} ({open_run['plan_name']})이 진행 중입니다."
+        )
+        checks.append({"name": "exclusive_experiment", "status": "BLOCK", "detail": detail})
+    else:
+        checks.append({"name": "exclusive_experiment", "status": "PASS", "detail": "열린 실험 run이 없습니다."})
+
+    cur.execute(
+        "SELECT COUNT(*)::int AS count FROM hvac_commands"
+        " WHERE room_id=%s AND command_status IN ('pending','sent')",
+        (room_id,),
+    )
+    pending_count = cur.fetchone()["count"]
+    checks.append({
+        "name": "pending_commands",
+        "status": "BLOCK" if pending_count else "PASS",
+        "detail": f"대기/전송 중 제어 명령 {pending_count}건입니다.",
+    })
+
+    return {
+        "scope": "MEASURED_PREFLIGHT",
+        "assessed_at": now,
+        "room": dict(room),
+        "ready": not any(check["status"] == "BLOCK" for check in checks),
+        "checks": checks,
+        "devices": devices,
+        "latest_age_seconds": latest_ages,
+        "manual_requirements": [
+            "목업 문을 닫고 초기 상태를 기록한다.",
+            "10W 히터의 실제 ON/OFF는 운영자가 확인 시각과 함께 기록한다.",
+            "펠티어 OFF와 안전 온도 상한을 실제 장치에서 확인한다.",
+            "실험 직전 이 준비도 점검을 다시 실행한다.",
+        ],
+        "limitations": [
+            "DB/MQTT 수신 상태만 확인하며 물리 배선·히터 실제 출력은 자동 검증하지 못합니다.",
+            "전력 스트림 경고가 있으면 열모델 데이터는 수집해도 에너지 KPI 검증에는 사용할 수 없습니다.",
+        ],
+    }
+
+
+def _data_quality(cur, room_id: int, arguments: dict) -> dict:
+    raw_run_id = arguments.get("run_id")
+    if raw_run_id is None:
+        cur.execute(
+            "SELECT run_id, plan_name, plan, started_at, ends_at, stopped_at"
+            " FROM experiment_runs WHERE room_id=%s ORDER BY started_at DESC LIMIT 1",
+            (room_id,),
+        )
+    else:
+        run_id = int(raw_run_id)
+        if run_id <= 0:
+            raise ValueError("run_id must be a positive integer")
+        cur.execute(
+            "SELECT run_id, plan_name, plan, started_at, ends_at, stopped_at"
+            " FROM experiment_runs WHERE room_id=%s AND run_id=%s",
+            (room_id, run_id),
+        )
+    run = cur.fetchone()
+    if not run:
+        raise ValueError("experiment run not found in this room")
+
+    now = datetime.now(timezone.utc)
+    window_end = run["stopped_at"] or min(run["ends_at"], now)
+    start = run["started_at"]
+    cur.execute(
+        "SELECT COUNT(*)::int AS sample_count, MIN(s.temperature) AS temp_min,"
+        " MAX(s.temperature) AS temp_max, MIN(s.measured_at) AS first_at,"
+        " MAX(s.measured_at) AS last_at,"
+        " COUNT(*) FILTER (WHERE s.temp_flag <> 'ok')::int AS bad_temp_count,"
+        " COUNT(*) FILTER (WHERE s.humidity_flag <> 'ok')::int AS bad_humidity_count,"
+        " COUNT(*) FILTER (WHERE s.co2_flag <> 'ok')::int AS bad_co2_count"
+        " FROM sensor_env s JOIN devices d USING (device_id)"
+        " WHERE d.room_id=%s AND s.measured_at BETWEEN %s AND %s",
+        (room_id, start, window_end),
+    )
+    env = dict(cur.fetchone())
+    cur.execute(
+        "WITH ordered AS ("
+        " SELECT EXTRACT(EPOCH FROM (s.measured_at - LAG(s.measured_at)"
+        " OVER (ORDER BY s.measured_at))) AS gap_sec"
+        " FROM sensor_env s JOIN devices d USING (device_id)"
+        " WHERE d.room_id=%s AND s.measured_at BETWEEN %s AND %s)"
+        " SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY gap_sec)"
+        " FILTER (WHERE gap_sec IS NOT NULL) AS median_gap_sec,"
+        " MAX(gap_sec) AS max_gap_sec FROM ordered",
+        (room_id, start, window_end),
+    )
+    gaps = dict(cur.fetchone())
+
+    counts: dict[str, int] = {}
+    for name, table, time_column in (
+        ("pir", "sensor_pir", "measured_at"),
+        ("door", "sensor_door", "measured_at"),
+        ("power", "power_readings", "measured_at"),
+    ):
+        cur.execute(
+            f"SELECT COUNT(*)::int AS count FROM {table} s JOIN devices d USING (device_id)"
+            f" WHERE d.room_id=%s AND s.{time_column} BETWEEN %s AND %s",
+            (room_id, start, window_end),
+        )
+        counts[name] = cur.fetchone()["count"]
+    cur.execute(
+        "SELECT COUNT(*)::int AS count,"
+        " COUNT(*) FILTER (WHERE blocked_reason IS NOT NULL)::int AS blocked_count,"
+        " COUNT(*) FILTER (WHERE applied_duty > 0)::int AS applied_on_count"
+        " FROM heater_log WHERE run_id=%s AND recorded_at BETWEEN %s AND %s",
+        (run["run_id"], start, window_end),
+    )
+    heater = dict(cur.fetchone())
+
+    plan = run["plan"] if isinstance(run["plan"], dict) else {}
+    quality_scope = str(plan.get("data_quality_scope", "UNREVIEWED"))
+    events = plan.get("actual_events", [])
+    event_sources = {
+        str(event.get("event")): str(event.get("source", ""))
+        for event in events if isinstance(event, dict) and event.get("event")
+    }
+    heater_events_verified = bool(
+        event_sources.get("heater_physical_on")
+        and event_sources.get("heater_physical_off")
+    )
+    cooling_was_commanded = "peltier_on" in event_sources or "peltier_off" in event_sources
+    cooling_verified = bool(
+        event_sources.get("peltier_on") == "device_state_ack"
+        and event_sources.get("peltier_off") == "device_state_ack"
+    )
+
+    sample_count = int(env["sample_count"] or 0)
+    temp_min = float(env["temp_min"]) if env["temp_min"] is not None else None
+    temp_max = float(env["temp_max"]) if env["temp_max"] is not None else None
+    temp_range = round(temp_max - temp_min, 3) if temp_min is not None and temp_max is not None else None
+    max_gap = float(gaps["max_gap_sec"]) if gaps["max_gap_sec"] is not None else None
+    median_gap = float(gaps["median_gap_sec"]) if gaps["median_gap_sec"] is not None else None
+    reasons: list[str] = []
+    if quality_scope != "TRAINING_QUALITY_APPROVED":
+        reasons.append(f"data_quality_scope={quality_scope}: 학습 승인 데이터가 아님")
+    if sample_count < 20:
+        reasons.append(f"환경 센서 표본 {sample_count}개로 부족")
+    if temp_range is None or temp_range < 0.5:
+        reasons.append(f"온도 가진 범위 {temp_range}°C로 식별에 부족")
+    if max_gap is None or max_gap > 60:
+        reasons.append(f"최대 표본 공백 {max_gap}초로 연속성 부족")
+    if not heater_events_verified and not cooling_verified:
+        reasons.append("물리 입력 ON/OFF 시각 검증 부족")
+    if cooling_was_commanded and not cooling_verified:
+        reasons.append("펠티어 명령이 실제 상태 ACK로 검증되지 않음")
+
+    thermal_candidate = not reasons
+    energy_reasons = list(reasons)
+    if counts["power"] < 20:
+        energy_reasons.append(f"전력 표본 {counts['power']}개로 에너지 검증 불가")
+    energy_candidate = not energy_reasons
+    if quality_scope != "TRAINING_QUALITY_APPROVED":
+        verdict = "NOT_APPROVED"
+    elif thermal_candidate:
+        verdict = "TRAINING_CANDIDATE"
+    else:
+        verdict = "INSUFFICIENT"
+
+    return {
+        "scope": "MEASURED_RUN_QUALITY",
+        "run_id": run["run_id"],
+        "plan_name": run["plan_name"],
+        "quality_scope": quality_scope,
+        "window": {"started_at": start, "evaluated_until": window_end, "planned_end": run["ends_at"]},
+        "environment": {
+            "sample_count": sample_count,
+            "first_at": env["first_at"],
+            "last_at": env["last_at"],
+            "temperature_min_c": temp_min,
+            "temperature_max_c": temp_max,
+            "temperature_range_c": temp_range,
+            "median_gap_sec": round(median_gap, 2) if median_gap is not None else None,
+            "max_gap_sec": round(max_gap, 2) if max_gap is not None else None,
+            "bad_flag_counts": {
+                "temperature": env["bad_temp_count"],
+                "humidity": env["bad_humidity_count"],
+                "co2": env["bad_co2_count"],
+            },
+        },
+        "sample_counts": {**counts, "heater_log": heater["count"]},
+        "actuation_evidence": {
+            "heater_events_verified": heater_events_verified,
+            "heater_applied_on_samples": heater["applied_on_count"],
+            "heater_blocked_samples": heater["blocked_count"],
+            "cooling_was_commanded": cooling_was_commanded,
+            "cooling_device_ack_verified": cooling_verified,
+            "event_sources": event_sources,
+        },
+        "verdict": verdict,
+        "thermal_training_candidate": thermal_candidate,
+        "energy_validation_candidate": energy_candidate,
+        "reasons": reasons,
+        "energy_reasons": energy_reasons,
+        "limitations": [
+            "후보 판정은 최소 자동 검사이며 hold-out 성능 검증을 대체하지 않습니다.",
+            "명령 로그를 물리 출력으로 간주하지 않고 ACK 또는 운영자 확인 이벤트를 요구합니다.",
+        ],
     }
 
 
@@ -262,6 +603,27 @@ def _run_database_copilot_tool(
             )
             row = cur.fetchone()
             return {"scope": "EXPERIMENT_METADATA", "experiment": dict(row) if row else None}
+
+        if tool_name == "get_data_quality":
+            return _data_quality(cur, room_id, arguments)
+
+        if tool_name == "get_experiment_readiness":
+            return _experiment_readiness(cur, room_id)
+
+        if tool_name == "propose_experiment_start":
+            readiness = _experiment_readiness(cur, room_id)
+            return copilot_tools.propose_experiment_start(room_id, arguments, readiness)
+
+        if tool_name == "propose_experiment_stop":
+            cur.execute(
+                "SELECT run_id, plan_name, started_at, ends_at FROM experiment_runs"
+                " WHERE room_id=%s AND stopped_at IS NULL ORDER BY started_at DESC LIMIT 1",
+                (room_id,),
+            )
+            row = cur.fetchone()
+            return copilot_tools.propose_experiment_stop(
+                room_id, arguments, dict(row) if row else None
+            )
 
     raise ValueError("tool is not implemented")
 
