@@ -42,8 +42,8 @@ def credentials(token: str) -> HTTPAuthorizationCredentials:
     return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
 
-def request(method: str = "GET") -> Request:
-    return Request({"type": "http", "method": method, "path": "/"})
+def request(method: str = "GET", path: str = "/") -> Request:
+    return Request({"type": "http", "method": method, "path": path})
 
 
 def test_signed_session_round_trip(monkeypatch):
@@ -82,3 +82,12 @@ def test_demo_session_can_read_but_cannot_change_state(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         security.get_current_user_id(request("PATCH"), credentials(token))
     assert exc.value.status_code == 403
+
+
+def test_demo_session_can_request_read_only_ai_explanation(monkeypatch):
+    monkeypatch.setattr(security, "get_conn", lambda: fake_conn())
+    token = security.create_access_token(7, scope="demo")
+    user_id = security.get_current_user_id(
+        request("POST", "/ai/decisions/1/explain"), credentials(token)
+    )
+    assert user_id == 7

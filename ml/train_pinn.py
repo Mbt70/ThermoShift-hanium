@@ -27,9 +27,25 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPOSITORY_ROOT))
 
+from ml.training_quality import assess_training_frame  # noqa: E402
 
-def train_pinn_numpy(df: pd.DataFrame, epochs: int = 1500, lr: float = 0.005, lambda_phys: float = 0.4):
+
+def train_pinn_numpy(
+    df: pd.DataFrame,
+    epochs: int = 1500,
+    lr: float = 0.005,
+    lambda_phys: float = 0.4,
+    pipeline_smoke_test: bool = False,
+):
     """PyTorch 미설치 환경에서도 즉시 훈련 가능한 물리 기반 최적화 엔진."""
+    quality = assess_training_frame(df)
+    if not quality.eligible and not pipeline_smoke_test:
+        details = "\n".join(f"- {reason}" for reason in quality.reasons)
+        raise ValueError(f"학습 품질 게이트를 통과하지 못했습니다:\n{details}")
+    if pipeline_smoke_test and not quality.eligible:
+        print("⚠️ PIPELINE_SMOKE_TEST: 아래 품질 문제를 무시하지만 결과를 운영에 저장하지 않습니다.")
+        for reason in quality.reasons:
+            print(f"  - {reason}")
     print("🧠 [PINN] 실측 시계열 데이터 기반 물리-신경망 하이브리드 훈련 시작...")
 
     # 유효 데이터 필터링
@@ -106,11 +122,21 @@ def train_pinn_numpy(df: pd.DataFrame, epochs: int = 1500, lr: float = 0.005, la
             r2 = 1.0 - np.sum((pred_dT - y_true) ** 2) / (np.sum((y_true - np.mean(y_true)) ** 2) + 1e-6)
             print(f"  [Epoch {epoch:4d}/{epochs}] Total Loss: {total_loss:.4f} | Data Loss: {loss_data:.4f} | Phys Loss: {loss_phys:.4f} | R²: {r2:.3f} | [a={a:.4f}, b={b:.4f}, d={d:.4f}]")
 
-    print("\n🎉 [PINN 학습 완료] 최종 물리 파라미터 수렴 결과:")
+    if pipeline_smoke_test:
+        print("\n🧪 [파이프라인 실행 완료 — 아래 값은 사용·저장 금지]")
+    else:
+        print("\n✅ [PINN 후보 학습 완료] 최종 물리 파라미터 수렴 결과:")
     print(f"  - 열 방출률 a (1/min): {a:.5f} (시정수 tau: {1/a:.1f}분)")
     print(f"  - 펠티어 냉각력 b (℃/min): {b:.5f}")
     print(f"  - 환경 외란 d (℃/min): {d:.5f}")
-    return {"a": a, "b": b, "d": d, "r2": float(r2)}
+    return {
+        "a": a,
+        "b": b,
+        "d": d,
+        "r2": float(r2),
+        "scope": "PIPELINE_SMOKE_TEST" if pipeline_smoke_test else "CANDIDATE_MODEL",
+        "quality": quality.to_dict(),
+    }
 
 
 def main():
@@ -118,6 +144,11 @@ def main():
     parser.add_argument("--data", default="ml/dataset_20260830_clean.csv")
     parser.add_argument("--epochs", type=int, default=1500)
     parser.add_argument("--lr", type=float, default=0.008)
+    parser.add_argument(
+        "--pipeline-smoke-test",
+        action="store_true",
+        help="품질 미달 데이터로 실행 경로만 시험하며 운영 모델은 만들지 않음",
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.data):
@@ -125,7 +156,15 @@ def main():
         return
 
     df = pd.read_csv(args.data)
-    train_pinn_numpy(df, epochs=args.epochs, lr=args.lr)
+    try:
+        train_pinn_numpy(
+            df,
+            epochs=args.epochs,
+            lr=args.lr,
+            pipeline_smoke_test=args.pipeline_smoke_test,
+        )
+    except ValueError as exc:
+        raise SystemExit(f"❌ {exc}") from exc
 
 
 if __name__ == "__main__":

@@ -46,6 +46,11 @@ min Σ [ λE·E(k) + λC·Poccupied(k)·ξ(k)^2 + λS·|Δu(k)| ]
 정렬되는지만 확인한다. 시정수 식별이나 PINN 학습용 최종 데이터로 사용하지
 않는다. 종료 후 `python -m ml.export_experiment <run_id>`로 원본 CSV,
 실제 이벤트, phase별 기울기와 제한사항이 포함된 manifest를 내보낸다.
+DB 연결이 없는 라즈베리파이에서도 내보낸 폴더에
+`python -m ml.prepare_experiment <run_dir>`를 실행하면 30초 통합표와 학습
+품질 보고서를 재생성할 수 있다. PINN은 이 품질 게이트를 통과하지 못한
+데이터를 기본적으로 거절하고, `--pipeline-smoke-test`일 때만 저장 없이
+실행 경로를 시험한다.
 
 ## 주장 가능 범위
 

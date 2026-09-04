@@ -16,7 +16,7 @@ import csv
 import json
 import statistics
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -126,6 +126,144 @@ def _phase_summary(
     return summaries
 
 
+def _event_times(events: list[dict[str, Any]]) -> dict[str, datetime]:
+    return {
+        event["event"]: datetime.fromisoformat(event["at"])
+        for event in events if event.get("event") and event.get("at")
+    }
+
+
+def _event_sources(events: list[dict[str, Any]]) -> dict[str, str]:
+    return {
+        event["event"]: str(event.get("source", ""))
+        for event in events if event.get("event")
+    }
+
+
+def _model_timeline_30s(
+    run_id: int,
+    started_at: datetime,
+    tables: dict[str, list[dict[str, Any]]],
+    events: list[dict[str, Any]],
+    quality_scope: str,
+) -> list[dict[str, Any]]:
+    """센서와 입력을 30초 격자로 맞춘 학습 후보 표를 만든다.
+
+    명령을 실제 출력으로 둔갑시키지 않도록 commanded와 verified를 분리한다.
+    물리 상태가 확인되지 않은 run은 CSV를 만들되 training_eligible=false다.
+    """
+    env_rows = tables["sensor_env"]
+    if not env_rows:
+        return []
+
+    buckets: dict[int, list[dict[str, Any]]] = {}
+    for row in env_rows:
+        index = int((row["measured_at"] - started_at).total_seconds() // 30)
+        buckets.setdefault(index, []).append(row)
+
+    times = _event_times(events)
+    sources = _event_sources(events)
+    peltier_on, peltier_off = times.get("peltier_on"), times.get("peltier_off")
+    cooling_verified = bool(
+        peltier_on
+        and peltier_off
+        and sources.get("peltier_on") == "device_state_ack"
+        and sources.get("peltier_off") == "device_state_ack"
+    )
+    heater_on, heater_off = (
+        times.get("heater_physical_on"),
+        times.get("heater_physical_off"),
+    )
+
+    def average(rows: list[dict[str, Any]], key: str) -> float | None:
+        values = [float(row[key]) for row in rows if row.get(key) is not None]
+        return round(sum(values) / len(values), 5) if values else None
+
+    out: list[dict[str, Any]] = []
+    previous_temp: float | None = None
+    previous_at: datetime | None = None
+    for index, rows in sorted(buckets.items()):
+        at = started_at + timedelta(seconds=index * 30)
+        end_at = at + timedelta(seconds=30)
+        temperature = average(rows, "temperature")
+
+        pir_in_bin = [
+            row for row in tables["sensor_pir"]
+            if at <= row["measured_at"] < end_at
+        ]
+        door_in_bin = [
+            row for row in tables["sensor_door"]
+            if at <= row["measured_at"] < end_at
+        ]
+        heater_before_end = [
+            row for row in tables["heater_log"] if row["recorded_at"] < end_at
+        ]
+        latest_heater = heater_before_end[-1] if heater_before_end else None
+
+        if heater_on is None or at < heater_on:
+            heater_physical_u: int | None = 0
+            heater_state_verified = True
+        elif heater_off is not None:
+            heater_physical_u = int(at < heater_off)
+            heater_state_verified = True
+        else:
+            heater_physical_u = None
+            heater_state_verified = False
+
+        cooling_u = int(bool(peltier_on and peltier_off and peltier_on <= at < peltier_off))
+        actuation_verified = bool(cooling_verified or cooling_u == 0)
+        training_eligible = bool(
+            quality_scope == "TRAINING_QUALITY_APPROVED"
+            and heater_state_verified
+            and actuation_verified
+        )
+
+        dt_seconds = (at - previous_at).total_seconds() if previous_at else None
+        d_temp = (
+            (temperature - previous_temp) / dt_seconds * 60.0
+            if temperature is not None and previous_temp is not None and dt_seconds
+            else None
+        )
+        if peltier_on and peltier_off and peltier_on <= at < peltier_off:
+            phase = "peltier_commanded_on"
+        elif times.get("door_open") and times.get("door_closed") and (
+            times["door_open"] <= at < times["door_closed"]
+        ):
+            phase = "door_open"
+        elif heater_on and at >= heater_on:
+            phase = "post_heater_on_state_unverified" if heater_off is None else "heater_cycle"
+        else:
+            phase = "baseline"
+
+        out.append({
+            "run_id": run_id,
+            "measured_at": at,
+            "temperature": temperature,
+            "humidity": average(rows, "humidity"),
+            "co2": average(rows, "co2"),
+            "pir_motion": any(bool(row.get("motion")) for row in pir_in_bin),
+            "door_open_fraction": (
+                round(sum(row.get("door_state") == "open" for row in door_in_bin)
+                      / len(door_in_bin), 4)
+                if door_in_bin else None
+            ),
+            "heater_commanded_duty": (
+                int(latest_heater["requested_duty"]) if latest_heater else 0
+            ),
+            "heater_physical_u": heater_physical_u,
+            "heater_state_verified": heater_state_verified,
+            "cooling_u": cooling_u,
+            "actuation_verified": actuation_verified,
+            "dt_seconds": dt_seconds,
+            "dT_dt": round(d_temp, 6) if d_temp is not None else None,
+            "phase": phase,
+            "quality_scope": quality_scope,
+            "training_eligible": training_eligible,
+        })
+        previous_temp, previous_at = temperature, at
+    return out
+
+
 def export_run(run_id: int, output_root: Path) -> Path:
     storage = get_storage()
     try:
@@ -190,14 +328,19 @@ def export_run(run_id: int, output_root: Path) -> Path:
     temperatures = [float(row["temperature"]) for row in env_rows if row["temperature"] is not None]
     plan = run["plan"]
     events = plan.get("actual_events", []) if isinstance(plan, dict) else []
+    quality_scope = (
+        plan.get("data_quality_scope", "UNREVIEWED")
+        if isinstance(plan, dict) else "UNREVIEWED"
+    )
     phases = _phase_summary(env_rows, events)
+    timeline = _model_timeline_30s(
+        run_id, start, tables, events, quality_scope
+    )
     _write_csv(output_dir / "phase_summary.csv", phases)
+    _write_csv(output_dir / "model_timeline_30s.csv", timeline)
     manifest = {
         "run": {key: _json_value(value) for key, value in dict(run).items()},
-        "quality_scope": (
-            plan.get("data_quality_scope", "UNREVIEWED")
-            if isinstance(plan, dict) else "UNREVIEWED"
-        ),
+        "quality_scope": quality_scope,
         "duration_sec": (end - start).total_seconds(),
         "tables": {
             name: _sample_summary(rows, time_keys[name]) for name, rows in tables.items()
@@ -211,6 +354,15 @@ def export_run(run_id: int, output_root: Path) -> Path:
         "phase_summary": [
             {key: _serializable(value) for key, value in row.items()} for row in phases
         ],
+        "derived_files": {
+            "model_timeline_30s.csv": {
+                "rows": len(timeline),
+                "purpose": "pipeline/training candidate with command and verification flags",
+                "training_eligible_rows": sum(
+                    bool(row["training_eligible"]) for row in timeline
+                ),
+            }
+        },
         "limitations": [
             "20-minute pipeline pilot is too short for final RC/PINN identification.",
             "No electrical power readings were captured; energy optimization cannot be validated.",

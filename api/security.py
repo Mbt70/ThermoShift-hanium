@@ -52,8 +52,12 @@ def get_current_user_id(
 
     # 비로그인 시연 세션은 대시보드 조회만 가능하다. 버튼 하나로 실제 장치
     # 제어나 사용자 데이터 변경까지 허용되는 인증 우회가 되면 안 된다.
+    # 단, /ai/ 는 DB 조회를 기반으로 LLM 해설만 생성하므로 데모 세션에서도 허용한다.
     if scope == "demo" and request.method not in {"GET", "HEAD", "OPTIONS"}:
-        raise HTTPException(status_code=403, detail="demo session is read-only")
+        # Request.url은 scheme/server/headers가 생략된 ASGI 테스트 요청에서
+        # 만들 수 없다. 권한 판단에는 원본 path만 필요하다.
+        if not request.scope.get("path", "").startswith("/ai/"):
+            raise HTTPException(status_code=403, detail="demo session is read-only")
     if scope not in {"user", "demo"}:
         raise HTTPException(status_code=401, detail="invalid session scope")
 
