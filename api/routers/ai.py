@@ -10,6 +10,7 @@ API 키가 없으면 503 을 준다. 프론트는 이 상태에서도 원래 화
 
 from datetime import date, datetime, timedelta, timezone
 import re
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -26,9 +27,15 @@ class CopilotToolRequest(BaseModel):
     arguments: dict = Field(default_factory=dict)
 
 
+class CopilotChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+
 class CopilotChatRequest(BaseModel):
     room_id: int = Field(gt=0)
     message: str = Field(min_length=1, max_length=1000)
+    history: list[CopilotChatMessage] = Field(default_factory=list, max_length=8)
 
 
 @router.get("/copilot/tools")
@@ -189,7 +196,12 @@ def copilot_chat(
 ):
     """자연어 요청을 허용 도구로 계획·실행한다. 제어는 제안까지만 한다."""
     require_room_owner(body.room_id, current_user_id)
-    plan = ai.plan_copilot_tool(body.message, copilot_tools.TOOL_DEFINITIONS)
+    history = tuple(item.model_dump() for item in body.history)
+    plan = ai.plan_copilot_tool(
+        body.message,
+        copilot_tools.TOOL_DEFINITIONS,
+        history=history,
+    )
     planner = "gemini" if plan is not None else "deterministic_fallback"
     if plan is None or plan.tool_name not in copilot_tools.TOOL_NAMES:
         tool_name, arguments = _fallback_copilot_plan(body.message)
@@ -230,8 +242,15 @@ def copilot_chat(
     tools_used.append(tool_name)
     if proposal_snapshot is not None:
         result["preflight_snapshot"] = proposal_snapshot
+    answer = ai.answer_copilot(
+        body.message,
+        tool_name,
+        result,
+        history=history,
+    )
     return {
-        "message": _copilot_summary(tool_name, result),
+        "message": answer.message if answer else _copilot_summary(tool_name, result),
+        "answer_source": "gemini" if answer else "template_fallback",
         "planner": planner,
         "planner_model": ai.MODEL if planner == "gemini" else None,
         "planner_attempts": plan.attempts if planner == "gemini" and plan else None,

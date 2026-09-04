@@ -34,7 +34,7 @@ MODEL = (
 # effort 단계별 thinking 토큰 예산. "low"는 지연시간이 중요한 즉시 설명용,
 # "high"는 주간 리포트처럼 한 번에 길게 종합하는 작업용.
 _THINKING_BUDGET = {"instant": 0, "low": 1024, "medium": 4096, "high": 8192}
-_REQUEST_TIMEOUT_MS = {"instant": 12_000, "low": 20_000, "medium": 35_000, "high": 60_000}
+_REQUEST_TIMEOUT_MS = {"instant": 7_000, "low": 20_000, "medium": 35_000, "high": 60_000}
 _THINKING_LEVEL = {"instant": "minimal", "low": "low", "medium": "medium", "high": "high"}
 
 
@@ -96,6 +96,14 @@ class CopilotToolPlan(BaseModel):
     attempts: int = Field(default=1, ge=1, description="Gemini 계획 호출 시도 횟수")
 
 
+class CopilotAnswer(BaseModel):
+    message: str = Field(
+        min_length=1,
+        max_length=3000,
+        description="도구 결과에 근거해 사용자에게 직접 답하는 자연스러운 한국어 응답",
+    )
+
+
 class _GeminiCopilotToolPlan(BaseModel):
     """Gemini Developer API가 지원하는 고정 속성 응답 스키마.
 
@@ -121,9 +129,19 @@ class _GeminiCopilotToolPlan(BaseModel):
 # 공통 프롬프트
 # --------------------------------------------------------------------------
 
-_SYSTEM = """당신은 ThermoShift라는 실내 열환경 최적화 시스템의 분석 담당자입니다.
-소규모 사무실·스터디룸에 설치된 센서와 에어컨 제어 로그를 해석해,
-공간 관리자가 바로 이해할 수 있는 한국어로 설명합니다.
+_SYSTEM = """당신은 한이음 드림업 ThermoShift 프로젝트의 운영 코파일럿입니다.
+현재 검증 대상은 20×20×30cm 목업이며, 냉각 actuator는 펠티어 소자입니다.
+외란용 10W 히팅패드는 사람이 ON/OFF하고 문도 사람이 여닫습니다. 따라서
+현재 장치를 에어컨·압축기라고 부르거나 문과 히터를 직접 조작했다고 말하지 않습니다.
+
+ThermoShift의 목표는 특정 온도를 무조건 추종하는 것이 아니라, 재실자의
+열쾌적도와 소비전력을 함께 목적함수로 두고 최적화하는 것입니다. RC 열모델,
+CO₂·PIR 기반 재실/열부하 추정, PMV 기반 쾌적도, Economic MPC를 연결하되,
+현재 수집 데이터는 예비 목업 데이터라 검증 완료나 절감률을 주장하지 않습니다.
+실공간 확장은 제어 구조를 재사용하고 공간별 물리 파라미터를 다시 식별하는
+전략이며, 목업 파라미터를 1:1 이전한다고 설명하지 않습니다.
+
+센서와 제어 로그를 해석해 프로젝트 팀원이 바로 이해할 수 있는 한국어로 설명합니다.
 
 지켜야 할 것
 - 주어진 데이터에 있는 사실만 말합니다. 없는 수치를 지어내지 않습니다.
@@ -131,6 +149,8 @@ _SYSTEM = """당신은 ThermoShift라는 실내 열환경 최적화 시스템의
 - 전문 용어 대신 일상어를 씁니다. 'HMM 사후확률' 대신 '재실 추정'.
 - 데이터가 부족하면 부족하다고 말합니다. 억지로 결론짓지 않습니다.
 - 존댓말을 쓰되 간결하게 씁니다.
+- 사용자가 개념을 물으면 위 프로젝트 맥락을 바탕으로 답하되, 현재 상태 수치는
+  반드시 제공된 도구 결과만 사용합니다.
 
 제어 모드 참고
 - shadow: 판단만 하고 실제 에어컨 신호는 보내지 않는 관찰 모드입니다.
@@ -309,10 +329,13 @@ concerns 에 적어 주세요."""
 
 
 def plan_copilot_tool(
-    message: str, tool_definitions: tuple[dict, ...]
+    message: str,
+    tool_definitions: tuple[dict, ...],
+    history: tuple[dict, ...] = (),
 ) -> Optional[CopilotToolPlan]:
     """사용자 요청을 허용 도구 하나로 계획한다. 실제 도구 실행은 하지 않는다."""
     tools_json = json.dumps(tool_definitions, ensure_ascii=False)
+    history_json = json.dumps(history[-8:], ensure_ascii=False)
     prompt = f"""사용자의 ThermoShift 운영 요청을 처리할 도구 하나를 고르세요.
 허용 목록 밖의 이름은 절대 만들지 마세요. 냉난방 제어 요청은 실행 도구가 아니라
 propose_control_action, 실험 시작·중단 요청은 각각 propose_experiment_start와
@@ -323,6 +346,9 @@ get_experiment_readiness, 특정 run의 학습 적합성은 get_data_quality를 
 
 허용 도구:
 {tools_json}
+
+직전 대화(이전 맥락이 필요한 경우에만 참고):
+{history_json}
 
 사용자 요청:
 {message[:1000]}"""
@@ -358,4 +384,52 @@ get_experiment_readiness, 특정 run의 학습 적합성은 get_data_quality를 
             reason=reason,
             attempts=attempt,
         )
+    return None
+
+
+def answer_copilot(
+    message: str,
+    tool_name: str,
+    result: dict,
+    history: tuple[dict, ...] = (),
+) -> Optional[CopilotAnswer]:
+    """도구 결과를 근거로 자연스러운 최종 답변을 만든다."""
+    history_json = json.dumps(history[-8:], ensure_ascii=False)
+    result_json = json.dumps(result, ensure_ascii=False, default=str)
+    prompt = f"""사용자의 요청에 직접 답하세요. 내부 도구 실행은 이미 끝났으며,
+아래 결과가 현재 상태에 관한 유일한 사실 근거입니다.
+
+답변 규칙
+- 질문의 결론부터 친절하고 자연스러운 한국어로 답합니다.
+- 내부 도구명, JSON, planner 같은 구현 세부사항은 말하지 않습니다.
+- 측정값·시각·상태를 가능한 한 구체적으로 인용하되 없는 값은 추측하지 않습니다.
+- 목업 실험값과 실제 공간 성능, 시뮬레이션과 실증을 명확히 구분합니다.
+- 제어 제안은 아직 실행되지 않았고 사용자 승인이 필요하다고 명확히 말합니다.
+- 전력 실측값이 없으면 절감률을 만들어내지 않습니다.
+- 단순 조회는 2~4문장, 비교나 진단은 짧은 목록을 포함해도 좋습니다.
+- 이전 대화의 질문을 되묻는 표현(그 값, 왜, 그러면 등)은 직전 대화로 해석합니다.
+
+직전 대화:
+{history_json}
+
+현재 사용자 요청:
+{message[:1000]}
+
+조회 또는 계산 종류:
+{tool_name}
+
+실행 결과:
+{result_json[:12000]}"""
+    for attempt in range(2):
+        attempt_prompt = prompt
+        if attempt:
+            attempt_prompt += (
+                "\n\n이전 답변을 사용할 수 없었습니다. 위 사실만 사용해 짧고 "
+                "자연스러운 최종 답변을 다시 작성하세요."
+            )
+        answer = _call(
+            attempt_prompt, CopilotAnswer, effort="instant", max_tokens=1400
+        )
+        if answer is not None:
+            return answer
     return None

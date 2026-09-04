@@ -182,6 +182,54 @@ def test_Gemini가_허용되지_않은_도구를_고르면_재시도한다(monke
     assert plan.attempts == 2
 
 
+def test_도구_결과와_대화맥락으로_Gemini_최종답변을_만든다(monkeypatch):
+    captured = {}
+    expected = ai.CopilotAnswer(
+        message="현재 25.2°C이고 재실 상태입니다. 냉각은 아직 실행하지 않았습니다."
+    )
+
+    def fake_call(prompt, schema, **kwargs):
+        captured.update({"prompt": prompt, "schema": schema, **kwargs})
+        return expected
+
+    monkeypatch.setattr(ai, "_call", fake_call)
+    answer = ai.answer_copilot(
+        "그럼 지금 상태는 어때?",
+        "get_live_snapshot",
+        {"environment": {"temperature": 25.2}, "occupancy": {"occupancy_state": "occupied"}},
+        history=(
+            {"role": "user", "content": "센서 확인해줘"},
+            {"role": "assistant", "content": "확인해볼게요."},
+        ),
+    )
+
+    assert answer == expected
+    assert captured["schema"] is ai.CopilotAnswer
+    assert "25.2" in captured["prompt"]
+    assert "센서 확인해줘" in captured["prompt"]
+    assert captured["effort"] == "instant"
+
+
+def test_Gemini_최종답변도_일시실패하면_한번_재시도한다(monkeypatch):
+    calls = []
+    expected = ai.CopilotAnswer(message="현재 측정값을 기준으로 답변드립니다.")
+
+    def fake_call(*args, **kwargs):
+        calls.append((args, kwargs))
+        return None if len(calls) == 1 else expected
+
+    monkeypatch.setattr(ai, "_call", fake_call)
+    answer = ai.answer_copilot(
+        "현재 상태 알려줘",
+        "get_live_snapshot",
+        {"environment": {"temperature": 24.8}},
+    )
+
+    assert answer == expected
+    assert len(calls) == 2
+    assert "다시 작성하세요" in calls[1][0][0]
+
+
 def test_Gemini_JSON은_API_스키마_기능없이_서버에서_검증한다(monkeypatch):
     captured = {}
 

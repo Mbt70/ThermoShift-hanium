@@ -35,7 +35,7 @@ history_key = f"_copilot_history_{selected_id}"
 proposal_key = f"_copilot_proposal_{selected_id}"
 tracking_key = f"_copilot_command_tracking_{selected_id}"
 history_version_key = f"_copilot_history_version_{selected_id}"
-_HISTORY_VERSION = 2
+_HISTORY_VERSION = 3
 if st.session_state.get(history_version_key) != _HISTORY_VERSION:
     # 배포 전 실패 응답이 서버 세션에 남아 새 요청도 폴백처럼 보이지 않게
     # 응답 메타데이터 계약이 바뀔 때 한 번만 대화 기록을 초기화한다.
@@ -57,12 +57,26 @@ def _friendly_error(exc: ApiError) -> str:
 
 
 def ask(message: str) -> None:
+    conversation = [
+        {
+            "role": item["role"],
+            "content": str(item.get("content") or "")[:2000],
+        }
+        for item in st.session_state[history_key][-8:]
+        if item.get("role") in {"user", "assistant"}
+        and item.get("content")
+        and not item.get("error")
+    ]
     st.session_state[history_key].append({"role": "user", "content": message})
     try:
         with st.spinner("센서와 제어 기록을 확인하고 있어요…"):
             response = api_post(
                 "/ai/copilot/chat",
-                json={"room_id": room["id"], "message": message},
+                json={
+                    "room_id": room["id"],
+                    "message": message,
+                    "history": conversation,
+                },
                 timeout=35,
             )
     except ApiError as exc:
@@ -82,6 +96,7 @@ def ask(message: str) -> None:
         "planner": response.get("planner"),
         "planner_model": response.get("planner_model"),
         "planner_attempts": response.get("planner_attempts"),
+        "answer_source": response.get("answer_source"),
         "result": response.get("result"),
     })
     if response.get("action_proposal"):
@@ -375,7 +390,12 @@ with main_col:
                         if item.get("planner") == "gemini":
                             model = item.get("planner_model") or "Gemini"
                             retried = " · 재시도 성공" if item.get("planner_attempts", 1) > 1 else ""
-                            planner = f"{model}{retried}"
+                            answer_note = (
+                                " · 근거 기반 답변"
+                                if item.get("answer_source") == "gemini"
+                                else " · 답변 생성 실패로 요약 복구"
+                            )
+                            planner = f"{model}{retried}{answer_note}"
                         elif item.get("planner") == "deterministic_fallback":
                             planner = "Gemini 연결 실패 · 안전 규칙으로 복구"
                         else:
