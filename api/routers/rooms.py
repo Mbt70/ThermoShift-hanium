@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from api.db import get_conn
 from api.security import get_current_user_id, require_room_owner
+from api.services.power_estimation import calculate_power_snapshot
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -196,7 +197,9 @@ def get_room_latest(room_id: int,
                 door.door_state,
                 door.measured_at AS door_measured_at,
                 pir.motion,
-                pir.measured_at AS pir_measured_at
+                pir.measured_at AS pir_measured_at,
+                actuator.cooling_state,
+                actuator.measured_at AS actuator_measured_at
             FROM rooms r
             LEFT JOIN LATERAL (
                 SELECT se.temperature, se.humidity, se.co2, se.measured_at
@@ -237,6 +240,22 @@ def get_room_latest(room_id: int,
                 ORDER BY sp.measured_at DESC
                 LIMIT 1
             ) pir ON true
+            LEFT JOIN LATERAL (
+                SELECT
+                    CASE
+                        WHEN ie.code_hash = 'COOLING_ON' THEN 'ON'
+                        WHEN ie.code_hash = 'COOLING_OFF' THEN 'OFF'
+                        ELSE NULL
+                    END AS cooling_state,
+                    ie.occurred_at AS measured_at
+                FROM ir_events ie
+                WHERE ie.room_id = r.room_id
+                  AND ie.direction = 'rx'
+                  AND ie.source = 'device_state_ack'
+                  AND ie.code_hash IN ('COOLING_ON', 'COOLING_OFF')
+                ORDER BY ie.occurred_at DESC
+                LIMIT 1
+            ) actuator ON true
             WHERE r.room_id = %s
             """,
             (room_id,),
@@ -246,6 +265,12 @@ def get_room_latest(room_id: int,
     if row is None:
         raise HTTPException(status_code=404, detail="room not found")
 
+    power = calculate_power_snapshot(
+        measured_power_w=row["power_w"],
+        measured_at=row["power_measured_at"],
+        cooling_state=row["cooling_state"],
+        cooling_state_at=row["actuator_measured_at"],
+    )
     return {
         "room_id": row["room_id"],
         "target_temp": row["target_temp"],
@@ -257,9 +282,10 @@ def get_room_latest(room_id: int,
             "co2": row["co2"],
             "measured_at": row["env_measured_at"],
         },
-        "power": {
-            "power_w": row["power_w"],
-            "measured_at": row["power_measured_at"],
+        "power": power,
+        "actuator": {
+            "cooling_state": power["cooling_state"],
+            "measured_at": power["state_measured_at"],
         },
         "occupancy": {
             "occupancy_state": row["occupancy_state"],

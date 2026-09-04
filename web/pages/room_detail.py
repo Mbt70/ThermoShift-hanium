@@ -12,7 +12,9 @@ if str(_REPOSITORY_ROOT) not in sys.path:
 
 from app.components.room_store import (
     environment_snapshot,
+    issue_cooling_command,
     list_rooms,
+    set_control_mode,
     set_target_temperature,
     system_judgment,
     trend_series,
@@ -26,10 +28,11 @@ from app.components.schedule_store import (
     schedule_status,
     update_schedule,
 )
-from components.auth_store import current_user_id, is_logged_in
+from components.auth_store import current_user_id, is_demo_session, is_logged_in
 from components.dash_shell import render_sidebar
 from components.mobile_ui import apply_mobile_styles, icon_data_uri
 from ml.comfort_model import calculate_pmv
+from shared.api_client import ApiError
 
 _KPI_ICON_FILES = {
     "temp": "temperture.svg",
@@ -381,6 +384,7 @@ with main_col:
             co2_display = f"{co2_val:.0f}" if co2_val is not None else "--"
             humidity_display = f"{humidity_val:.0f}" if humidity_val is not None else "--"
             power_display = f"{power_val:.1f}" if power_val is not None else "--"
+            power_estimated = bool(snapshot.get("power_estimated"))
             co2_ok = co2_val is not None and co2_val < 700
             door_val = snapshot.get("door_state")
             motion_val = snapshot.get("motion")
@@ -434,11 +438,17 @@ with main_col:
                 ),
                 (
                     "power",
-                    "HVAC 전력",
+                    "냉각 전력",
                     power_display,
                     "kW",
                     "is-positive" if power_val is not None else "",
-                    f"{_CHECK_ICON}전력 센서 실측" if power_val is not None else "전력 센서 미연동",
+                    (
+                        f"{_CHECK_ICON}[EST] 릴레이×정격 계산"
+                        if power_estimated
+                        else f"{_CHECK_ICON}전력 센서 실측"
+                        if power_val is not None
+                        else "전력 산출 불가"
+                    ),
                 ),
             ]
             kpi_cols = st.columns(6, gap="small")
@@ -523,12 +533,15 @@ with main_col:
                 with st.container(key="ts_room_manual_card", border=True):
                     st.markdown(
                         f'<p class="ts-dash-card-title">'
-                        f'<img class="ts-dash-kpi-icon" src="{icon_data_uri("snow.svg")}" alt="" />에어컨 수동 제어</p>',
+                        f'<img class="ts-dash-kpi-icon" src="{icon_data_uri("snow.svg")}" alt="" />펠티어 수동 제어</p>',
                         unsafe_allow_html=True,
                     )
                     minus_col, value_col, plus_col = st.columns([1, 2, 1], vertical_alignment="center")
                     with minus_col:
-                        if st.button("−", key="dash_target_minus", width="stretch"):
+                        if st.button(
+                            "−", key="dash_target_minus", width="stretch",
+                            disabled=is_demo_session(),
+                        ):
                             set_target_temperature(current_r["id"], max(16, current_r["target_temperature"] - 1))
                             st.rerun()
                     with value_col:
@@ -540,13 +553,50 @@ with main_col:
                             unsafe_allow_html=True,
                         )
                     with plus_col:
-                        if st.button("+", key="dash_target_plus", width="stretch"):
+                        if st.button(
+                            "+", key="dash_target_plus", width="stretch",
+                            disabled=is_demo_session(),
+                        ):
                             set_target_temperature(current_r["id"], min(30, current_r["target_temperature"] + 1))
                             st.rerun()
                     st.markdown(
                         '<p class="ts-room-manual-note">수동 제어는 자동 제어보다 항상 우선 실행됩니다</p>',
                         unsafe_allow_html=True,
                     )
+                    on_col, off_col = st.columns(2, gap="small")
+                    direct_request = None
+                    with on_col:
+                        if st.button(
+                            "펠티어 ON",
+                            key="dash_room_peltier_on",
+                            type="primary",
+                            width="stretch",
+                            disabled=is_demo_session(),
+                        ):
+                            direct_request = True
+                    with off_col:
+                        if st.button(
+                            "펠티어 OFF",
+                            key="dash_room_peltier_off",
+                            width="stretch",
+                            disabled=is_demo_session(),
+                        ):
+                            direct_request = False
+                    if direct_request is not None:
+                        try:
+                            set_control_mode(current_r["id"], "manual")
+                            command = issue_cooling_command(
+                                current_r["id"], direct_request
+                            )
+                            st.session_state["_dash_tracked_command_id"] = command[
+                                "command_id"
+                            ]
+                            st.toast("실제 장치 명령을 등록했습니다", icon="⚡")
+                            st.rerun(scope="fragment")
+                        except ApiError as exc:
+                            st.error(f"제어 실패: {exc.message}")
+                    if is_demo_session():
+                        st.caption("실제 제어는 운영자 계정에서 활성화됩니다.")
 
                 with st.container(key="ts_room_ai_card", border=True):
                     st.markdown(
@@ -570,7 +620,7 @@ with main_col:
             with st.container(key="ts_dash_summary_card", border=True):
                 st.markdown('<p class="ts-dash-card-title">현재 상태 요약</p>', unsafe_allow_html=True)
                 summary_items = [
-                    ("power", "순간 HVAC 전력", f"{power_val:.1f}kW" if power_val is not None else "--"),
+                    ("power", "순간 냉각 전력", f"{power_val:.2f}kW" if power_val is not None else "--"),
                     ("temp", "현재 온도", f"{temp_display}°C" if temp_val is not None else "--"),
                     ("co2", "현재 CO₂", f"{co2_display}ppm" if co2_val is not None else "--"),
                     ("occupancy", "현재 재실 상태", "재실" if current_r.get("occupied") else "공실"),

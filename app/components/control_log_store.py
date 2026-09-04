@@ -17,8 +17,8 @@ _METHOD_DB_TO_UI = {"mpc": "predict"}
 _METHOD_UI_TO_DB = {"predict": "mpc"}
 
 _COMMAND_LABELS = {
-    "power_on": "에어컨 켜기",
-    "power_off": "에어컨 끄기",
+    "power_on": "펠티어 켜기",
+    "power_off": "펠티어 끄기",
     "set_temp": "온도 설정",
     "set_mode": "모드 변경",
     "set_fan": "풍량 설정",

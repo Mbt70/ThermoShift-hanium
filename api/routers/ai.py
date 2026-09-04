@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from api.db import get_conn
 from api.services import ai, copilot_tools
+from api.services.power_estimation import calculate_power_snapshot
 from api.security import get_current_user_id, require_owned_resource, require_room_owner
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -605,11 +606,28 @@ def _run_database_copilot_tool(
                 (room_id,),
             )
             command = cur.fetchone()
+            cur.execute(
+                "SELECT CASE WHEN code_hash='COOLING_ON' THEN 'ON'"
+                " WHEN code_hash='COOLING_OFF' THEN 'OFF' END AS cooling_state,"
+                " occurred_at FROM ir_events WHERE room_id=%s"
+                " AND direction='rx' AND source='device_state_ack'"
+                " AND code_hash IN ('COOLING_ON','COOLING_OFF')"
+                " ORDER BY occurred_at DESC LIMIT 1",
+                (room_id,),
+            )
+            actuator = cur.fetchone()
+            power_snapshot = calculate_power_snapshot(
+                measured_power_w=power["power_w"] if power else None,
+                measured_at=power["measured_at"] if power else None,
+                cooling_state=actuator["cooling_state"] if actuator else None,
+                cooling_state_at=actuator["occurred_at"] if actuator else None,
+            )
             return {
                 "scope": "MEASURED_LATEST",
                 "room": dict(room) if room else None,
                 "environment": dict(env) if env else None,
-                "power": dict(power) if power else None,
+                "power": power_snapshot,
+                "actuator": dict(actuator) if actuator else None,
                 "occupancy": dict(occupancy) if occupancy else None,
                 "door": dict(door) if door else None,
                 "pir": dict(pir) if pir else None,

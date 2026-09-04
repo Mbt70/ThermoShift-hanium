@@ -11,15 +11,17 @@ if str(_REPOSITORY_ROOT) not in sys.path:
 from app.components.control_log_store import list_logs
 from app.components.room_store import (
     environment_snapshot,
+    issue_cooling_command,
     list_rooms,
     set_control_mode,
     system_judgment,
 )
-from components.auth_store import current_user_id, is_logged_in
+from components.auth_store import current_user_id, is_demo_session, is_logged_in
 from components.dash_shell import render_sidebar
 from components.mobile_ui import apply_mobile_styles, icon_data_uri, recolored_icon_data_uri
 from ml.comfort_model import calculate_pmv
 from ml.scaling import scale_parameters, MOCKUP_DOMAIN, REAL_OFFICE_DOMAIN
+from shared.api_client import ApiError
 
 _CONTROL_MODES = (
     ("monitoring", "모니터링", "monitoring.svg"),
@@ -133,7 +135,9 @@ with main_col:
             # 인원 계수기와 전일 기준선이 아직 없는데 임의 숫자를 만들면
             # 실시간 실측처럼 보인다. 현재 확인 가능한 재실 공간 수와 실제
             # 전력 센서 합계만 보여준다.
-            measured_power = bool(powers)
+            power_available = bool(powers)
+            estimated_power = any(s.get("power_estimated") for s in snapshots.values())
+            measured_power = power_available and not estimated_power
 
             co2_ok = avg_co2 < 700
             kpi_items = [
@@ -150,11 +154,17 @@ with main_col:
                 ("humidity", "습도", f"{avg_humidity:.0f}", "%", "is-positive", f"{_CHECK_ICON}적정"),
                 (
                     "power",
-                    "총 HVAC 전력",
-                    f"{total_power:.1f}" if measured_power else "--",
+                    "총 냉각 전력",
+                    f"{total_power:.2f}" if power_available else "--",
                     "kW",
-                    "is-positive" if measured_power else "",
-                    f"{_CHECK_ICON}전력 센서 합계" if measured_power else "전력 센서 미연동",
+                    "is-positive" if power_available else "",
+                    (
+                        f"{_CHECK_ICON}[EST] 릴레이×정격 계산"
+                        if estimated_power
+                        else f"{_CHECK_ICON}전력 센서 실측"
+                        if measured_power
+                        else "전력 산출 불가"
+                    ),
                 ),
             ]
             kpi_cols = st.columns(5, gap="small")
@@ -302,7 +312,7 @@ with main_col:
                         )
                         logs_today = list_logs(current_r["id"], date.today())
                         latest_log = logs_today[-1] if logs_today else None
-                        aircon_state = "AC ON" if current_r.get("aircon_on") else "AC OFF"
+                        aircon_state = "펠티어 ON" if current_r.get("aircon_on") else "펠티어 OFF"
                         latest_text = (
                             f'{latest_log["timestamp"].hour}:{latest_log["timestamp"].minute:02d} {latest_log["content"]}'
                             if latest_log
@@ -310,7 +320,7 @@ with main_col:
                         )
                         verify_text = "성공" if (latest_log is None or latest_log.get("success", True)) else "실패"
                         rows = [
-                            ("AC 상태", aircon_state, f'설정 {current_r.get("target_temperature", 24)}°C'),
+                            ("냉각 상태", aircon_state, f'제어 기준 {current_r.get("target_temperature", 24)}°C'),
                             ("최근 명령", latest_text, ""),
                             ("검증 결과", verify_text, ""),
                         ]
@@ -346,11 +356,48 @@ with main_col:
                                         """,
                                         unsafe_allow_html=True,
                                     )
-                                    if st.button(mode_label, key=f"dash_mode_btn_{mode_id}", width="stretch"):
+                                    if st.button(
+                                        mode_label,
+                                        key=f"dash_mode_btn_{mode_id}",
+                                        width="stretch",
+                                        disabled=is_demo_session(),
+                                    ):
                                         clicked_mode = mode_id
                         if clicked_mode and clicked_mode != current_mode:
                             set_control_mode(current_r["id"], clicked_mode)
                             st.rerun()
+                        direct_on, direct_off = st.columns(2, gap="small")
+                        direct_request = None
+                        with direct_on:
+                            if st.button(
+                                "펠티어 ON",
+                                key="twin_peltier_on",
+                                type="primary",
+                                width="stretch",
+                                disabled=is_demo_session(),
+                            ):
+                                direct_request = True
+                        with direct_off:
+                            if st.button(
+                                "펠티어 OFF",
+                                key="twin_peltier_off",
+                                width="stretch",
+                                disabled=is_demo_session(),
+                            ):
+                                direct_request = False
+                        if direct_request is not None:
+                            try:
+                                set_control_mode(current_r["id"], "manual")
+                                command = issue_cooling_command(
+                                    current_r["id"], direct_request
+                                )
+                                st.session_state["_dash_tracked_command_id"] = command[
+                                    "command_id"
+                                ]
+                                st.toast("실제 장치 명령을 등록했습니다", icon="⚡")
+                                st.rerun(scope="fragment")
+                            except ApiError as exc:
+                                st.error(f"제어 실패: {exc.message}")
 
             pmv_values = [
                 calculate_pmv(float(s["temperature"]), float(s["humidity"])).pmv
@@ -362,7 +409,7 @@ with main_col:
             with st.container(key="ts_dash_summary_card", border=True):
                 st.markdown('<p class="ts-dash-card-title">현재 상태 요약</p>', unsafe_allow_html=True)
                 summary_items = [
-                    ("power", "순간 HVAC 전력", f"{total_power:.1f}kW" if measured_power else "--"),
+                    ("power", "순간 냉각 전력", f"{total_power:.2f}kW" if power_available else "--"),
                     ("temp", "현재 평균 온도", f"{avg_temp:.1f}°C" if temps else "--"),
                     ("co2", "현재 평균 CO₂", f"{avg_co2:.0f}ppm" if co2s else "--"),
                     ("occupancy", "현재 공간 사용률", f"{occupancy_rate}%"),

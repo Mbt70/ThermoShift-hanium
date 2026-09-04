@@ -27,14 +27,26 @@ def _with_latest(room: dict) -> dict:
     occupancy = latest.get("occupancy") or {}
     door = latest.get("door") or {}
     pir = latest.get("pir") or {}
+    actuator = latest.get("actuator") or {}
     power_w = power.get("power_w")
     room["temperature"] = env.get("temperature")
     room["humidity"] = env.get("humidity")
     room["co2"] = env.get("co2")
     room["power"] = power_w
+    room["power_source"] = power.get("source") or "unavailable"
+    room["power_is_estimated"] = bool(power.get("estimated"))
+    room["power_basis"] = power.get("basis")
+    room["power_limitations"] = power.get("limitations")
     room["occupied"] = occupancy.get("occupancy_state") == "occupied"
     room["occupancy_count"] = occupancy.get("estimated_count")
-    room["aircon_on"] = bool(power_w and power_w >= _AC_ON_POWER_THRESHOLD_W)
+    cooling_state = actuator.get("cooling_state") or power.get("cooling_state")
+    room["cooling_state"] = cooling_state or "UNKNOWN"
+    room["cooling_state_at"] = actuator.get("measured_at") or power.get("state_measured_at")
+    room["aircon_on"] = (
+        cooling_state == "ON"
+        if cooling_state in {"ON", "OFF"}
+        else bool(power_w and power_w >= _AC_ON_POWER_THRESHOLD_W)
+    )
     room["door_state"] = door.get("door_state")
     room["motion"] = pir.get("motion")
     room["sensor_connected"] = env.get("measured_at") is not None
@@ -187,6 +199,13 @@ def environment_snapshot(room: dict) -> dict:
         "humidity": room.get("humidity"),
         "co2": room.get("co2"),
         "power": round(room["power"] / 1000, 2) if room.get("power") is not None else None,
+        "power_w": room.get("power"),
+        "power_source": room.get("power_source", "unavailable"),
+        "power_estimated": bool(room.get("power_is_estimated")),
+        "power_basis": room.get("power_basis"),
+        "power_limitations": room.get("power_limitations"),
+        "cooling_state": room.get("cooling_state", "UNKNOWN"),
+        "cooling_state_at": room.get("cooling_state_at"),
         "door_state": room.get("door_state"),
         "motion": room.get("motion"),
     }
@@ -215,6 +234,22 @@ def set_target_temperature(room_id: int, target_temperature: int) -> None:
 def set_control_mode(room_id: int, control_mode: str) -> None:
     db_mode = _MODE_UI_TO_DB.get(control_mode, control_mode)
     api_patch(f"/rooms/{room_id}/control-mode", json={"control_mode": db_mode})
+
+
+def issue_cooling_command(room_id: int, turn_on: bool) -> dict:
+    """대시보드 수동 제어를 기존 단일 명령 큐에 넣는다."""
+    return api_post(
+        f"/rooms/{room_id}/commands",
+        json={
+            "command_type": "power_on" if turn_on else "power_off",
+            "control_mode": "manual",
+            "payload": {"source": "dashboard_direct_control"},
+        },
+    )
+
+
+def get_control_command(command_id: int) -> dict | None:
+    return api_get(f"/commands/{command_id}", ignore_404=True)
 
 
 def update_room(room_id: int, *, name: str, location: str, floor_plan_name: str | None) -> None:

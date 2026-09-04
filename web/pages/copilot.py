@@ -135,6 +135,7 @@ def render_live_context() -> None:
     last_command = snapshot.get("last_command") or {}
     room_state = snapshot.get("room") or {}
     command_status = last_command.get("command_status") or "기록 없음"
+    power_label = "전력 [EST]" if power.get("estimated") else "전력"
     st.markdown(
         f"""
         <div class="ts-copilot-live"><span></span>실시간 연동 · 10초</div>
@@ -144,7 +145,7 @@ def render_live_context() -> None:
           <div><small>CO₂</small><strong>{_value(env.get('co2'), ' ppm', 0)}</strong></div>
           <div><small>재실</small><strong>{html.escape(str(occupancy.get('occupancy_state') or '—'))}</strong></div>
           <div><small>문</small><strong>{html.escape(str(door.get('door_state') or '—'))}</strong></div>
-          <div><small>전력</small><strong>{_value(power.get('power_w'), ' W')}</strong></div>
+          <div><small>{power_label}</small><strong>{_value(power.get('power_w'), ' W')}</strong></div>
         </div>
         <div class="ts-copilot-last-command">
           <span>모드 {html.escape(str(room_state.get('control_mode') or '—'))}</span>
