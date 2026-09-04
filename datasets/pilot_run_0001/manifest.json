@@ -239,6 +239,13 @@
       "co2_delta": -12.0
     }
   ],
+  "derived_files": {
+    "model_timeline_30s.csv": {
+      "rows": 40,
+      "purpose": "pipeline/training candidate with command and verification flags",
+      "training_eligible_rows": 0
+    }
+  },
   "limitations": [
     "20-minute pipeline pilot is too short for final RC/PINN identification.",
     "No electrical power readings were captured; energy optimization cannot be validated.",
