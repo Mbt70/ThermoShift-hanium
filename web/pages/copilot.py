@@ -77,7 +77,7 @@ def ask(message: str) -> None:
                     "message": message,
                     "history": conversation,
                 },
-                timeout=35,
+                timeout=50,
             )
     except ApiError as exc:
         st.session_state[history_key].append({

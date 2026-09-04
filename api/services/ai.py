@@ -34,7 +34,7 @@ MODEL = (
 # effort 단계별 thinking 토큰 예산. "low"는 지연시간이 중요한 즉시 설명용,
 # "high"는 주간 리포트처럼 한 번에 길게 종합하는 작업용.
 _THINKING_BUDGET = {"instant": 0, "low": 1024, "medium": 4096, "high": 8192}
-_REQUEST_TIMEOUT_MS = {"instant": 7_000, "low": 20_000, "medium": 35_000, "high": 60_000}
+_REQUEST_TIMEOUT_MS = {"instant": 12_000, "low": 20_000, "medium": 35_000, "high": 60_000}
 _THINKING_LEVEL = {"instant": "minimal", "low": "low", "medium": "medium", "high": "high"}
 
 
