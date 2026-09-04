@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 
 from api.routers.ai import _fallback_copilot_plan
 from api.services import ai, copilot_tools
@@ -137,3 +138,31 @@ def test_Gemini_고정_응답을_내부_도구_인자로_변환한다(monkeypatc
     assert plan is not None
     assert plan.tool_name == "get_data_quality"
     assert plan.arguments == {"run_id": 7}
+
+
+def test_Gemini_JSON은_API_스키마_기능없이_서버에서_검증한다(monkeypatch):
+    captured = {}
+
+    class Models:
+        @staticmethod
+        def generate_content(**kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                candidates=[SimpleNamespace(finish_reason="STOP")],
+                prompt_feedback=None,
+                text=(
+                    '{"tool_name":"get_live_snapshot",'
+                    '"selection_reason":"현재 상태 조회"}'
+                ),
+            )
+
+    monkeypatch.setattr(ai, "is_available", lambda: True)
+    monkeypatch.setattr(ai, "_get_client", lambda: SimpleNamespace(models=Models()))
+    monkeypatch.setattr(ai, "MODEL", "gemini-3.5-flash-lite")
+
+    result = ai._call("상태를 확인해줘", ai._GeminiCopilotToolPlan, effort="instant")
+
+    assert result.tool_name == "get_live_snapshot"
+    assert captured["config"].response_schema is None
+    assert captured["config"].automatic_function_calling.disable is True
+    assert "JSON Schema" in captured["contents"]

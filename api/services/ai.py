@@ -21,13 +21,21 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-# 기본 모델. 필요하면 THERMOSHIFT_AI_MODEL 로 바꾼다.
-MODEL = os.environ.get("THERMOSHIFT_AI_MODEL", "gemini-flash-lite-latest")
+# 기본 모델. 필요하면 THERMOSHIFT_AI_MODEL 로 바꾼다. 예전 배포 파일의
+# `gemini-flash-lite-latest`는 세대가 바뀌는 별칭이라 2026-09 현재 구조화
+# 응답에서 지연/호환 문제가 확인됐다. 그 값만 안정 고정 버전으로 이관한다.
+_CONFIGURED_MODEL = os.environ.get("THERMOSHIFT_AI_MODEL", "gemini-3.5-flash-lite")
+MODEL = (
+    "gemini-3.5-flash-lite"
+    if _CONFIGURED_MODEL == "gemini-flash-lite-latest"
+    else _CONFIGURED_MODEL
+)
 
 # effort 단계별 thinking 토큰 예산. "low"는 지연시간이 중요한 즉시 설명용,
 # "high"는 주간 리포트처럼 한 번에 길게 종합하는 작업용.
 _THINKING_BUDGET = {"instant": 0, "low": 1024, "medium": 4096, "high": 8192}
 _REQUEST_TIMEOUT_MS = {"instant": 12_000, "low": 20_000, "medium": 35_000, "high": 60_000}
+_THINKING_LEVEL = {"instant": "minimal", "low": "low", "medium": "medium", "high": "high"}
 
 
 def _load_sdk():
@@ -166,24 +174,33 @@ def _call(prompt: str, schema, effort: str = "medium", max_tokens: int = 4000):
     try:
         from google.genai import types  # noqa: PLC0415
 
+        if MODEL.startswith("gemini-3"):
+            thinking = types.ThinkingConfig(
+                thinking_level=_THINKING_LEVEL.get(effort, "medium")
+            )
+        else:
+            thinking = types.ThinkingConfig(
+                thinking_budget=_THINKING_BUDGET.get(effort, 4096)
+            )
+        schema_json = json.dumps(schema.model_json_schema(), ensure_ascii=False)
+        structured_prompt = (
+            f"{prompt}\n\n반드시 아래 JSON Schema를 만족하는 JSON 객체만 반환하세요. "
+            f"마크다운 코드 블록은 쓰지 마세요.\n{schema_json}"
+        )
         response = _get_client().models.generate_content(
             model=MODEL,
-            contents=prompt,
+            contents=structured_prompt,
             config=types.GenerateContentConfig(
                 system_instruction=_SYSTEM,
-                temperature=0,
                 max_output_tokens=max_tokens,
                 response_mime_type="application/json",
-                response_schema=schema,
                 http_options=types.HttpOptions(
                     timeout=_REQUEST_TIMEOUT_MS.get(effort, 35_000)
                 ),
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(
                     disable=True
                 ),
-                thinking_config=types.ThinkingConfig(
-                    thinking_budget=_THINKING_BUDGET.get(effort, 4096)
-                ),
+                thinking_config=thinking,
             ),
         )
     except Exception:
@@ -195,7 +212,11 @@ def _call(prompt: str, schema, effort: str = "medium", max_tokens: int = 4000):
     if not candidates or candidates[0].finish_reason not in ("STOP", None):
         logger.warning("Gemini가 응답을 완료하지 못했습니다: %s", response.prompt_feedback)
         return None
-    return response.parsed
+    try:
+        return schema.model_validate_json(response.text or "")
+    except (TypeError, ValueError):
+        logger.exception("Gemini JSON 응답이 기대한 스키마와 맞지 않습니다")
+        return None
 
 
 # --------------------------------------------------------------------------
