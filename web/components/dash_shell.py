@@ -12,6 +12,7 @@ _NAV_SECTIONS = (
         "운영",
         (
             ("dashboard", "대시보드", "home.svg", "pages/home.py"),
+            ("copilot", "AI 코파일럿", "predictive.svg", "pages/copilot.py"),
             ("room_detail", "공간 상세", "meeting_room.svg", "pages/room_detail.py"),
             ("digital_twin", "디지털 트윈·3D", "deployed_code.svg", "pages/digital_twin.py"),
         ),

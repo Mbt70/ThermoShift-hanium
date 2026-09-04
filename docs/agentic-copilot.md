@@ -18,14 +18,21 @@
 
 ## 도구 범위
 
-초기 버전은 다음 읽기 전용 도구만 제공한다.
+초기 버전은 다음 도구를 제공한다. 구현은 `api/services/copilot_tools.py`,
+API 진입점은 `POST /ai/copilot/chat`과
+`POST /ai/copilot/tools/{tool_name}`이다.
 
 1. `get_live_snapshot(room_id)` — 최신 센서값, 수신 시각, 품질 플래그
-2. `get_data_quality(run_id)` — 누락률, 간격, 온도 변화폭, 액추에이터 ACK
-3. `get_model_status()` — 가정값/교정값 여부, 검증 지표와 학습 run
-4. `simulate_mpc(scenario)` — 장치를 건드리지 않는 what-if 비교
-5. `get_experiment_readiness()` — 전원·센서·저장공간·모드 체크리스트
-6. `explain_decision(decision_id)` — 저장된 결정과 수치에 근거한 설명
+2. `get_recent_decisions(room_id)` — 최근 판단과 저장된 근거
+3. `get_experiment_status(room_id)` — 최근 실험 run과 메타데이터
+4. `get_model_status()` — 가정값/교정값 여부와 물리 파라미터
+5. `simulate_mpc(scenario)` — 장치를 건드리지 않는 what-if 비교
+6. `propose_control_action(room_id, action)` — 실행하지 않는 승인 카드
+
+후속 도구는 `get_data_quality(run_id)`와
+`get_experiment_readiness()`다. Gemini가 사용 가능하면 자연어를 구조화된 도구
+인자로 계획하고, 사용할 수 없으면 결정론적 한국어 라우터로 폴백한다.
+인자 없는 MPC 요청은 최신 센서 조회와 시뮬레이션을 연쇄 실행한다.
 
 이 정도만으로도 “왜 꺼졌나?”, “내일 실험해도 되나?”, “이 run을 학습에
 써도 되나?”, “쾌적도 가중치를 바꾸면 어떤 차이가 나나?”에 답할 수 있다.
@@ -35,15 +42,19 @@
 챗봇이 장치 변경을 제안할 수는 있지만 직접 MQTT를 발행하거나 DB를 임의
 수정하지 않는다. 변경은 반드시 아래 순서를 따른다.
 
-1. 챗봇이 구조화된 `ActionProposal`을 만든다.
+1. 챗봇이 구조화된 `ActionProposal`을 만든다(현재 구현).
 2. API가 허용 목록, 값 범위, 현재 안전 상태를 결정론적으로 검사한다.
 3. 화면에 대상·변경값·지속시간·자동 복구값을 보여준다.
-4. 로그인한 운영자가 일회성 승인 토큰으로 승인한다.
+4. 로그인한 운영자가 화면 확인 체크와 승인 버튼으로 기존 제어 API에 요청한다.
 5. gateway가 실행하고 명령/ACK/실패/복구를 감사 로그에 남긴다.
 
 허용 가능한 첫 변경은 `shadow 실험 시작`, `실험 중단`, `강제 OFF`처럼
 복구가 명확한 것부터 시작한다. 자동 모델 승격, 안전 임계값 변경, 무인 히터
 ON, 장시간 액추에이터 ON은 허용하지 않는다. 데모 세션은 항상 읽기 전용이다.
+
+대시보드의 `AI 코파일럿` 화면은 조회 결과의 원본 근거와 사용한 도구를 함께
+표시한다. 제어 요청은 즉시 실행되지 않고 승인 카드가 되며, 승인 후에도 API의
+소유권 검사와 gateway의 모드·lockout·rate-limit 검사가 최종 권한을 가진다.
 
 ## 모델과 프롬프트의 경계
 

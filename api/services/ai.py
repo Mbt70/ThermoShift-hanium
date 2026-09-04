@@ -14,6 +14,7 @@ ERROR_CATALOG 로 폴백한다. 키 없이도 시스템 전체가 동작해야 �
 
 import logging
 import os
+import json
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -77,6 +78,12 @@ class WeeklyReport(BaseModel):
     highlights: list[str] = Field(description="잘 된 점 2~4개")
     concerns: list[str] = Field(description="문제가 된 점 2~4개")
     recommendations: list[str] = Field(description="다음 기간에 할 일 2~4개")
+
+
+class CopilotToolPlan(BaseModel):
+    tool_name: str = Field(description="허용된 도구 이름 하나")
+    arguments: dict = Field(default_factory=dict, description="도구에 전달할 구조화 인자")
+    reason: str = Field(description="이 도구를 고른 이유 한 문장")
 
 
 # --------------------------------------------------------------------------
@@ -248,3 +255,22 @@ def weekly_report(stats: dict) -> Optional[WeeklyReport]:
 데이터는 없습니다. 에너지 절감률을 추정하지 말고, 측정이 필요하다는 점을
 concerns 에 적어 주세요."""
     return _call(prompt, WeeklyReport, effort="high", max_tokens=8000)
+
+
+def plan_copilot_tool(
+    message: str, tool_definitions: tuple[dict, ...]
+) -> Optional[CopilotToolPlan]:
+    """사용자 요청을 허용 도구 하나로 계획한다. 실제 도구 실행은 하지 않는다."""
+    tools_json = json.dumps(tool_definitions, ensure_ascii=False)
+    prompt = f"""사용자의 ThermoShift 운영 요청을 처리할 도구 하나를 고르세요.
+허용 목록 밖의 이름은 절대 만들지 말고, 장치 제어 요청은 실행 도구가 아니라
+propose_control_action만 선택하세요. '왜 껐어?'처럼 과거 이유를 묻는 질문은
+제어 제안이 아니라 get_recent_decisions입니다. 정보가 부족한 일반 질문은
+get_live_snapshot을 선택하세요.
+
+허용 도구:
+{tools_json}
+
+사용자 요청:
+{message[:1000]}"""
+    return _call(prompt, CopilotToolPlan, effort="low", max_tokens=1500)
