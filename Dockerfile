@@ -1,7 +1,7 @@
 # ThermoShift API 컨테이너 (EC2 배포용)
 #
-# api/ 는 저장소 루트 requirements.txt 의 fastapi/uvicorn/psycopg 등만 쓰고
-# web/ · gateway/ · ml/ 어느 것도 import 하지 않으므로 api/ 만 복사한다.
+# API의 코파일럿 MPC 시뮬레이션이 ml/의 순수 계산 모듈을 사용한다. 전체
+# ml/에는 대형 실험 CSV가 있으므로 런타임에 필요한 네 파일만 복사한다.
 #
 # 로컬 개발 venv(.venv/pyvenv.cfg)와 동일한 Python 3.13 을 쓴다.
 # requirements.txt 가 고정한 버전들(numpy/pandas/pyarrow 등)이 그 venv
@@ -17,6 +17,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api/ ./api/
+COPY ml/__init__.py ml/comfort_model.py ml/mpc_controller.py ml/thermal_model.py ./ml/
 
 EXPOSE 8000
 
