@@ -214,11 +214,22 @@ def copilot_chat(
             "p_occupied": float(occ.get("probability") or 0.0),
         })
 
+    # 실제 제어 제안에는 제안 시점의 측정 근거를 함께 고정한다. 승인 화면이
+    # 현재 상태를 다시 조회해 숫자가 바뀌면 제안 근거와 승인 대상이 섞인다.
+    proposal_snapshot = None
+    if tool_name == "propose_control_action":
+        proposal_snapshot = _run_database_copilot_tool(
+            "get_live_snapshot", body.room_id, {}
+        )
+        tools_used.append("get_live_snapshot")
+
     try:
         result = _execute_copilot_tool(tool_name, body.room_id, arguments)
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     tools_used.append(tool_name)
+    if proposal_snapshot is not None:
+        result["preflight_snapshot"] = proposal_snapshot
     return {
         "message": _copilot_summary(tool_name, result),
         "planner": planner,

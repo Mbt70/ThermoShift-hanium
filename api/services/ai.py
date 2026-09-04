@@ -26,7 +26,8 @@ MODEL = os.environ.get("THERMOSHIFT_AI_MODEL", "gemini-flash-lite-latest")
 
 # effort 단계별 thinking 토큰 예산. "low"는 지연시간이 중요한 즉시 설명용,
 # "high"는 주간 리포트처럼 한 번에 길게 종합하는 작업용.
-_THINKING_BUDGET = {"low": 1024, "medium": 4096, "high": 8192}
+_THINKING_BUDGET = {"instant": 0, "low": 1024, "medium": 4096, "high": 8192}
+_REQUEST_TIMEOUT_MS = {"instant": 12_000, "low": 20_000, "medium": 35_000, "high": 60_000}
 
 
 def _load_sdk():
@@ -170,9 +171,16 @@ def _call(prompt: str, schema, effort: str = "medium", max_tokens: int = 4000):
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=_SYSTEM,
+                temperature=0,
                 max_output_tokens=max_tokens,
                 response_mime_type="application/json",
                 response_schema=schema,
+                http_options=types.HttpOptions(
+                    timeout=_REQUEST_TIMEOUT_MS.get(effort, 35_000)
+                ),
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                    disable=True
+                ),
                 thinking_config=types.ThinkingConfig(
                     thinking_budget=_THINKING_BUDGET.get(effort, 4096)
                 ),
@@ -296,7 +304,7 @@ get_experiment_readiness, 특정 run의 학습 적합성은 get_data_quality를 
 
 사용자 요청:
 {message[:1000]}"""
-    raw_plan = _call(prompt, _GeminiCopilotToolPlan, effort="low", max_tokens=1500)
+    raw_plan = _call(prompt, _GeminiCopilotToolPlan, effort="instant", max_tokens=500)
     if raw_plan is None:
         return None
     values = raw_plan.model_dump(exclude_none=True)

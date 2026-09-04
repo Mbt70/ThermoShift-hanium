@@ -188,6 +188,7 @@ def propose_control_action(room_id: int, arguments: dict[str, Any]) -> dict[str,
             "gateway active/manual mode check required",
             "gateway lockout and command rate limit remain authoritative",
             "result is not ACK until device feedback verifies it",
+            "relay ACK verifies ON/OFF state, not target-temperature achievement",
         ],
     }
 

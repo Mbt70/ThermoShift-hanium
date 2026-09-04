@@ -132,7 +132,7 @@ def render_live_context() -> None:
 _STATUS_LABELS = {
     "pending": ("요청 접수", "API가 명령을 안전 큐에 등록했습니다.", 25),
     "sent": ("장치 확인 중", "게이트웨이가 전송했고 릴레이 상태 응답을 기다립니다.", 65),
-    "acked": ("동작 확인 완료", "장치가 목표 상태를 직접 회신했습니다.", 100),
+    "acked": ("릴레이 상태 확인 완료", "장치가 요청한 ON/OFF 상태를 직접 회신했습니다.", 100),
     "failed": ("실행 차단", "안전 조건 또는 전송 과정에서 명령이 차단됐습니다.", 100),
     "timeout": ("응답 시간 초과", "120초 안에 장치 상태를 확인하지 못했습니다.", 100),
 }
@@ -190,7 +190,7 @@ def render_proposal() -> None:
             labels = {
                 "power_on": "냉각 장치 켜기",
                 "power_off": "냉각 장치 끄기",
-                "set_temp": "목표 온도 변경 후 냉각",
+                "set_temp": "냉방 설정 명령",
             }
             label = labels.get(command["command_type"], command["command_type"])
             target = (
@@ -202,7 +202,21 @@ def render_proposal() -> None:
                 "API 안전 검사 → 단일 명령 큐 → Raspberry Pi 게이트웨이 → "
                 "MQTT → 릴레이 → 상태 ACK 순서로 실행됩니다."
             )
+            snapshot = pending.get("preflight_snapshot") or {}
+            env = snapshot.get("environment") or {}
+            occupancy = snapshot.get("occupancy") or {}
+            if env:
+                st.caption(
+                    f"제안 시점: {_value(env.get('temperature'), '°C')} · "
+                    f"습도 {_value(env.get('humidity'), '%')} · "
+                    f"재실 {occupancy.get('occupancy_state') or '—'}"
+                )
             st.warning("승인은 실제 펠티어·팬 동작으로 이어질 수 있습니다.")
+            if command["command_type"] == "set_temp":
+                st.caption(
+                    "장치 ACK는 냉각 릴레이 ON/OFF를 확인합니다. 목표 온도 도달은 "
+                    "이후 센서 측정으로 별도 판단합니다."
+                )
             demo = is_demo_session()
             confirmed = st.checkbox(
                 "대상 공간과 실제 장치 동작을 확인했습니다.",
